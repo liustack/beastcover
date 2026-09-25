@@ -8,6 +8,63 @@ export interface CoverLayout {
     textArea: Rect;
     /** 族母版才有，自定义画布为 undefined */
     family?: FamilyName;
+    /** 有人物主体时才有：人物贴着这个区域的底边放 */
+    subjectArea?: Rect;
+}
+
+// 人物版式：人物占一侧（竖版占下半），标题让到另一侧。人物压在最上层，所以两块不重叠，
+// 人物永远挡不住字。坐标都在族母版里，人物区贴着母版底边，标题区仍在族的安全区内。
+const SUBJECT_LAYOUTS: Readonly<Record<FamilyName, { textArea: Rect; subjectArea: Rect }>> = {
+    landscape: {
+        textArea: { x: 192, y: 132, width: 864, height: 876 },
+        subjectArea: { x: 1056, y: 60, width: 672, height: 1140 },
+    },
+    portrait: {
+        textArea: { x: 86, y: 384, width: 842, height: 480 },
+        subjectArea: { x: 86, y: 864, width: 842, height: 1056 },
+    },
+    // 人物放在公众号裁切框的右半边，公众号转发卡片的正中方块里能看到人和字各一部分。
+    ultrawide: {
+        textArea: { x: 576, y: 36, width: 464, height: 296 },
+        subjectArea: { x: 1040, y: 0, width: 304, height: 368 },
+    },
+};
+
+export function withSubjectArea(layout: CoverLayout): CoverLayout {
+    if (layout.family !== undefined) {
+        const areas = SUBJECT_LAYOUTS[layout.family];
+        return {
+            ...layout,
+            textArea: { ...areas.textArea },
+            subjectArea: { ...areas.subjectArea },
+        };
+    }
+    const area = layout.textArea;
+    if (layout.width >= layout.height) {
+        const split = Math.round(area.width * 0.55);
+        const top = Math.round(area.y / 2);
+        return {
+            ...layout,
+            textArea: { ...area, width: split },
+            subjectArea: {
+                x: area.x + split,
+                y: top,
+                width: area.width - split,
+                height: layout.height - top,
+            },
+        };
+    }
+    const split = Math.round(area.height * 0.4);
+    return {
+        ...layout,
+        textArea: { ...area, height: split },
+        subjectArea: {
+            x: area.x,
+            y: area.y + split,
+            width: area.width,
+            height: layout.height - area.y - split,
+        },
+    };
 }
 
 export function familyLayout(name: FamilyName): CoverLayout {

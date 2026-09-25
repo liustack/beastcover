@@ -1,5 +1,11 @@
-// --guides 参考线：把标题区（绿）、主体区（橙）和平台界面遮挡区（红）画到成品上，方便目检。
-import type { Platform, PlatformFamily, Rect } from '../platforms/index.ts';
+// --guides 参考线：把标题区（绿）、主体区（橙）、人物区（蓝）和平台界面遮挡区（红）画到成品上，方便目检。
+import type { Platform, Rect } from '../platforms/index.ts';
+
+export interface GuideAreas {
+    textArea: Rect;
+    focusArea: Rect;
+    subjectArea?: Rect;
+}
 
 function toOutput(rect: Rect, platform: Platform, factor: number): Rect {
     return {
@@ -17,7 +23,7 @@ function rectTag(rect: Rect, style: string): string {
 
 export function guidesOverlay(
     platform: Platform,
-    family: PlatformFamily,
+    areas: GuideAreas,
     pixelWidth: number,
     pixelHeight: number,
 ): Buffer {
@@ -29,11 +35,19 @@ export function guidesOverlay(
             rectTag(toOutput(rect, platform, factor), 'fill="#ef4444" fill-opacity="0.35"'),
         ),
         rectTag(
-            toOutput(family.focusArea, platform, factor),
+            toOutput(areas.focusArea, platform, factor),
             `fill="none" stroke="#f97316" stroke-width="${stroke}" ${dash}`,
         ),
+        ...(areas.subjectArea
+            ? [
+                  rectTag(
+                      toOutput(areas.subjectArea, platform, factor),
+                      `fill="none" stroke="#3b82f6" stroke-width="${stroke}" ${dash}`,
+                  ),
+              ]
+            : []),
         rectTag(
-            toOutput(family.textArea, platform, factor),
+            toOutput(areas.textArea, platform, factor),
             `fill="none" stroke="#22c55e" stroke-width="${stroke}"`,
         ),
     ];

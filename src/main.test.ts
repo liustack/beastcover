@@ -944,6 +944,125 @@ describe('BeastCover CLI', () => {
         expect(history).toHaveLength(4);
     });
 
+    it('puts a transparent subject on the cover and records it in history', async () => {
+        const cwd = tempDir('beastcover-cli-subject-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        const subjectPath = join(cwd, 'me.png');
+        await sharp({
+            create: {
+                width: 40,
+                height: 60,
+                channels: 4,
+                background: { r: 0, g: 0, b: 0, alpha: 0 },
+            },
+        })
+            .composite([
+                {
+                    input: {
+                        create: {
+                            width: 20,
+                            height: 40,
+                            channels: 4,
+                            background: { r: 200, g: 40, b: 40, alpha: 1 },
+                        },
+                    },
+                    left: 10,
+                    top: 20,
+                },
+            ])
+            .png()
+            .toFile(subjectPath);
+        const renderHtml = mockRender();
+        const cutout = vi.fn();
+        const stdout = captureOutput();
+
+        const exitCode = await runCli(
+            ['node', 'beastcover', 'gen', 'Me', '--source', 'render', '--subject', 'me.png'],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                cutout,
+                stdout,
+                now: () => new Date('2026-09-25T00:00:00.000Z'),
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(cutout).not.toHaveBeenCalled();
+        expect(renderHtml.mock.calls[0]?.[0].html).toContain('class="subject"');
+        expect(stdout.chunks.join('')).toContain(
+            `Subject: ${subjectPath} (used as a transparent PNG)`,
+        );
+        const history = JSON.parse(
+            readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8').trim(),
+        );
+        expect(history.subject).toEqual({ path: subjectPath, method: 'transparent' });
+    });
+
+    it('cuts out an opaque subject photo into the workspace cache', async () => {
+        const cwd = tempDir('beastcover-cli-cutout-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        writeFileSync(join(cwd, 'me.jpg'), await testPngBytes(64, 64));
+        const cutout = vi.fn(async (_input: string, output: string) => {
+            await sharp({
+                create: {
+                    width: 32,
+                    height: 48,
+                    channels: 4,
+                    background: { r: 10, g: 20, b: 30, alpha: 1 },
+                },
+            })
+                .png()
+                .toFile(output);
+        });
+        const stdout = captureOutput();
+
+        const exitCode = await runCli(
+            ['node', 'beastcover', 'gen', 'Me', '--source', 'render', '--subject', 'me.jpg'],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: mockRender().open,
+                cutout,
+                stdout,
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(cutout.mock.calls[0]?.[0]).toBe(join(cwd, 'me.jpg'));
+        expect(cutout.mock.calls[0]?.[1].startsWith(join(cwd, '.beastcover', 'cache'))).toBe(true);
+        expect(stdout.chunks.join('')).toContain('(cut out on this machine with macOS Vision)');
+    });
+
+    it('rejects a missing subject and a subject with local-model', async () => {
+        const cwd = tempDir('beastcover-cli-subject-errors-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        for (const [args, message] of [
+            [
+                ['--source', 'render', '--subject', 'nobody.png'],
+                `Error: Subject not found: ${join(cwd, 'nobody.png')}\n`,
+            ],
+            [
+                ['--source', 'local-model', '--subject', 'nobody.png'],
+                'Error: --subject works with --source render or stock.\n',
+            ],
+        ] as const) {
+            const stderr = captureOutput();
+            const exitCode = await runCli(['node', 'beastcover', 'gen', 'Me', ...args], {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: mockRender().open,
+                runLocalModel: mockRunLocalModel(),
+                lookupCommand: () => '/fake/codex',
+                stdout: captureOutput(),
+                stderr,
+            });
+            expect(exitCode).toBe(1);
+            expect(stderr.chunks.join('')).toBe(message);
+        }
+    });
+
     it('names the platform preset when an old ratio preset is passed', async () => {
         const renderHtml = mockRender();
         const stderr = captureOutput();

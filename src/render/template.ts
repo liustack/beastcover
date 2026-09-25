@@ -1,4 +1,5 @@
 import { type PaletteSlotValue, parseCssColorValue } from '../styles/schema.ts';
+import type { SubjectLayer } from '../subject/index.ts';
 import {
     type CoverLayout,
     escapeHtml,
@@ -22,6 +23,52 @@ export interface RenderTemplateOptions {
     palette?: Record<string, PaletteSlotValue>;
     /** 量字号时加上探针 */
     measure?: boolean;
+    /** 抠好的人物，版式里要有 subjectArea */
+    subject?: SubjectLayer;
+}
+
+/** 人物层：贴着人物区底边居中，白描边加一层投影，压在标题上面 */
+export function subjectMarkup(
+    layout: CoverLayout,
+    subject: SubjectLayer | undefined,
+): {
+    css: string;
+    html: string;
+} {
+    if (subject === undefined) {
+        return { css: '', html: '' };
+    }
+    const area = layout.subjectArea;
+    if (area === undefined) {
+        throw new Error('A subject needs a layout with a subject area.');
+    }
+    const stroke = Math.max(3, Math.round(Math.min(layout.width, layout.height) * 0.007));
+    return {
+        css: `
+        .subject {
+            position: absolute;
+            left: ${area.x}px;
+            top: ${area.y}px;
+            width: ${area.width}px;
+            height: ${area.height}px;
+            z-index: 2;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+        }
+
+        .subject img {
+            /* 撑满人物区再按比例收回，小图也会放大到版位尺寸，贴着底边居中。 */
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            object-position: 50% 100%;
+            filter: drop-shadow(${stroke}px 0 0 #fff) drop-shadow(-${stroke}px 0 0 #fff)
+                drop-shadow(0 ${stroke}px 0 #fff) drop-shadow(0 -${stroke}px 0 #fff)
+                drop-shadow(0 ${stroke * 2}px ${stroke * 4}px rgba(0, 0, 0, 0.35));
+        }`,
+        html: `<div class="subject" aria-hidden="true"><img src="${subject.dataUri}" alt=""></div>`,
+    };
 }
 
 // 色条贴在标题区域左边 24px 处，公众号从超宽母版裁切时也还在画面里。
@@ -112,6 +159,7 @@ export function createRenderTemplate(text: string, options: RenderTemplateOption
     const colors = resolveRenderColors(palette);
     const paletteJson = escapeHtml(JSON.stringify(palette));
     const { layout } = options;
+    const subject = subjectMarkup(layout, options.subject);
 
     return `<!doctype html>
 <html lang="en">
@@ -152,6 +200,7 @@ ${headlineCss(layout, options.headline, text)}
         .text-box {
             align-items: center;
         }
+${subject.css}
     </style>
 </head>
 <body>
@@ -160,6 +209,7 @@ ${headlineCss(layout, options.headline, text)}
         <section class="text-box" aria-label="Headline">
             <p class="copy">${headlineMarkup(text, options.headline)}</p>${options.measure ? probeMarkup(text, options.headline) : ''}
         </section>
+        ${subject.html}
     </main>
     <script type="application/json" id="beastcover-palette">${paletteJson}</script>
 </body>

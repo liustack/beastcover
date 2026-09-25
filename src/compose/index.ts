@@ -22,6 +22,8 @@ import {
 import { guidesOverlay } from './guides.ts';
 
 export interface CoverTemplate {
+    /** 模板要改版式时提供，比如有人物时把标题让到一侧 */
+    layoutFor?(layout: CoverLayout): CoverLayout;
     /** 量字号用的页面：同样的版式和字体，不带照片等重资源 */
     measureHtml(layout: CoverLayout, headline: Headline): string;
     /** 真正截图的页面，pixelWidth/pixelHeight 是截图的设备像素，照片按它预处理 */
@@ -160,7 +162,8 @@ export async function composeCovers(input: {
     const composed = new Map<PlatformName, ComposedCover>();
     for (const [familyName, members] of byFamily) {
         const family = getFamily(familyName);
-        const layout = familyLayout(familyName);
+        const base = familyLayout(familyName);
+        const layout = input.template.layoutFor?.(base) ?? base;
         const headline = await fitHeadline(
             input.renderer,
             input.template,
@@ -191,7 +194,16 @@ export async function composeCovers(input: {
             if (input.guides) {
                 image = sharp(await image.png().toBuffer()).composite([
                     {
-                        input: guidesOverlay(platform, family, pixelWidth, pixelHeight),
+                        input: guidesOverlay(
+                            platform,
+                            {
+                                textArea: layout.textArea,
+                                focusArea: family.focusArea,
+                                ...(layout.subjectArea ? { subjectArea: layout.subjectArea } : {}),
+                            },
+                            pixelWidth,
+                            pixelHeight,
+                        ),
                         left: 0,
                         top: 0,
                     },
@@ -220,7 +232,8 @@ export async function composeCustomCover(input: {
     scale: number;
     outputPath: string;
 }): Promise<{ outputPath: string; pixelWidth: number; pixelHeight: number }> {
-    const layout = customLayout(input.width, input.height);
+    const base = customLayout(input.width, input.height);
+    const layout = input.template.layoutFor?.(base) ?? base;
     const headline = await fitHeadline(
         input.renderer,
         input.template,

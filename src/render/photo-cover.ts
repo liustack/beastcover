@@ -3,8 +3,9 @@
 // 封面是用户要发出去的成品，画面上只有照片、配色和标题，不印工具名和说明字样。
 import sharp from 'sharp';
 import type { PaletteSlotValue } from '../styles/schema.ts';
+import type { SubjectLayer } from '../subject/index.ts';
 import { type CoverLayout, type Headline, headlineMarkup, probeMarkup } from './layout.ts';
-import { headlineCss, resolveRenderColors } from './template.ts';
+import { headlineCss, resolveRenderColors, subjectMarkup } from './template.ts';
 
 const PHOTO_JPEG_QUALITY = 82;
 
@@ -41,6 +42,8 @@ interface PhotoCoverBase {
     /** 标题字号和断行方式，由渲染器在标题区域里量出来 */
     headline: Headline;
     palette?: Record<string, PaletteSlotValue>;
+    /** 抠好的人物，版式里要有 subjectArea */
+    subject?: SubjectLayer;
 }
 
 /** 量字号时不需要照片，只排标题和探针 */
@@ -51,6 +54,7 @@ export type PhotoCoverOptions =
 export function createPhotoCoverTemplate(text: string, options: PhotoCoverOptions): string {
     const colors = resolveRenderColors(options.palette ?? {});
     const { layout } = options;
+    const subject = subjectMarkup(layout, options.measure === true ? undefined : options.subject);
     const photo =
         options.measure === true ? '' : `<img class="photo" src="${options.photo.dataUri}" alt="">`;
 
@@ -128,6 +132,7 @@ ${headlineCss(layout, options.headline, text)}
         .copy {
             text-shadow: 0 2px 12px color-mix(in srgb, var(--cover-ink) 55%, transparent);
         }
+${subject.css}
     </style>
 </head>
 <body>
@@ -139,6 +144,7 @@ ${headlineCss(layout, options.headline, text)}
         <section class="text-box" aria-label="Headline">
             <p class="copy">${headlineMarkup(text, options.headline)}</p>${options.measure === true ? probeMarkup(text, options.headline) : ''}
         </section>
+        ${subject.html}
     </main>
 </body>
 </html>`;

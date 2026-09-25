@@ -22,6 +22,7 @@ import {
     type PaletteSlotValue,
     parseCssColorValue,
 } from '../styles/schema.ts';
+import type { SubjectMethod } from '../subject/index.ts';
 import { writeWorkspaceIgnoreFile } from './ignore.ts';
 
 export const WORKSPACE_DIRNAME = '.beastcover';
@@ -57,7 +58,15 @@ export interface HistoryRecord {
     preset?: PlatformName;
     catalogPalette?: Record<string, PaletteSlotValue>;
     photo?: HistoryPhoto;
+    subject?: HistorySubject;
 }
+
+export interface HistorySubject {
+    path: string;
+    method: SubjectMethod;
+}
+
+const SUBJECT_METHODS: readonly SubjectMethod[] = ['transparent', 'macos-vision'];
 
 const HISTORY_PHOTO_KEYS = new Set([
     'path',
@@ -404,6 +413,20 @@ function parseHistoryRecord(filePath: string, lineNumber: number, raw: string): 
     }
     if (parsed.photo !== undefined) {
         record.photo = parseHistoryPhoto(filePath, lineNumber, parsed.photo);
+    }
+    if (parsed.subject !== undefined) {
+        const subject = parsed.subject;
+        if (
+            !isPlainObject(subject) ||
+            Object.keys(subject).some((key) => key !== 'path' && key !== 'method') ||
+            typeof subject.path !== 'string' ||
+            !SUBJECT_METHODS.includes(subject.method as SubjectMethod)
+        ) {
+            throw new Error(
+                `${filePath}:${lineNumber} has invalid "subject". Expected "path" and a "method" of ${SUBJECT_METHODS.join(' or ')}.`,
+            );
+        }
+        record.subject = { path: subject.path, method: subject.method as SubjectMethod };
     }
     if (parsed.catalogPalette !== undefined) {
         if (!isPlainObject(parsed.catalogPalette)) {

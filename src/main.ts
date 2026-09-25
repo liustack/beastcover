@@ -4,7 +4,7 @@ declare const __APP_VERSION__: string;
 
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Command, CommanderError } from 'commander';
 import {
@@ -46,6 +46,7 @@ import {
     parsePlatformList,
 } from './platforms/index.ts';
 import { type CoverRenderer, openRenderer } from './render/index.ts';
+import { withSubjectArea } from './render/layout.ts';
 import { createPhotoCoverTemplate, preparePhotoLayer } from './render/photo-cover.ts';
 import { createRenderTemplate } from './render/template.ts';
 import {
@@ -62,6 +63,7 @@ import {
 } from './stock/index.ts';
 import { listStyles, loadStyle } from './styles/loader.ts';
 import type { StyleDefinition } from './styles/schema.ts';
+import { prepareSubject, type SubjectLayer, visionSubjectCutout } from './subject/index.ts';
 import {
     appendHistory,
     createWorkspace,
@@ -91,6 +93,8 @@ export interface CliRuntime {
     lookupCommand: (name: string) => string | undefined;
     runLocalModel: typeof defaultRunLocalModel;
     stock: Pick<StockRuntime, 'fetch' | 'sleep' | 'download'>;
+    /** 把普通照片里的主体抠成透明 PNG，默认用 macOS Vision */
+    cutout: (inputPath: string, outputPath: string) => Promise<void>;
 }
 
 export type CliRuntimeOverrides = Partial<CliRuntime>;
@@ -115,6 +119,13 @@ function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
         lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
         runLocalModel: overrides.runLocalModel ?? defaultRunLocalModel,
         stock: overrides.stock ?? {},
+        cutout:
+            overrides.cutout ??
+            visionSubjectCutout({
+                platform: process.platform,
+                binDir: join(dirname(configPath), 'bin'),
+                lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
+            }),
     };
 }
 
@@ -308,6 +319,44 @@ function coverLines(covers: readonly WrittenCover[], scale: number): string[] {
     ]);
 }
 
+interface LoadedSubject {
+    path: string;
+    layer: SubjectLayer;
+}
+
+async function loadSubject(
+    runtime: CliRuntime,
+    workspaceDir: string | undefined,
+    subjectOption: string | undefined,
+): Promise<LoadedSubject | undefined> {
+    if (subjectOption === undefined) {
+        return undefined;
+    }
+    const path = resolve(runtime.cwd, subjectOption);
+    if (!existsSync(path)) {
+        throw new Error(`Subject not found: ${path}`);
+    }
+    const cacheDir = workspaceDir
+        ? join(workspaceDir, 'cache')
+        : join(tmpdir(), 'beastcover-subjects');
+    return { path, layer: await prepareSubject(path, { cacheDir, cutout: runtime.cutout }) };
+}
+
+function subjectLine(subject: LoadedSubject | undefined): string[] {
+    if (subject === undefined) {
+        return [];
+    }
+    const how =
+        subject.layer.method === 'transparent'
+            ? 'used as a transparent PNG'
+            : 'cut out on this machine with macOS Vision';
+    return [`Subject: ${subject.path} (${how})`];
+}
+
+function subjectHistory(subject: LoadedSubject | undefined) {
+    return subject ? { subject: { path: subject.path, method: subject.layer.method } } : {};
+}
+
 export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
     const runtime = createRuntime(overrides);
     const program = new Command();
@@ -350,6 +399,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             '--photo <ref-or-path>',
             'Stock photo ref (pexels:<id>, openverse:<id>) or a local image',
         )
+        .option(
+            '--subject <path>',
+            'Person or object to put on the cover: a transparent PNG, or a photo to cut out on macOS',
+        )
         .option('--verbose', 'Print backend CLI output')
         .action(
             async (
@@ -365,6 +418,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     via?: string;
                     ref?: string[];
                     photo?: string;
+                    subject?: string;
                     verbose?: boolean;
                 },
             ) => {
@@ -439,7 +493,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                           ? defaultWorkspaceOutputPath(workspaceDir, now)
                           : effective.output;
                     const paletteOption = palette ? { palette } : {};
+                    const subject = await loadSubject(runtime, workspaceDir, options.subject);
                     const template: CoverTemplate = {
+                        ...(subject ? { layoutFor: withSubjectArea } : {}),
                         measureHtml: (layout, headline) =>
                             createPhotoCoverTemplate(text, {
                                 layout,
@@ -453,6 +509,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 headline,
                                 photo: await preparePhotoLayer(photoPath, pixelWidth, pixelHeight),
                                 ...paletteOption,
+                                ...(subject ? { subject: subject.layer } : {}),
                             }),
                     };
                     let written: Awaited<ReturnType<typeof writeCovers>>;
@@ -482,6 +539,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 ...(cover.platform ? { preset: cover.platform } : {}),
                                 output: cover.outputPath,
                                 photo: { path: photoPath, ...photoMeta },
+                                ...subjectHistory(subject),
                             });
                         }
                     }
@@ -490,6 +548,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         [
                             ...coverLines(written.covers, effective.render.scale),
                             ...written.warnings,
+                            ...subjectLine(subject),
                             `Photo: ${photoMeta.ref ?? photoPath}`,
                             ...creditLines(photoMeta),
                             photoMeta.provider
@@ -515,6 +574,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     }
                     if (guides) {
                         throw new Error('--guides works with --source render or stock.');
+                    }
+                    if (options.subject !== undefined) {
+                        throw new Error('--subject works with --source render or stock.');
                     }
                     const pack = loadStylePack(workspaceDir);
                     const style = loadStyle(pack.style);
@@ -617,7 +679,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                       ? defaultWorkspaceOutputPath(workspaceDir, now)
                       : effective.output;
                 const paletteOption = palette ? { palette } : {};
+                const subject = await loadSubject(runtime, workspaceDir, options.subject);
                 const template: CoverTemplate = {
+                    ...(subject ? { layoutFor: withSubjectArea } : {}),
                     measureHtml: (layout, headline) =>
                         createRenderTemplate(text, {
                             layout,
@@ -626,7 +690,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             ...paletteOption,
                         }),
                     renderHtml: async (layout, headline) =>
-                        createRenderTemplate(text, { layout, headline, ...paletteOption }),
+                        createRenderTemplate(text, {
+                            layout,
+                            headline,
+                            ...paletteOption,
+                            ...(subject ? { subject: subject.layer } : {}),
+                        }),
                 };
                 const written = await writeCovers(
                     runtime,
@@ -646,6 +715,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             text,
                             ...(cover.platform ? { preset: cover.platform } : {}),
                             output: cover.outputPath,
+                            ...subjectHistory(subject),
                         });
                     }
                 }
@@ -654,6 +724,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     [
                         ...coverLines(written.covers, effective.render.scale),
                         ...written.warnings,
+                        ...subjectLine(subject),
                         'Privacy: render stayed on this machine.',
                         '',
                     ].join('\n'),

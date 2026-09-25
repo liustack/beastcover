@@ -10,7 +10,7 @@ import {
     type RenderPage,
     TextDoesNotFitError,
 } from '../render/index.ts';
-import type { CoverLayout, Headline } from '../render/layout.ts';
+import { type CoverLayout, type Headline, withSubjectArea } from '../render/layout.ts';
 import {
     type CoverTemplate,
     composeCovers,
@@ -261,6 +261,27 @@ describe('cover composition', () => {
         expect(edge[1]).toBeGreaterThan(150);
         expect(edge[0]).toBeLessThan(120);
         expect(after).toEqual(before);
+    });
+
+    it('fits the headline in the area the template layout leaves for it', async () => {
+        const { renderer } = fakeRenderer(() => 120);
+        const directory = tempDir();
+        await composeCovers({
+            renderer,
+            template: { ...template, layoutFor: withSubjectArea },
+            text: 'Person',
+            targets: [{ platform: 'youtube', outputPath: join(directory, 'person.png') }],
+            scale: 1,
+            guides: true,
+        });
+
+        const request = vi.mocked(renderer.fitText).mock.calls[0]?.[0];
+        expect(request?.box).toEqual({ x: 192, y: 132, width: 864, height: 876 });
+        // 人物区的蓝色参考线：右边框在母版 x=1728，youtube 缩放 2/3 后是 1152。
+        const [r, g, b] = await pixel(join(directory, 'person.png'), 1152, 400);
+        expect(b).toBeGreaterThan(150);
+        expect(r).toBeLessThan(120);
+        expect(g).toBeLessThan(170);
     });
 
     it('renders a custom canvas directly without a family master', async () => {

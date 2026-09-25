@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import { describe, expect, it } from 'vitest';
 import { FAMILY_NAMES } from '../platforms/index.ts';
 import { openRenderer } from './index.ts';
-import { customLayout, familyLayout } from './layout.ts';
+import { customLayout, familyLayout, withSubjectArea } from './layout.ts';
 import { createPhotoCoverTemplate } from './photo-cover.ts';
 import { createRenderTemplate, DEFAULT_RENDER_COLORS } from './template.ts';
 
@@ -160,5 +160,40 @@ describe('built-in render template', () => {
         expect(clauses).toContain(
             '<span class="copy probe" aria-hidden="true">也赚不到认知以外的钱</span>',
         );
+    });
+
+    it('draws the subject above the headline with a white stroke inside its area', () => {
+        const layout = withSubjectArea(familyLayout('landscape'));
+        const subject = {
+            dataUri: 'data:image/png;base64,AAAA',
+            width: 10,
+            height: 20,
+            method: 'transparent' as const,
+        };
+        const html = createRenderTemplate('人物大字', { ...BASE, layout, subject });
+
+        expect(html).toContain('left: 1056px;');
+        expect(html).toContain('top: 60px;');
+        expect(html).toContain('z-index: 2;');
+        expect(html).toContain('drop-shadow(8px 0 0 #fff)');
+        expect(html).toContain('<img src="data:image/png;base64,AAAA" alt="">');
+        expect(html.indexOf('class="subject"')).toBeGreaterThan(html.indexOf('class="text-box"'));
+
+        const photo = createPhotoCoverTemplate('人物大字', {
+            ...BASE,
+            layout,
+            subject,
+            measure: true,
+        });
+        expect(photo).not.toContain('class="subject"');
+    });
+
+    it('refuses a subject on a layout without a subject area', () => {
+        expect(() =>
+            createRenderTemplate('人物大字', {
+                ...BASE,
+                subject: { dataUri: 'data:,', width: 1, height: 1, method: 'transparent' },
+            }),
+        ).toThrowError('A subject needs a layout with a subject area.');
     });
 });
