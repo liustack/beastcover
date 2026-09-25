@@ -7,6 +7,8 @@ import pkg from './package.json' with { type: 'json' };
 
 export default defineConfig({
     test: {
+        // 不少测试真的跑 Chromium 或在 2 倍母版上做 sharp 裁切，机器忙时 5 秒默认值会误报超时。
+        testTimeout: 30_000,
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
