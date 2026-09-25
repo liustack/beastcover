@@ -270,6 +270,27 @@ describe('history paths', () => {
         expect(raw).not.toContain(cwd);
     });
 
+    it('stores photo and subject paths relative to the workspace too', () => {
+        const cwd = tempDir('beastcover-history-inputs-');
+        const created = createWorkspace(cwd, { name: 'demo' });
+        appendHistory(created.path, {
+            createdAt: '2026-09-25T00:00:00.000Z',
+            style: 'risograph_editorial',
+            palette: {},
+            text: 'Me',
+            output: join(created.path, 'out', 'a.png'),
+            source: 'stock',
+            photo: { path: join(created.path, 'refs', 'openverse-a1.jpg'), ref: 'openverse:a1' },
+            subject: { path: join(cwd, 'photos', 'me.jpg'), method: 'macos-vision' },
+        });
+        const raw = readFileSync(join(created.path, 'history.jsonl'), 'utf8').trim();
+        expect(JSON.parse(raw)).toMatchObject({
+            photo: { path: join('refs', 'openverse-a1.jpg'), ref: 'openverse:a1' },
+            subject: { path: join('..', 'photos', 'me.jpg'), method: 'macos-vision' },
+        });
+        expect(raw).not.toContain(cwd);
+    });
+
     it('round-trips optional source, via, and catalogPalette when present', () => {
         const cwd = tempDir('beastcover-history-optional-');
         const workspaceDir = createWorkspace(cwd, { name: 'demo' }).path;

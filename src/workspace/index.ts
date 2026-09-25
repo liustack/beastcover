@@ -467,7 +467,16 @@ export function listHistory(workspaceDir: string): HistoryRecord[] {
 export function appendHistory(workspaceDir: string, record: HistoryRecord): string {
     const filePath = historyPath(workspaceDir);
     // history.jsonl 会进版本库，绝对路径会把本机目录结构和用户名带进仓库，换台机器也对不上。
-    const stored: HistoryRecord = { ...record, output: relative(workspaceDir, record.output) };
+    const stored: HistoryRecord = {
+        ...record,
+        output: relative(workspaceDir, record.output),
+        ...(record.photo
+            ? { photo: { ...record.photo, path: relative(workspaceDir, record.photo.path) } }
+            : {}),
+        ...(record.subject
+            ? { subject: { ...record.subject, path: relative(workspaceDir, record.subject.path) } }
+            : {}),
+    };
     appendFileSync(filePath, `${JSON.stringify(stored)}\n`, { encoding: 'utf8' });
     return filePath;
 }

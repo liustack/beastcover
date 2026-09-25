@@ -369,7 +369,7 @@ describe('BeastCover CLI', () => {
         expect(history).toMatchObject({
             source: 'stock',
             text: 'Dawn tide',
-            photo: { path: photoPath },
+            photo: { path: join('..', 'sea.png') },
         });
     });
 
@@ -446,7 +446,7 @@ describe('BeastCover CLI', () => {
             readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8').trim(),
         );
         expect(history.photo).toEqual({
-            path: refPath,
+            path: join('refs', 'openverse-a1.png'),
             ref: 'openverse:a1',
             provider: 'openverse',
             creator: 'Ada',
@@ -1040,7 +1040,7 @@ describe('BeastCover CLI', () => {
         const history = JSON.parse(
             readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8').trim(),
         );
-        expect(history.subject).toEqual({ path: subjectPath, method: 'transparent' });
+        expect(history.subject).toEqual({ path: join('..', 'me.png'), method: 'transparent' });
     });
 
     it('cuts out an opaque subject photo into the workspace cache', async () => {
