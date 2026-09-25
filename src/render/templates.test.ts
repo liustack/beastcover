@@ -263,13 +263,13 @@ describe('template layouts', () => {
     it('knows which part of each compare panel the requested platforms show', () => {
         const { panels } = compareLayout(familyLayout('ultrawide'));
         const wechat = getPlatform('wechat').crop;
-        // 公众号只看得到左半的右边 432px 和右半的左边 433px。
+        // 公众号两边各裁掉一点：左半从 58px 起，右半到 903px 止。
         const left = panelVisibility(panels.first, wechat);
         const right = panelVisibility(panels.second, wechat);
-        expect(left.x).toBeCloseTo(528 / 960, 3);
-        expect(left.width).toBeCloseTo(432 / 960, 3);
+        expect(left.x).toBeCloseTo(58 / 960, 3);
+        expect(left.width).toBeCloseTo(902 / 960, 3);
         expect(right.x).toBe(0);
-        expect(right.width).toBeCloseTo(433 / 960, 3);
+        expect(right.width).toBeCloseTo(903 / 960, 3);
         expect(() =>
             panelVisibility(panels.first, { x: 1000, y: 0, width: 100, height: 100 }),
         ).toThrowError('A compare panel has no visible part on the requested platforms.');

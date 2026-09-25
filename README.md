@@ -74,7 +74,7 @@ Without a photo, `--source render` makes a text-only cover. `--template poster` 
 | `youtube` | 1280×720 | YouTube thumbnail | `bilibili`, `og`, `github` |
 | `bilibili` | 1146×717 | Bilibili video cover | `youtube`, `og`, `github` |
 | `wechat` | 900×383 | WeChat article cover | `x` |
-| `x` | 1920×368 | X article cover | `wechat` |
+| `x` | 1600×640 | X article cover | `wechat` |
 | `xiaohongshu` | 1080×1440 | Xiaohongshu note cover | the other portrait presets |
 | `instagram` | 1080×1440 | Instagram post | the other portrait presets |
 | `instagram-reels` | 1080×1920 | Instagram Reels cover | the other portrait presets |

@@ -44,7 +44,7 @@ beastcover styles risograph_editorial
 | Preset | Pixels | Keep in mind |
 | :-- | :-- | :-- |
 | `wechat` | 900×383 | The share card crops the centre square. Keep the subject and headline there |
-| `x` | 1920×368 | Very wide and shallow. Keep everything in the middle band |
+| `x` | 1600×640 | 5:2. The WeChat cover is cut from its middle, so keep key content off the far left and right edges |
 | `youtube` | 1280×720 | The duration badge covers the bottom-right corner |
 | `bilibili` | 1146×717 | Keep key content in the middle |
 | `xiaohongshu`, `instagram` | 1080×1440 | Leave about 10% free at the top and bottom |

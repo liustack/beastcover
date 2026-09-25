@@ -63,17 +63,17 @@ const COMPARE_LAYOUTS: Readonly<Record<FamilyName, { textArea: Rect; panels: Com
         },
     },
     ultrawide: {
-        textArea: { x: 576, y: 236, width: 768, height: 96 },
+        textArea: { x: 576, y: 472, width: 768, height: 192 },
         panels: {
             split: 'columns',
-            first: { x: 0, y: 0, width: 960, height: 368 },
-            second: { x: 960, y: 0, width: 960, height: 368 },
-            arrow: { x: 960, y: 128, size: 104 },
+            first: { x: 0, y: 0, width: 960, height: 768 },
+            second: { x: 960, y: 0, width: 960, height: 768 },
+            arrow: { x: 960, y: 256, size: 208 },
             labels: [
-                { x: 576, y: 36 },
-                { x: 1000, y: 36 },
+                { x: 576, y: 72 },
+                { x: 1000, y: 72 },
             ],
-            labelPx: 30,
+            labelPx: 60,
         },
     },
 };

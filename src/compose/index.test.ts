@@ -122,7 +122,7 @@ describe('cover composition', () => {
 
         expect(screenshots.map((page) => [page.width, page.height, page.scale])).toEqual([
             [1920, 1200, 2],
-            [1920, 368, 2],
+            [1920, 768, 2],
             [1080, 1920, 2],
         ]);
         expect(covers.map((cover) => cover.platform)).toEqual([...PLATFORM_NAMES]);
@@ -396,13 +396,10 @@ describe('thumbnail check', () => {
 describe('photo stretch check', () => {
     it('warns when the photo has to grow more than 1.5x for a platform', () => {
         // 1024x683 铺满母版要放大 1.875 倍。youtube 再从 1920 缩到 1280，只剩 1.25 倍，不提示。
-        // x 按母版原样输出，公众号再从 865 宽放到 900 宽。
+        // x 从 1920 缩到 1600，还剩 1.56 倍。公众号从 1805 宽缩到 900 宽，不提示。
         expect(
             photoStretchWarnings({ width: 1024, height: 683 }, ['youtube', 'x', 'wechat'], 1),
-        ).toEqual([
-            'Photo: 1024x683 is stretched 1.9x on x. A larger photo stays sharp.',
-            'Photo: 1024x683 is stretched 2.0x on wechat. A larger photo stays sharp.',
-        ]);
+        ).toEqual(['Photo: 1024x683 is stretched 1.6x on x. A larger photo stays sharp.']);
         expect(
             photoStretchWarnings({ width: 4000, height: 3000 }, ['youtube', 'douyin'], 1),
         ).toEqual([]);
@@ -418,7 +415,7 @@ describe('visible area', () => {
             x: 0,
             y: 0,
             width: 1920,
-            height: 368,
+            height: 768,
         });
         expect(familyVisibleArea('ultrawide', ['x', 'wechat'])).toEqual(getPlatform('wechat').crop);
         expect(familyVisibleArea('portrait', ['douyin', 'xiaohongshu'])).toEqual(
@@ -450,11 +447,11 @@ describe('clear area', () => {
 
 describe('focus crop check', () => {
     it('names the platforms where the photo cannot show its subject', () => {
-        // 1920x368 的照片铺满超宽母版挪不动，右边的主体公众号看不到，X 看得到。
+        // 1920x768 的照片铺满超宽母版挪不动，贴着右边的主体公众号看不到，X 看得到。
         expect(
             focusCropWarnings(
-                { width: 1920, height: 368 },
-                { x: 0.9, y: 0.5, width: 0.07, height: 0.4, source: 'attention' },
+                { width: 1920, height: 768 },
+                { x: 0.985, y: 0.5, width: 0.02, height: 0.4, source: 'attention' },
                 ['x', 'wechat'],
             ),
         ).toEqual([
@@ -484,7 +481,7 @@ describe('photo stretch check with extend', () => {
     it('does not warn when extend only shrinks the sharp photo', () => {
         expect(
             photoStretchWarnings(
-                { width: 1920, height: 368 },
+                { width: 1920, height: 768 },
                 ['xiaohongshu', 'douyin'],
                 1,
                 'extend',

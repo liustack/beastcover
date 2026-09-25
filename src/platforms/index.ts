@@ -70,10 +70,10 @@ const FAMILIES: Readonly<Record<FamilyName, PlatformFamily>> = {
     ultrawide: {
         name: 'ultrawide',
         masterWidth: 1920,
-        masterHeight: 368,
-        textArea: { x: 576, y: 36, width: 768, height: 296 },
-        // 公众号转发卡片只露正中的方块
-        focusArea: { x: 776, y: 0, width: 368, height: 368 },
+        masterHeight: 768,
+        // 标题放在正中方块里：公众号转发卡片只露正中的方块
+        textArea: { x: 576, y: 72, width: 768, height: 624 },
+        focusArea: { x: 576, y: 0, width: 768, height: 768 },
     },
 };
 
@@ -113,17 +113,17 @@ const PLATFORMS: Readonly<Record<PlatformName, Platform>> = {
         height: 383,
         use: 'WeChat article cover',
         family: 'ultrawide',
-        crop: { x: 528, y: 0, width: 865, height: 368 },
+        crop: { x: 58, y: 0, width: 1805, height: 768 },
         covered: [],
         feedWidth: 340,
     },
     x: {
         name: 'x',
-        width: 1920,
-        height: 368,
+        width: 1600,
+        height: 640,
         use: 'X article cover',
         family: 'ultrawide',
-        crop: { x: 0, y: 0, width: 1920, height: 368 },
+        crop: { x: 0, y: 0, width: 1920, height: 768 },
         covered: [],
         feedWidth: 500,
     },

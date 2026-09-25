@@ -38,7 +38,7 @@ describe('layered config', () => {
         ).toMatchObject({
             source: 'render',
             output: 'from-file.png',
-            render: { presets: ['x'], canvas: { width: 800, height: 368 }, scale: 2 },
+            render: { presets: ['x'], canvas: { width: 800, height: 640 }, scale: 2 },
         });
 
         expect(resolveEffectiveConfig({}, {})).toMatchObject({

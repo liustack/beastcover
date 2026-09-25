@@ -25,12 +25,12 @@ export interface LocalModelCanvasPlan {
 // 生成尺寸只用模型原生的 1536x1024 与 1024x1536，再从正中裁出各平台的比例。
 const LOCAL_MODEL_GENERATE_PLANS: Record<FamilyName, LocalModelGeneratePlan> = {
     landscape: { family: 'landscape', generateWidth: 1536, generateHeight: 1024 },
-    // X 只留中间 294px 高的横带，公众号转发卡片只留正中方块。
+    // X 裁掉上下各五分之一，公众号转发卡片只留正中方块。
     ultrawide: {
         family: 'ultrawide',
         generateWidth: 1536,
         generateHeight: 1024,
-        subjectSuffix: '主体集中在画面正中的窄横带内，四周只放背景',
+        subjectSuffix: '主体集中在画面正中，上下边缘和左右两侧只放背景',
     },
     // 小红书裁掉上下各一截，抖音顶部和底部被界面挡住。
     portrait: {
@@ -100,11 +100,11 @@ const LOCAL_MODEL_CANVAS_PLANS: Record<PlatformName, LocalModelCanvasPlan> = {
         preset: 'x',
         ...ULTRAWIDE,
         cropWidth: 1536,
-        cropHeight: 294,
+        cropHeight: 614,
         cropLeft: 0,
-        cropTop: 365,
-        outputWidth: 1920,
-        outputHeight: 368,
+        cropTop: 205,
+        outputWidth: 1600,
+        outputHeight: 640,
     },
     xiaohongshu: { preset: 'xiaohongshu', ...PORTRAIT_3X4 },
     instagram: { preset: 'instagram', ...PORTRAIT_3X4 },

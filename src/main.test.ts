@@ -236,11 +236,11 @@ describe('BeastCover CLI', () => {
         expect(exitCode).toBe(0);
         expect(stderr.chunks).toEqual([]);
         expect(renderHtml).toHaveBeenCalledOnce();
-        expect(renderHtml.mock.calls[0]?.[0]).toMatchObject({ width: 800, height: 368, scale: 2 });
+        expect(renderHtml.mock.calls[0]?.[0]).toMatchObject({ width: 800, height: 640, scale: 2 });
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('One headline for every platform');
         const meta = await sharp(outputPath).metadata();
-        expect([meta.width, meta.height]).toEqual([1600, 736]);
-        expect(stdout.chunks.join('')).toContain(`Created ${outputPath}\nCanvas: 800x368 at 2x`);
+        expect([meta.width, meta.height]).toEqual([1600, 1280]);
+        expect(stdout.chunks.join('')).toContain(`Created ${outputPath}\nCanvas: 800x640 at 2x`);
         expect(stdout.chunks.join('')).toContain('Privacy: render stayed on this machine.');
         expect(readdirSync(directory)).not.toContain('.beastcover');
     });
@@ -729,7 +729,7 @@ describe('BeastCover CLI', () => {
         });
         expect(localInput.prompt).toContain(`save it to ${generatedPath}. `);
         expect(localInput.prompt).toContain(
-            '主体集中在画面正中的窄横带内，四周只放背景. Landscape 1536x1024',
+            '主体集中在画面正中，上下边缘和左右两侧只放背景. Landscape 1536x1024',
         );
 
         const historyPath = join(cwd, '.beastcover', 'history.jsonl');
@@ -855,14 +855,14 @@ describe('BeastCover CLI', () => {
 
         expect(exitCode).toBe(0);
         expect(renderHtml.mock.calls.map(([page]) => [page.width, page.height])).toEqual([
-            [1920, 368],
+            [1920, 768],
             [1080, 1920],
         ]);
         const stem = join(cwd, '.beastcover', 'out', 'beastcover-2026-09-25T00-00-00.000Z');
         const printed = stdout.chunks.join('');
         for (const [platform, size] of [
             ['wechat', [900, 383]],
-            ['x', [1920, 368]],
+            ['x', [1600, 640]],
             ['douyin', [1080, 1920]],
         ] as const) {
             const path = `${stem}-${platform}.png`;

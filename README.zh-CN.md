@@ -74,7 +74,7 @@ beastcover gen "人接不住认知以外的流量，也赚不到认知以外的�
 | `youtube` | 1280×720 | YouTube 缩略图 | `bilibili`、`og`、`github` |
 | `bilibili` | 1146×717 | B 站视频封面 | `youtube`、`og`、`github` |
 | `wechat` | 900×383 | 公众号文章封面 | `x` |
-| `x` | 1920×368 | X 文章封面 | `wechat` |
+| `x` | 1600×640 | X 文章封面 | `wechat` |
 | `xiaohongshu` | 1080×1440 | 小红书笔记封面 | 其他竖版预设 |
 | `instagram` | 1080×1440 | Instagram 帖子 | 其他竖版预设 |
 | `instagram-reels` | 1080×1920 | Instagram Reels 封面 | 其他竖版预设 |

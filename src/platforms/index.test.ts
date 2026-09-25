@@ -32,7 +32,7 @@ describe('platform presets', () => {
             ['youtube', 1280, 720, 'landscape'],
             ['bilibili', 1146, 717, 'landscape'],
             ['wechat', 900, 383, 'ultrawide'],
-            ['x', 1920, 368, 'ultrawide'],
+            ['x', 1600, 640, 'ultrawide'],
             ['xiaohongshu', 1080, 1440, 'portrait'],
             ['instagram', 1080, 1440, 'portrait'],
             ['instagram-reels', 1080, 1920, 'portrait'],
@@ -80,7 +80,9 @@ describe('platform presets', () => {
 
     it('keeps the wechat share square and the title band inside the wechat crop', () => {
         const ultrawide = getFamily('ultrawide');
-        expect(ultrawide.focusArea).toEqual({ x: 776, y: 0, width: 368, height: 368 });
+        expect(ultrawide.focusArea).toEqual({ x: 576, y: 0, width: 768, height: 768 });
+        expect(inside(ultrawide.focusArea, getPlatform('wechat').crop)).toBe(true);
+        expect(inside(ultrawide.textArea, ultrawide.focusArea)).toBe(true);
         expect(inside(ultrawide.textArea, getPlatform('wechat').crop)).toBe(true);
     });
 

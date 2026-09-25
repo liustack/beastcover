@@ -17,7 +17,7 @@ describe('local-model canvas plans', () => {
             ['youtube', '1536x1024', '1536x864+0+80', '1280x720'],
             ['bilibili', '1536x1024', '1536x961+0+31', '1146x717'],
             ['wechat', '1536x1024', '1536x654+0+185', '900x383'],
-            ['x', '1536x1024', '1536x294+0+365', '1920x368'],
+            ['x', '1536x1024', '1536x614+0+205', '1600x640'],
             ['xiaohongshu', '1024x1536', '1024x1365+0+85', '1080x1440'],
             ['instagram', '1024x1536', '1024x1365+0+85', '1080x1440'],
             ['instagram-reels', '1024x1536', '864x1536+80+0', '1080x1920'],
@@ -61,7 +61,7 @@ describe('local-model canvas plans', () => {
             family: 'ultrawide',
             generateWidth: 1536,
             generateHeight: 1024,
-            subjectSuffix: '主体集中在画面正中的窄横带内，四周只放背景',
+            subjectSuffix: '主体集中在画面正中，上下边缘和左右两侧只放背景',
         });
         expect(getLocalModelGeneratePlan('portrait')).toEqual({
             family: 'portrait',

@@ -170,7 +170,7 @@ describe('local-model prompt assembly', () => {
         const style = loadStyle('risograph_editorial');
         const subject = '一只背对的人';
         for (const [family, suffix, size] of [
-            ['ultrawide', '主体集中在画面正中的窄横带内，四周只放背景', 'Landscape 1536x1024'],
+            ['ultrawide', '主体集中在画面正中，上下边缘和左右两侧只放背景', 'Landscape 1536x1024'],
             ['portrait', '主体集中在画面中部，顶部和底部只放背景', '竖版 1024x1536'],
         ] as const) {
             const envelope = buildEnvelopePrompt({

@@ -321,7 +321,7 @@ export function photoFocusTarget(
             return { x: 0.7, y: 0.3 };
         case 'portrait':
             return { x: 0.5, y: 0.3 };
-        // 标题占公众号裁切框左边，主体放右边：公众号裁切框是 528 到 1393。
+        // 标题占正中方块左边，主体放右边：正中方块是 576 到 1344。
         case 'ultrawide':
             return { x: 0.64, y: 0.45 };
         default:
