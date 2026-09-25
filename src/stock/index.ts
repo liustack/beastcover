@@ -97,6 +97,9 @@ export interface FetchedStock {
     photo: StockPhoto;
     imagePath: string;
     sidecar: string;
+    /** 实际下载到的尺寸，可能比图库标的小 */
+    width: number;
+    height: number;
 }
 
 export async function fetchStockPhoto(
@@ -111,7 +114,7 @@ export async function fetchStockPhoto(
         basePath: input.basePath,
         now: input.now,
     });
-    return { photo, ...written };
+    return { photo, ...written, width: downloaded.width, height: downloaded.height };
 }
 
 export function stockFileStem(ref: string): string {

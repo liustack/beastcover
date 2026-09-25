@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import sharp, { type Metadata } from 'sharp';
 import { userAgent } from './http.ts';
 import { assertSafeRemoteTarget, type DnsLookup, defaultDnsLookup, pinnedFetch } from './ssrf.ts';
 import type { StockPhoto } from './types.ts';
@@ -47,6 +48,9 @@ export function extensionForContentType(contentType: string | null): string {
 export interface DownloadedPhoto {
     bytes: Buffer;
     extension: string;
+    /** 实际下载到的像素尺寸。图库标的尺寸可能是原图，发下来的却是预览图 */
+    width: number;
+    height: number;
 }
 
 export async function downloadPhotoBytes(
@@ -74,7 +78,16 @@ export async function downloadPhotoBytes(
             `Stock photo is ${bytes.byteLength} bytes, larger than the ${MAX_DOWNLOAD_BYTES} byte limit.`,
         );
     }
-    return { bytes, extension };
+    let meta: Metadata;
+    try {
+        meta = await sharp(bytes, { failOn: 'error' }).metadata();
+    } catch {
+        throw new Error('Stock photo download is not a readable image.');
+    }
+    if (meta.width === undefined || meta.height === undefined) {
+        throw new Error('Stock photo download is not a readable image.');
+    }
+    return { bytes, extension, width: meta.width, height: meta.height };
 }
 
 export interface StockSidecar {
@@ -86,8 +99,12 @@ export interface StockSidecar {
     attribution: string;
     pageUrl: string;
     downloadUrl: string;
+    /** 实际下载到的尺寸 */
     width: number;
     height: number;
+    /** 图库标的尺寸，和实际不一致时才记 */
+    listedWidth?: number;
+    listedHeight?: number;
     fetchedAt: string;
 }
 
@@ -113,8 +130,12 @@ export function writePhotoFiles(input: {
         attribution: input.photo.attribution,
         pageUrl: input.photo.pageUrl,
         downloadUrl: input.photo.downloadUrl,
-        width: input.photo.width,
-        height: input.photo.height,
+        width: input.downloaded.width,
+        height: input.downloaded.height,
+        ...(input.downloaded.width !== input.photo.width ||
+        input.downloaded.height !== input.photo.height
+            ? { listedWidth: input.photo.width, listedHeight: input.photo.height }
+            : {}),
         fetchedAt: input.now.toISOString(),
     };
     const sidecarFile = sidecarPath(imagePath);

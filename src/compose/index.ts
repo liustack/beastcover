@@ -260,3 +260,28 @@ export function thumbnailWarnings(covers: readonly ComposedCover[]): string[] {
             return `Thumbnail: the headline is ${cover.feedHeadlinePx.toFixed(1)}px at ${platform.name} feed size (${platform.feedWidth}px wide). A shorter headline reads bigger.`;
         });
 }
+
+// 照片放大到这个倍数以上就会明显发虚。
+export const MAX_PHOTO_STRETCH = 1.5;
+
+/** 照片铺满母版再裁出每个平台时要放大多少倍，超过 MAX_PHOTO_STRETCH 的列出来 */
+export function photoStretchWarnings(
+    photo: { width: number; height: number },
+    platforms: readonly PlatformName[],
+    scale: number,
+): string[] {
+    return platforms.flatMap((name) => {
+        const platform = getPlatform(name);
+        const family = getFamily(platform.family);
+        const cover = Math.max(
+            family.masterWidth / photo.width,
+            family.masterHeight / photo.height,
+        );
+        const stretch = cover * (platform.width / platform.crop.width) * scale;
+        return stretch > MAX_PHOTO_STRETCH
+            ? [
+                  `Photo: ${photo.width}x${photo.height} is stretched ${stretch.toFixed(1)}x on ${name}. A larger photo stays sharp.`,
+              ]
+            : [];
+    });
+}

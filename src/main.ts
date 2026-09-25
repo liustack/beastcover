@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Command, CommanderError } from 'commander';
+import sharp from 'sharp';
 import {
     type ComposedCover,
     type CoverTarget,
@@ -14,6 +15,8 @@ import {
     composeCovers,
     composeCustomCover,
     coverOutputPaths,
+    MAX_PHOTO_STRETCH,
+    photoStretchWarnings,
     thumbnailWarnings,
 } from './compose/index.ts';
 import {
@@ -171,6 +174,13 @@ function creditLines(photo: {
     return lines;
 }
 
+function sizeLine(fetched: { width: number; height: number; photo: StockHit }): string {
+    const size = `Size: ${fetched.width}x${fetched.height}`;
+    return fetched.width === fetched.photo.width && fetched.height === fetched.photo.height
+        ? size
+        : `${size} (the host served a smaller copy than the listed ${fetched.photo.width}x${fetched.photo.height})`;
+}
+
 function parseImageSource(value: string): ImageSource {
     if (!IMAGE_SOURCES.includes(value as ImageSource)) {
         throw new Error(`Unknown source "${value}". Use ${IMAGE_SOURCES.join(', ')}.`);
@@ -317,6 +327,28 @@ function coverLines(covers: readonly WrittenCover[], scale: number): string[] {
         `Created ${cover.outputPath}`,
         `Canvas: ${cover.width}x${cover.height} at ${scale}x`,
     ]);
+}
+
+async function imageSize(path: string): Promise<{ width: number; height: number }> {
+    const meta = await sharp(path, { failOn: 'error' }).metadata();
+    if (meta.width === undefined || meta.height === undefined) {
+        throw new Error(`Cannot read the image size of ${path}.`);
+    }
+    return { width: meta.width, height: meta.height };
+}
+
+function stretchLines(photo: { width: number; height: number }, render: EffectiveRender): string[] {
+    if (render.canvas === undefined) {
+        return photoStretchWarnings(photo, render.presets, render.scale);
+    }
+    const stretch =
+        Math.max(render.canvas.width / photo.width, render.canvas.height / photo.height) *
+        render.scale;
+    return stretch > MAX_PHOTO_STRETCH
+        ? [
+              `Photo: ${photo.width}x${photo.height} is stretched ${stretch.toFixed(1)}x on the ${render.canvas.width}x${render.canvas.height} canvas. A larger photo stays sharp.`,
+          ]
+        : [];
 }
 
 interface LoadedSubject {
@@ -493,6 +525,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                           ? defaultWorkspaceOutputPath(workspaceDir, now)
                           : effective.output;
                     const paletteOption = palette ? { palette } : {};
+                    const photoSize = await imageSize(photoPath);
                     const subject = await loadSubject(runtime, workspaceDir, options.subject);
                     const template: CoverTemplate = {
                         ...(subject ? { layoutFor: withSubjectArea } : {}),
@@ -548,6 +581,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         [
                             ...coverLines(written.covers, effective.render.scale),
                             ...written.warnings,
+                            ...stretchLines(photoSize, effective.render),
                             ...subjectLine(subject),
                             `Photo: ${photoMeta.ref ?? photoPath}`,
                             ...creditLines(photoMeta),
@@ -792,7 +826,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 [
                     `Saved ${fetched.imagePath}`,
                     `Sidecar: ${fetched.sidecar}`,
-                    `Size: ${fetched.photo.width}x${fetched.photo.height}`,
+                    sizeLine(fetched),
                     ...creditLines(fetched.photo),
                     '',
                 ].join('\n'),

@@ -16,6 +16,7 @@ import {
     composeCovers,
     composeCustomCover,
     coverOutputPaths,
+    photoStretchWarnings,
     thumbnailWarnings,
 } from './index.ts';
 
@@ -366,5 +367,24 @@ describe('thumbnail check', () => {
             scale: 1,
         });
         expect(cover?.feedHeadlinePx).toBeCloseTo((108 * 180) / 1080);
+    });
+});
+
+describe('photo stretch check', () => {
+    it('warns when the photo has to grow more than 1.5x for a platform', () => {
+        // 1024x683 铺满母版要放大 1.875 倍。youtube 再从 1920 缩到 1280，只剩 1.25 倍，不提示。
+        // x 按母版原样输出，公众号再从 865 宽放到 900 宽。
+        expect(
+            photoStretchWarnings({ width: 1024, height: 683 }, ['youtube', 'x', 'wechat'], 1),
+        ).toEqual([
+            'Photo: 1024x683 is stretched 1.9x on x. A larger photo stays sharp.',
+            'Photo: 1024x683 is stretched 2.0x on wechat. A larger photo stays sharp.',
+        ]);
+        expect(
+            photoStretchWarnings({ width: 4000, height: 3000 }, ['youtube', 'douyin'], 1),
+        ).toEqual([]);
+        expect(photoStretchWarnings({ width: 1280, height: 800 }, ['youtube'], 2)).toEqual([
+            'Photo: 1280x800 is stretched 2.0x on youtube. A larger photo stays sharp.',
+        ]);
     });
 });

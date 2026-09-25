@@ -357,6 +357,9 @@ describe('BeastCover CLI', () => {
         expect(html).toContain('Dawn tide');
         expect(html).toContain('data:image/jpeg;base64,');
         expect(html).toContain('--cover-paper: #f4efe6');
+        expect(stdout.chunks.join('')).toContain(
+            'Photo: 64x32 is stretched 25.0x on youtube. A larger photo stays sharp.',
+        );
         expect(stdout.chunks.join('')).toContain(`Photo: ${photoPath}`);
         expect(stdout.chunks.join('')).toContain('Privacy: render stayed on this machine.');
 
@@ -512,6 +515,46 @@ describe('BeastCover CLI', () => {
         expect(exitCode).toBe(1);
         expect(fetchImpl).not.toHaveBeenCalled();
         expect(stderr.chunks.join('')).toContain('Pexels needs an API key.');
+    });
+
+    it('stock fetch reports the size the host served when it is smaller than listed', async () => {
+        const cwd = tempDir('beastcover-stock-fetch-size-');
+        const png = await testPngBytes(80, 40);
+        const stock = {
+            fetch: (async () =>
+                new Response(
+                    JSON.stringify({
+                        id: 'a1',
+                        url: 'https://upload.example/a1.png',
+                        license: 'cc0',
+                        creator: 'Ada',
+                        width: 5000,
+                        height: 2500,
+                        foreign_landing_url: 'https://rawpixel.example/a1',
+                    }),
+                    { status: 200 },
+                )) as unknown as typeof fetch,
+            sleep: async () => undefined,
+            download: {
+                lookup: async () => [{ address: '104.16.1.1', family: 4 }],
+                pinnedFetch: async () =>
+                    new Response(png, { status: 200, headers: { 'content-type': 'image/png' } }),
+            },
+        };
+        const stdout = captureOutput();
+
+        const exitCode = await runCli(
+            ['node', 'beastcover', 'stock', 'fetch', 'openverse:a1', '--dir', 'refs'],
+            { cwd, configPath: join(cwd, 'unused-config.json'), stdout, stock },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(stdout.chunks.join('')).toContain(
+            'Size: 80x40 (the host served a smaller copy than the listed 5000x2500)',
+        );
+        expect(
+            JSON.parse(readFileSync(join(cwd, 'refs', 'openverse-a1.png.json'), 'utf8')),
+        ).toMatchObject({ width: 80, height: 40, listedWidth: 5000, listedHeight: 2500 });
     });
 
     it('stock fetch needs a workspace or --dir and never creates one', async () => {

@@ -1,7 +1,8 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import sharp from 'sharp';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
     downloadPhotoBytes,
     extensionForContentType,
@@ -21,6 +22,16 @@ afterEach(() => {
 });
 
 const publicLookup = async () => [{ address: '104.16.1.1', family: 4 }];
+
+let jpeg: Buffer;
+
+beforeAll(async () => {
+    jpeg = await sharp({
+        create: { width: 64, height: 40, channels: 3, background: { r: 9, g: 9, b: 9 } },
+    })
+        .jpeg()
+        .toBuffer();
+});
 
 function imageResponse(bytes: Buffer, contentType: string): Response {
     return new Response(bytes, { status: 200, headers: { 'content-type': contentType } });
@@ -43,13 +54,13 @@ describe('stock download', () => {
         ).rejects.toThrowError('Stock photo download URL must use https');
 
         const pinned = vi.fn(async (_url: URL, _pin: PinnedTarget, _init?: PinnedFetchInit) =>
-            imageResponse(Buffer.from('abc'), 'image/jpeg'),
+            imageResponse(jpeg, 'image/jpeg'),
         );
         const result = await downloadPhotoBytes('https://images.example/a.jpg', {
             lookup: publicLookup,
             pinnedFetch: pinned,
         });
-        expect(result).toEqual({ bytes: Buffer.from('abc'), extension: '.jpg' });
+        expect(result).toEqual({ bytes: jpeg, extension: '.jpg', width: 64, height: 40 });
         expect(pinned.mock.calls[0]?.[1]).toEqual({
             hostname: 'images.example',
             address: '104.16.1.1',
@@ -73,6 +84,14 @@ describe('stock download', () => {
                 pinnedFetch: empty,
             }),
         ).rejects.toThrowError('empty body');
+
+        const html = vi.fn(async () => imageResponse(Buffer.from('<html>'), 'image/jpeg'));
+        await expect(
+            downloadPhotoBytes('https://images.example/a.jpg', {
+                lookup: publicLookup,
+                pinnedFetch: html,
+            }),
+        ).rejects.toThrowError('Stock photo download is not a readable image.');
     });
 
     it('writes the image beside a sidecar that records provenance', () => {
@@ -94,7 +113,7 @@ describe('stock download', () => {
 
         const written = writePhotoFiles({
             photo,
-            downloaded: { bytes: Buffer.from('img'), extension: '.jpg' },
+            downloaded: { bytes: Buffer.from('img'), extension: '.jpg', width: 1600, height: 900 },
             basePath: join(directory, 'refs', 'pexels-42'),
             now: new Date('2026-09-23T00:00:00.000Z'),
         });
@@ -114,6 +133,38 @@ describe('stock download', () => {
             width: 1600,
             height: 900,
             fetchedAt: '2026-09-23T00:00:00.000Z',
+        });
+    });
+
+    it('records the size the host actually served and keeps the listed size beside it', () => {
+        const directory = mkdtempSync(join(tmpdir(), 'beastcover-stock-size-'));
+        tempDirectories.push(directory);
+        const photo: StockPhoto = {
+            ref: 'openverse:a1',
+            provider: 'openverse',
+            id: 'a1',
+            width: 5000,
+            height: 3334,
+            creator: 'unknown',
+            license: 'cc0',
+            attribution: '',
+            pageUrl: 'https://www.rawpixel.com/image/1',
+            thumbnail: '',
+            downloadUrl: 'https://images.rawpixel.com/editor_1024/a.jpg',
+        };
+
+        const written = writePhotoFiles({
+            photo,
+            downloaded: { bytes: jpeg, extension: '.jpg', width: 1024, height: 683 },
+            basePath: join(directory, 'openverse-a1'),
+            now: new Date('2026-09-25T00:00:00.000Z'),
+        });
+
+        expect(JSON.parse(readFileSync(written.sidecar, 'utf8'))).toMatchObject({
+            width: 1024,
+            height: 683,
+            listedWidth: 5000,
+            listedHeight: 3334,
         });
     });
 });
