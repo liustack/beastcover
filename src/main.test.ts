@@ -1106,6 +1106,101 @@ describe('BeastCover CLI', () => {
         }
     });
 
+    it('renders the poster, number, and compare templates and records the template', async () => {
+        const cwd = tempDir('beastcover-cli-templates-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        writeFileSync(join(cwd, 'a.png'), await testPngBytes(64, 64));
+        writeFileSync(join(cwd, 'b.png'), await testPngBytes(64, 64));
+
+        for (const [name, args, marker] of [
+            ['poster', ['--tag', '新手必看'], 'class="tag">新手必看'],
+            ['number', ['--number', '3'], 'class="figure">3'],
+            [
+                'compare',
+                ['--before', 'a.png', '--after', 'b.png', '--labels', '之前,之后'],
+                '>之后</div>',
+            ],
+        ] as const) {
+            const renderHtml = mockRender();
+            const exitCode = await runCli(
+                [
+                    'node',
+                    'beastcover',
+                    'gen',
+                    '封面没人点',
+                    '--source',
+                    'render',
+                    '--template',
+                    name,
+                    ...args,
+                    '--output',
+                    join(cwd, `${name}.png`),
+                ],
+                {
+                    cwd,
+                    configPath: join(cwd, 'unused-config.json'),
+                    openRenderer: renderHtml.open,
+                    stdout: captureOutput(),
+                },
+            );
+            expect(exitCode, name).toBe(0);
+            expect(renderHtml.mock.calls[0]?.[0].html, name).toContain(marker);
+            expect(existsSync(join(cwd, `${name}.png`)), name).toBe(true);
+        }
+
+        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
+            .trimEnd()
+            .split('\n')
+            .map((line) => (JSON.parse(line) as { template?: string }).template);
+        expect(history).toEqual(['poster', 'number', 'compare']);
+    });
+
+    it('rejects template options that do not match the template', async () => {
+        const cwd = tempDir('beastcover-cli-template-errors-');
+        for (const [args, message] of [
+            [
+                ['--template', 'banner'],
+                'Unknown template "banner". Use text, poster, number, compare.',
+            ],
+            [['--tag', '新手'], '--tag is only valid with --template poster.'],
+            [
+                ['--template', 'poster', '--number', '3'],
+                '--number is only valid with --template number.',
+            ],
+            [
+                ['--template', 'number'],
+                '--template number needs --number <figure>, like --number 3.',
+            ],
+            [
+                ['--template', 'compare', '--before', 'a.png'],
+                '--template compare needs --before <path> and --after <path>.',
+            ],
+            [
+                ['--template', 'compare', '--before', 'a.png', '--after', 'b.png'],
+                `--before image not found: ${join(cwd, 'a.png')}`,
+            ],
+            [
+                ['--template', 'number', '--number', '3', '--subject', 'me.png'],
+                '--subject works with the text and poster templates.',
+            ],
+            [
+                ['--source', 'stock', '--photo', 'x.jpg', '--template', 'poster'],
+                '--template works with --source render.',
+            ],
+        ] as const) {
+            const stderr = captureOutput();
+            const exitCode = await runCli(['node', 'beastcover', 'gen', 'A', ...args], {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: mockRender().open,
+                stdout: captureOutput(),
+                stderr,
+            });
+            expect(exitCode, args.join(' ')).toBe(1);
+            expect(stderr.chunks.join(''), args.join(' ')).toBe(`Error: ${message}\n`);
+        }
+    });
+
     it('names the platform preset when an old ratio preset is passed', async () => {
         const renderHtml = mockRender();
         const stderr = captureOutput();

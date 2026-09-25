@@ -10,6 +10,8 @@ export interface CoverLayout {
     family?: FamilyName;
     /** 有人物主体时才有：人物贴着这个区域的底边放 */
     subjectArea?: Rect;
+    /** 模板的第二段大字（比如数字钩子里的数字）放这里，字号单独量 */
+    accentArea?: Rect;
 }
 
 // 人物版式：人物占一侧（竖版占下半），标题让到另一侧。人物压在最上层，所以两块不重叠，
@@ -118,6 +120,8 @@ export interface Headline {
     fontPx: number;
     /** 按标点切成短句，每句不拆开，句与句之间换行 */
     keepClauses: boolean;
+    /** 版式有 accentArea 时，第二段大字量出来的字号 */
+    accentPx?: number;
 }
 
 const CLAUSE_END = /(?<=[，。！？；：、,.!?;:])\s*/u;

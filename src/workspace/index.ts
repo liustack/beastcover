@@ -56,6 +56,8 @@ export interface HistoryRecord {
     via?: LocalModelProvider;
     /** 出图的平台，自定义画布时没有 */
     preset?: PlatformName;
+    /** render 用的文字封面模板，默认的 text 不记 */
+    template?: string;
     catalogPalette?: Record<string, PaletteSlotValue>;
     photo?: HistoryPhoto;
     subject?: HistorySubject;
@@ -410,6 +412,12 @@ function parseHistoryRecord(filePath: string, lineNumber: number, raw: string): 
             );
         }
         record.preset = parsed.preset as PlatformName;
+    }
+    if (parsed.template !== undefined) {
+        if (typeof parsed.template !== 'string' || parsed.template.trim() === '') {
+            throw new Error(`${filePath}:${lineNumber} has invalid "template". Expected a string.`);
+        }
+        record.template = parsed.template;
     }
     if (parsed.photo !== undefined) {
         record.photo = parseHistoryPhoto(filePath, lineNumber, parsed.photo);

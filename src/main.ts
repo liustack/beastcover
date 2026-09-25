@@ -20,6 +20,12 @@ import {
     thumbnailWarnings,
 } from './compose/index.ts';
 import {
+    parseTemplateName,
+    TEMPLATE_NAMES,
+    type TemplateName,
+    textCoverTemplate,
+} from './compose/templates.ts';
+import {
     CONFIG_PATH,
     type ConfigFlags,
     type EffectiveConfig,
@@ -48,10 +54,12 @@ import {
     type PlatformName,
     parsePlatformList,
 } from './platforms/index.ts';
+import { parseLabels } from './render/compare.ts';
 import { type CoverRenderer, openRenderer } from './render/index.ts';
 import { withSubjectArea } from './render/layout.ts';
+import { validateNumber } from './render/number.ts';
 import { createPhotoCoverTemplate, preparePhotoLayer } from './render/photo-cover.ts';
-import { createRenderTemplate } from './render/template.ts';
+import { validateTag } from './render/poster.ts';
 import {
     fetchStockPhoto,
     isStockRef,
@@ -389,6 +397,83 @@ function subjectHistory(subject: LoadedSubject | undefined) {
     return subject ? { subject: { path: subject.path, method: subject.layer.method } } : {};
 }
 
+interface TemplateOptions {
+    template?: string;
+    tag?: string;
+    number?: string;
+    before?: string;
+    after?: string;
+    labels?: string;
+    subject?: string;
+}
+
+const TEMPLATE_ONLY_OPTIONS: readonly [keyof TemplateOptions, TemplateName][] = [
+    ['tag', 'poster'],
+    ['number', 'number'],
+    ['before', 'compare'],
+    ['after', 'compare'],
+    ['labels', 'compare'],
+];
+
+/** 模板和它专属的参数要对得上，对不上直接报错，不猜用户想要哪个 */
+function checkTemplateOptions(options: TemplateOptions, source: ImageSource): TemplateName {
+    const name = options.template === undefined ? 'text' : parseTemplateName(options.template);
+    if (name !== 'text' && source !== 'render') {
+        throw new Error('--template works with --source render.');
+    }
+    for (const [option, owner] of TEMPLATE_ONLY_OPTIONS) {
+        if (options[option] !== undefined && name !== owner) {
+            throw new Error(`--${option} is only valid with --template ${owner}.`);
+        }
+    }
+    if (name === 'number' && options.number === undefined) {
+        throw new Error('--template number needs --number <figure>, like --number 3.');
+    }
+    if (name === 'compare' && (options.before === undefined || options.after === undefined)) {
+        throw new Error('--template compare needs --before <path> and --after <path>.');
+    }
+    if (options.subject !== undefined && (name === 'number' || name === 'compare')) {
+        throw new Error('--subject works with the text and poster templates.');
+    }
+    return name;
+}
+
+function existingImage(runtime: CliRuntime, option: string, value: string): string {
+    const path = resolve(runtime.cwd, value);
+    if (!existsSync(path)) {
+        throw new Error(`${option} image not found: ${path}`);
+    }
+    return path;
+}
+
+function templateRequest(
+    runtime: CliRuntime,
+    name: TemplateName,
+    options: TemplateOptions,
+    subject: LoadedSubject | undefined,
+) {
+    const person = subject ? { subject: subject.layer } : {};
+    switch (name) {
+        case 'text':
+            return { template: 'text' as const, ...person };
+        case 'poster':
+            return {
+                template: 'poster' as const,
+                ...person,
+                ...(options.tag === undefined ? {} : { tag: validateTag(options.tag) }),
+            };
+        case 'number':
+            return { template: 'number' as const, figure: validateNumber(options.number ?? '') };
+        case 'compare':
+            return {
+                template: 'compare' as const,
+                before: existingImage(runtime, '--before', options.before ?? ''),
+                after: existingImage(runtime, '--after', options.after ?? ''),
+                ...(options.labels === undefined ? {} : { labels: parseLabels(options.labels) }),
+            };
+    }
+}
+
 export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
     const runtime = createRuntime(overrides);
     const program = new Command();
@@ -431,6 +516,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             '--photo <ref-or-path>',
             'Stock photo ref (pexels:<id>, openverse:<id>) or a local image',
         )
+        .option('--template <name>', `Text cover template: ${TEMPLATE_NAMES.join(', ')}`)
+        .option('--tag <text>', 'Poster template: a short label above the headline')
+        .option('--number <figure>', 'Number template: the big figure, like 3, 90%, or 10x')
+        .option('--before <path>', 'Compare template: the image shown first')
+        .option('--after <path>', 'Compare template: the image shown second')
+        .option('--labels <first,second>', 'Compare template: a label for each side')
         .option(
             '--subject <path>',
             'Person or object to put on the cover: a transparent PNG, or a photo to cut out on macOS',
@@ -451,6 +542,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     ref?: string[];
                     photo?: string;
                     subject?: string;
+                    template?: string;
+                    tag?: string;
+                    number?: string;
+                    before?: string;
+                    after?: string;
+                    labels?: string;
                     verbose?: boolean;
                 },
             ) => {
@@ -465,6 +562,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 if (options.photo !== undefined && effective.source !== 'stock') {
                     throw new Error('--photo is only valid with --source stock.');
                 }
+                const templateName = checkTemplateOptions(options, effective.source);
 
                 if (effective.source === 'stock') {
                     if (options.photo === undefined || options.photo.trim() === '') {
@@ -712,25 +810,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     : workspaceDir
                       ? defaultWorkspaceOutputPath(workspaceDir, now)
                       : effective.output;
-                const paletteOption = palette ? { palette } : {};
                 const subject = await loadSubject(runtime, workspaceDir, options.subject);
-                const template: CoverTemplate = {
-                    ...(subject ? { layoutFor: withSubjectArea } : {}),
-                    measureHtml: (layout, headline) =>
-                        createRenderTemplate(text, {
-                            layout,
-                            headline,
-                            measure: true,
-                            ...paletteOption,
-                        }),
-                    renderHtml: async (layout, headline) =>
-                        createRenderTemplate(text, {
-                            layout,
-                            headline,
-                            ...paletteOption,
-                            ...(subject ? { subject: subject.layer } : {}),
-                        }),
-                };
+                const template = textCoverTemplate({
+                    text,
+                    ...(palette ? { palette } : {}),
+                    ...templateRequest(runtime, templateName, options, subject),
+                });
                 const written = await writeCovers(
                     runtime,
                     text,
@@ -748,6 +833,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             palette: palette ?? {},
                             text,
                             ...(cover.platform ? { preset: cover.platform } : {}),
+                            ...(templateName === 'text' ? {} : { template: templateName }),
                             output: cover.outputPath,
                             ...subjectHistory(subject),
                         });

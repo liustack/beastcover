@@ -1,10 +1,11 @@
-// --guides 参考线：把标题区（绿）、主体区（橙）、人物区（蓝）和平台界面遮挡区（红）画到成品上，方便目检。
+// --guides 参考线：把标题区（绿）、主体区（橙）、人物区（蓝）、大字区（紫）和平台界面遮挡区（红）画到成品上，方便目检。
 import type { Platform, Rect } from '../platforms/index.ts';
 
 export interface GuideAreas {
     textArea: Rect;
     focusArea: Rect;
     subjectArea?: Rect;
+    accentArea?: Rect;
 }
 
 function toOutput(rect: Rect, platform: Platform, factor: number): Rect {
@@ -43,6 +44,14 @@ export function guidesOverlay(
                   rectTag(
                       toOutput(areas.subjectArea, platform, factor),
                       `fill="none" stroke="#3b82f6" stroke-width="${stroke}" ${dash}`,
+                  ),
+              ]
+            : []),
+        ...(areas.accentArea
+            ? [
+                  rectTag(
+                      toOutput(areas.accentArea, platform, factor),
+                      `fill="none" stroke="#a855f7" stroke-width="${stroke}"`,
                   ),
               ]
             : []),

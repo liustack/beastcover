@@ -148,14 +148,82 @@ export function resolveRenderColors(palette: Record<string, PaletteSlotValue> = 
     };
 }
 
-export function createRenderTemplate(text: string, options: RenderTemplateOptions): string {
-    const palette = options.palette ?? {};
+/** 调色板里每个槽都要有合法的 CSS 颜色，缺了或写错直接报错 */
+export function validatePaletteCss(palette: Record<string, PaletteSlotValue>): void {
     for (const [name, slot] of Object.entries(palette)) {
         if (typeof slot.css !== 'string') {
             throw new Error(`Palette slot "${name}" is missing a CSS color.`);
         }
         parseCssColorValue(slot.css);
     }
+}
+
+// 大字模板共用的无衬线粗体。
+export const BOLD_SANS =
+    '"PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif';
+
+/** 按底色深浅选黑字或白字：底色亮度高于 0.62 用近黑，否则用白。任何 CSS 颜色写法都能用 */
+export function contrastingText(background: string): string {
+    return `oklch(from ${background} clamp(0.18, (0.62 - l) * 1000, 1) 0 0)`;
+}
+
+/** 三个大字模板共用的页面骨架 */
+export function coverDocument(input: {
+    layout: CoverLayout;
+    colors: { paper: string; ink: string; accent: string };
+    background: string;
+    fontFamily: string;
+    css: string;
+    body: string;
+}): string {
+    const { layout, colors } = input;
+    return `<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>BeastCover</title>
+    <style>
+        :root {
+            color-scheme: light;
+            font-family: ${input.fontFamily};
+            --cover-paper: ${colors.paper};
+            --cover-ink: ${colors.ink};
+            --cover-accent: ${colors.accent};
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: ${layout.width}px;
+            height: ${layout.height}px;
+            margin: 0;
+            overflow: hidden;
+            background: ${input.background};
+        }
+
+        #canvas {
+            position: relative;
+            width: ${layout.width}px;
+            height: ${layout.height}px;
+            isolation: isolate;
+        }
+${input.css}
+    </style>
+</head>
+<body>
+    <main id="canvas">
+${input.body}
+    </main>
+</body>
+</html>`;
+}
+
+export function createRenderTemplate(text: string, options: RenderTemplateOptions): string {
+    const palette = options.palette ?? {};
+    validatePaletteCss(palette);
     const colors = resolveRenderColors(palette);
     const paletteJson = escapeHtml(JSON.stringify(palette));
     const { layout } = options;

@@ -26,6 +26,8 @@ export interface CoverTemplate {
     layoutFor?(layout: CoverLayout): CoverLayout;
     /** 量字号用的页面：同样的版式和字体，不带照片等重资源 */
     measureHtml(layout: CoverLayout, headline: Headline): string;
+    /** 版式有 accentArea 时提供：只排第二段大字的量字号页面，大字放在 .copy 里 */
+    measureAccentHtml?(layout: CoverLayout, fontPx: number): string;
     /** 真正截图的页面，pixelWidth/pixelHeight 是截图的设备像素，照片按它预处理 */
     renderHtml(
         layout: CoverLayout,
@@ -85,6 +87,37 @@ async function fitFontPx(
     }
 }
 
+async function fitAccent(
+    renderer: CoverRenderer,
+    template: CoverTemplate,
+    layout: CoverLayout,
+    where: string,
+): Promise<number | undefined> {
+    const area = layout.accentArea;
+    const measure = template.measureAccentHtml;
+    if (area === undefined || measure === undefined) {
+        return undefined;
+    }
+    try {
+        return await renderer.fitText({
+            html: (fontPx) => measure(layout, fontPx),
+            width: layout.width,
+            height: layout.height,
+            box: area,
+            minPx: MIN_HEADLINE_PX,
+            // 大字行高常压到 1 以下，上限放宽到区域高度的 1.3 倍，交给测量决定。
+            maxPx: Math.max(MIN_HEADLINE_PX, Math.round(area.height * 1.3)),
+        });
+    } catch (error) {
+        if (error instanceof TextDoesNotFitError) {
+            throw new Error(
+                `The big figure is too long to fit ${where} even at ${MIN_HEADLINE_PX}px. Shorten it.`,
+            );
+        }
+        throw error;
+    }
+}
+
 async function fitHeadline(
     renderer: CoverRenderer,
     template: CoverTemplate,
@@ -92,6 +125,8 @@ async function fitHeadline(
     text: string,
     where: string,
 ): Promise<Headline> {
+    const accentPx = await fitAccent(renderer, template, layout, where);
+    const accent = accentPx === undefined ? {} : { accentPx };
     const free = await fitFontPx(renderer, template, layout, false);
     if (free === undefined) {
         throw new Error(
@@ -101,10 +136,10 @@ async function fitHeadline(
     if (headlineClauses(text).length > 1) {
         const clauses = await fitFontPx(renderer, template, layout, true);
         if (clauses !== undefined && clauses >= free * KEEP_CLAUSES_MIN_RATIO) {
-            return { fontPx: clauses, keepClauses: true };
+            return { fontPx: clauses, keepClauses: true, ...accent };
         }
     }
-    return { fontPx: free, keepClauses: false };
+    return { fontPx: free, keepClauses: false, ...accent };
 }
 
 function writePng(outputPath: string, bytes: Buffer): string {
@@ -200,6 +235,7 @@ export async function composeCovers(input: {
                                 textArea: layout.textArea,
                                 focusArea: family.focusArea,
                                 ...(layout.subjectArea ? { subjectArea: layout.subjectArea } : {}),
+                                ...(layout.accentArea ? { accentArea: layout.accentArea } : {}),
                             },
                             pixelWidth,
                             pixelHeight,
