@@ -27,7 +27,7 @@ import Vision
 
 // 用法：
 //   vision cutout <输入图片> <输出 PNG>   抠出前景主体
-//   vision focus <输入图片>              打印主体中心的 JSON：有人脸按人脸，没有按显著区域
+//   vision focus <输入图片>              打印主体中心的 JSON：人脸，其次显著物体，其次注意力区域
 // 退出码 2 参数错，3 没找到主体，4 读写失败。
 let args = CommandLine.arguments
 
@@ -61,9 +61,11 @@ func printFocus(_ box: CGRect, _ source: String) {
 func focus(_ path: String) {
     let handler = VNImageRequestHandler(cgImage: loadImage(path), options: [:])
     let faces = VNDetectFaceRectanglesRequest()
-    let saliency = VNGenerateAttentionBasedSaliencyImageRequest()
+    // 按物体的显著性框得紧，按注意力的常常框住大半张图，所以先用前者，没有结果再用后者。
+    let objects = VNGenerateObjectnessBasedSaliencyImageRequest()
+    let attention = VNGenerateAttentionBasedSaliencyImageRequest()
     do {
-        try handler.perform([faces, saliency])
+        try handler.perform([faces, objects, attention])
     } catch {
         fail("vision failed: \(error)", 4)
     }
@@ -71,10 +73,12 @@ func focus(_ path: String) {
         printFocus(box, "faces")
         return
     }
-    let salient = (saliency.results?.first?.salientObjects ?? []).map { $0.boundingBox }
-    if let box = union(salient) {
-        printFocus(box, "saliency")
-        return
+    let candidates: [[VNSaliencyImageObservation]?] = [objects.results, attention.results]
+    for results in candidates {
+        if let box = union((results?.first?.salientObjects ?? []).map { $0.boundingBox }) {
+            printFocus(box, "saliency")
+            return
+        }
     }
     fail("no subject found", 3)
 }

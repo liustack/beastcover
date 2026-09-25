@@ -1150,6 +1150,7 @@ describe('BeastCover CLI', () => {
                     cwd,
                     configPath: join(cwd, 'unused-config.json'),
                     openRenderer: renderHtml.open,
+                    photoFocus: centreFocus,
                     stdout: captureOutput(),
                 },
             );

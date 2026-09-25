@@ -12,6 +12,8 @@ export interface CoverLayout {
     subjectArea?: Rect;
     /** 模板的第二段大字（比如数字钩子里的数字）放这里，字号单独量 */
     accentArea?: Rect;
+    /** 本次要出的同族平台都看得见的区域（它们裁切框的交集），合成时填上 */
+    visibleArea?: Rect;
 }
 
 // 人物版式：人物占一侧（竖版占下半），标题让到另一侧。人物压在最上层，所以两块不重叠，

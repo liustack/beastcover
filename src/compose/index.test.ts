@@ -16,6 +16,7 @@ import {
     composeCovers,
     composeCustomCover,
     coverOutputPaths,
+    familyVisibleArea,
     focusCropWarnings,
     photoStretchWarnings,
     thumbnailWarnings,
@@ -410,22 +411,65 @@ describe('photo stretch check', () => {
     });
 });
 
+describe('visible area', () => {
+    it('is the overlap of the crops of the requested platforms in a family', () => {
+        expect(familyVisibleArea('ultrawide', ['x'])).toEqual({
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 368,
+        });
+        expect(familyVisibleArea('ultrawide', ['x', 'wechat'])).toEqual(getPlatform('wechat').crop);
+        expect(familyVisibleArea('portrait', ['douyin', 'xiaohongshu'])).toEqual(
+            getPlatform('xiaohongshu').crop,
+        );
+    });
+});
+
 describe('focus crop check', () => {
-    it('suggests extend when the subject is taller than the crop window', () => {
-        // 783x1023 的竖版人像，脸占 60% 高：X 母版 5.2:1，窗口只有 150px 高。
+    it('names the platforms where the photo cannot show its subject', () => {
+        // 1920x368 的照片铺满超宽母版挪不动，右边的主体公众号看不到，X 看得到。
         expect(
-            focusCropWarnings({ width: 783, height: 1023 }, { width: 0.5, height: 0.6 }, [
-                'x',
-                'wechat',
-                'youtube',
-                'douyin',
-            ]),
+            focusCropWarnings(
+                { width: 1920, height: 368 },
+                { x: 0.9, y: 0.5, width: 0.07, height: 0.4, source: 'attention' },
+                ['x', 'wechat'],
+            ),
         ).toEqual([
-            'Photo: the subject does not fit the x, wechat crop. Add --fit extend to keep the whole photo.',
-            'Photo: the subject does not fit the youtube crop. Add --fit extend to keep the whole photo.',
+            'Photo: the subject falls outside the wechat crop. Add --fit extend to keep the whole photo.',
+        ]);
+        // 竖版人像进超宽母版：脸比窗口还高，两个都看不全。
+        expect(
+            focusCropWarnings(
+                { width: 783, height: 1023 },
+                { x: 0.5, y: 0.4, width: 0.5, height: 0.6, source: 'faces' },
+                ['x', 'wechat', 'douyin'],
+            ),
+        ).toEqual([
+            'Photo: the subject falls outside the x, wechat crop. Add --fit extend to keep the whole photo.',
         ]);
         expect(
-            focusCropWarnings({ width: 3000, height: 2000 }, { width: 0.2, height: 0.2 }, ['x']),
+            focusCropWarnings(
+                { width: 3000, height: 2000 },
+                { x: 0.5, y: 0.5, width: 0.2, height: 0.2, source: 'attention' },
+                ['x', 'youtube'],
+            ),
         ).toEqual([]);
+    });
+});
+
+describe('photo stretch check with extend', () => {
+    it('does not warn when extend only shrinks the sharp photo', () => {
+        expect(
+            photoStretchWarnings(
+                { width: 1920, height: 368 },
+                ['xiaohongshu', 'douyin'],
+                1,
+                'extend',
+            ),
+        ).toEqual([]);
+        expect(photoStretchWarnings({ width: 400, height: 300 }, ['youtube'], 1, 'extend')).toEqual(
+            ['Photo: 400x300 is stretched 2.4x on youtube. A larger photo stays sharp.'],
+        );
     });
 });

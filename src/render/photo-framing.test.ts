@@ -8,9 +8,11 @@ import { attentionFocus } from '../subject/focus.ts';
 import { visionFocus } from '../subject/vision.ts';
 import { customLayout, familyLayout } from './layout.ts';
 import {
+    framePhoto,
     photoFocusTarget,
     photoTextLayout,
     placeWindow,
+    preparePanelLayer,
     preparePhotoLayer,
 } from './photo-cover.ts';
 
@@ -97,6 +99,115 @@ describe('photo framing', () => {
                 target: 0.95,
             }),
         ).toBe(700);
+    });
+
+    it('keeps the focus inside the visible part of the window when the photo allows it', () => {
+        // 窗口 1920 宽，只有 0.275 到 0.725 这段会被公众号看到。主体在 3000，目标 0.64 时起点 1771，
+        // 主体落在窗口的 1229 处，在可见段里。
+        expect(
+            placeWindow({
+                source: 4000,
+                window: 1920,
+                focusCenter: 3000,
+                focusSize: 100,
+                target: 0.64,
+                visible: [0.275, 0.725],
+            }),
+        ).toBe(1771);
+        // 目标在可见段外（0.95）时，改成让主体贴着可见段的边。
+        expect(
+            placeWindow({
+                source: 4000,
+                window: 1920,
+                focusCenter: 3000,
+                focusSize: 100,
+                target: 0.95,
+                visible: [0.275, 0.725],
+            }),
+        ).toBe(3050 - Math.round(0.725 * 1920));
+    });
+
+    it('reports when the photo cannot move far enough to show its focus', () => {
+        // 1920x368 的照片正好铺满超宽母版，窗口挪不动，主体在最右边，公众号看不到。
+        const framed = framePhoto({
+            source: { width: 1920, height: 368 },
+            canvas: { width: 1920, height: 368 },
+            focus: { x: 0.9, y: 0.5, width: 0.07, height: 0.4, source: 'attention' },
+            target: { x: 0.64, y: 0.45 },
+            visible: { x: 0.275, y: 0, width: 0.45, height: 1 },
+        });
+        expect(framed.focusVisible).toBe(false);
+        // 照片比母版宽一倍，窗口能左右挪，主体就能挪进可见段。
+        const roomy = framePhoto({
+            source: { width: 8000, height: 768 },
+            canvas: { width: 1920, height: 368 },
+            focus: { x: 0.7, y: 0.5, width: 0.03, height: 0.3, source: 'attention' },
+            target: { x: 0.64, y: 0.45 },
+            visible: { x: 0.275, y: 0, width: 0.45, height: 1 },
+        });
+        expect(roomy.focusVisible).toBe(true);
+    });
+
+    it('puts the sharp extend photo inside the visible area', async () => {
+        // 超宽照片，红块在右边 x≈0.88。公众号只看得到中间 0.275 到 0.725。
+        const path = join(tempDir(), 'wide.png');
+        await sharp({ create: { width: 1920, height: 368, channels: 3, background: '#808080' } })
+            .composite([
+                {
+                    input: {
+                        create: { width: 140, height: 140, channels: 3, background: '#ff0000' },
+                    },
+                    left: 1630,
+                    top: 114,
+                },
+            ])
+            .png()
+            .toFile(path);
+        const layer = await preparePhotoLayer(path, 1920, 368, {
+            fit: 'extend',
+            focus: { x: 0.885, y: 0.5, width: 0.07, height: 0.38, source: 'attention' },
+            target: { x: 0.64, y: 0.45 },
+            visible: { x: 0.275, y: 0, width: 0.45, height: 1 },
+        });
+        // 模糊背景里也留着一点红，只数可见段里的清晰红块。
+        const bytes = Buffer.from(layer.dataUri.slice(layer.dataUri.indexOf(',') + 1), 'base64');
+        const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+        let inside = 0;
+        for (let y = 0; y < info.height; y += 1) {
+            for (
+                let x = Math.round(0.275 * info.width);
+                x < Math.round(0.725 * info.width);
+                x += 1
+            ) {
+                const i = (y * info.width + x) * info.channels;
+                if ((data[i] ?? 0) > 230 && (data[i + 1] ?? 255) < 40) {
+                    inside += 1;
+                }
+            }
+        }
+        expect(inside).toBeGreaterThan(1000);
+    });
+
+    it('frames a compare panel sharp inside its visible part and blurs the rest', async () => {
+        // 红块在照片中间，面板只有右边 45% 看得见：清晰的红块要出现在那一截里。
+        const path = await photoWithRedBlock();
+        const layer = await preparePanelLayer(path, 960, 368, {
+            focus: { x: 300 / 1600, y: 0.5, width: 0.125, height: 0.22, source: 'attention' },
+            visible: { x: 0.55, y: 0, width: 0.45, height: 1 },
+        });
+        const bytes = Buffer.from(layer.dataUri.slice(layer.dataUri.indexOf(',') + 1), 'base64');
+        const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+        expect([info.width, info.height]).toEqual([960, 368]);
+        let inside = 0;
+        for (let y = 0; y < info.height; y += 1) {
+            for (let x = Math.round(0.55 * info.width); x < info.width; x += 1) {
+                const i = (y * info.width + x) * info.channels;
+                if ((data[i] ?? 0) > 230 && (data[i + 1] ?? 255) < 40) {
+                    inside += 1;
+                }
+            }
+        }
+        expect(inside).toBeGreaterThan(1000);
     });
 
     it('moves the focus toward the target instead of cropping around the centre', async () => {

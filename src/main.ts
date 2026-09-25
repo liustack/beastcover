@@ -55,19 +55,23 @@ import {
     PLATFORM_NAMES,
     type PlatformName,
     parsePlatformList,
+    type Rect,
 } from './platforms/index.ts';
 import { parseLabels } from './render/compare.ts';
 import { type CoverRenderer, openRenderer } from './render/index.ts';
+import type { CoverLayout } from './render/layout.ts';
 import { withSubjectArea } from './render/layout.ts';
 import { validateNumber } from './render/number.ts';
 import {
     createPhotoCoverTemplate,
     PHOTO_LOOKS,
+    type PhotoFit,
     parsePhotoFit,
     parsePhotoLook,
     photoFocusTarget,
     photoTextLayout,
     preparePhotoLayer,
+    visibleFraction,
 } from './render/photo-cover.ts';
 import { validateTag } from './render/poster.ts';
 import {
@@ -374,18 +378,30 @@ async function imageSize(path: string): Promise<{ width: number; height: number 
         : { width: meta.width, height: meta.height };
 }
 
-function stretchLines(photo: { width: number; height: number }, render: EffectiveRender): string[] {
+function stretchLines(
+    photo: { width: number; height: number },
+    render: EffectiveRender,
+    fit: PhotoFit,
+): string[] {
     if (render.canvas === undefined) {
-        return photoStretchWarnings(photo, render.presets, render.scale);
+        return photoStretchWarnings(photo, render.presets, render.scale, fit);
     }
-    const stretch =
-        Math.max(render.canvas.width / photo.width, render.canvas.height / photo.height) *
-        render.scale;
+    // cover 按铺满算，extend 按整张放进画布算。
+    const fill =
+        fit === 'extend'
+            ? Math.min(render.canvas.width / photo.width, render.canvas.height / photo.height)
+            : Math.max(render.canvas.width / photo.width, render.canvas.height / photo.height);
+    const stretch = fill * render.scale;
     return stretch > MAX_PHOTO_STRETCH
         ? [
               `Photo: ${photo.width}x${photo.height} is stretched ${stretch.toFixed(1)}x on the ${render.canvas.width}x${render.canvas.height} canvas. A larger photo stays sharp.`,
           ]
         : [];
+}
+
+function visibleOption(layout: CoverLayout): { visible?: Rect } {
+    const visible = visibleFraction(layout);
+    return visible === undefined ? {} : { visible };
 }
 
 interface LoadedSubject {
@@ -498,6 +514,7 @@ function templateRequest(
                 template: 'compare' as const,
                 before: existingImage(runtime, '--before', options.before ?? ''),
                 after: existingImage(runtime, '--after', options.after ?? ''),
+                focusOf: runtime.photoFocus,
                 ...(options.labels === undefined ? {} : { labels: parseLabels(options.labels) }),
             };
     }
@@ -697,6 +714,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                     focus,
                                     target: photoFocusTarget(layout, subject !== undefined),
                                     fit,
+                                    ...visibleOption(layout),
                                 }),
                                 look,
                                 ...paletteOption,
@@ -739,9 +757,14 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         [
                             ...coverLines(written.covers, effective.render.scale),
                             ...written.warnings,
-                            ...stretchLines(photoSize, effective.render),
+                            ...stretchLines(photoSize, effective.render, fit),
                             ...(fit === 'cover' && effective.render.canvas === undefined
-                                ? focusCropWarnings(photoSize, focus, effective.render.presets)
+                                ? focusCropWarnings(
+                                      photoSize,
+                                      focus,
+                                      effective.render.presets,
+                                      subject !== undefined,
+                                  )
                                 : []),
                             ...subjectLine(subject),
                             `Photo: ${photoMeta.ref ?? photoPath}`,

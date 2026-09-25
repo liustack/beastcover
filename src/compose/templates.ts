@@ -1,14 +1,34 @@
 // --template 的四种文字封面：text（默认）、poster 大字报、number 数字钩子、compare 前后对比。
 // 这里把模板名和参数组装成 composeCovers 用的 CoverTemplate。
+
+import type { Rect } from '../platforms/index.ts';
 import { compareLayout, createCompareTemplate } from '../render/compare.ts';
 import { type CoverLayout, withSubjectArea } from '../render/layout.ts';
 import { createNumberTemplate, numberLayout } from '../render/number.ts';
-import { preparePhotoLayer } from '../render/photo-cover.ts';
+import { preparePanelLayer } from '../render/photo-cover.ts';
 import { createPosterTemplate } from '../render/poster.ts';
 import { createRenderTemplate } from '../render/template.ts';
 import type { PaletteSlotValue } from '../styles/schema.ts';
 import type { SubjectLayer } from '../subject/index.ts';
+import type { PhotoFocus } from '../subject/vision.ts';
 import type { CoverTemplate } from './index.ts';
+
+/** 面板里平台看得见的那一截，换算成面板的 0 到 1 */
+export function panelVisibility(panel: Rect, visibleArea: Rect): Rect {
+    const x = Math.max(panel.x, visibleArea.x);
+    const y = Math.max(panel.y, visibleArea.y);
+    const right = Math.min(panel.x + panel.width, visibleArea.x + visibleArea.width);
+    const bottom = Math.min(panel.y + panel.height, visibleArea.y + visibleArea.height);
+    if (right <= x || bottom <= y) {
+        throw new Error('A compare panel has no visible part on the requested platforms.');
+    }
+    return {
+        x: (x - panel.x) / panel.width,
+        y: (y - panel.y) / panel.height,
+        width: (right - x) / panel.width,
+        height: (bottom - y) / panel.height,
+    };
+}
 
 export const TEMPLATE_NAMES = ['text', 'poster', 'number', 'compare'] as const;
 
@@ -28,7 +48,14 @@ export type TextTemplateRequest = {
     | { template: 'text'; subject?: SubjectLayer }
     | { template: 'poster'; subject?: SubjectLayer; tag?: string }
     | { template: 'number'; figure: string }
-    | { template: 'compare'; before: string; after: string; labels?: [string, string] }
+    | {
+          template: 'compare';
+          before: string;
+          after: string;
+          labels?: [string, string];
+          /** 找两张图的主体，好把它们放进平台看得见的那一截 */
+          focusOf: (imagePath: string) => Promise<PhotoFocus>;
+      }
 );
 
 export function textCoverTemplate(request: TextTemplateRequest): CoverTemplate {
@@ -116,17 +143,25 @@ export function textCoverTemplate(request: TextTemplateRequest): CoverTemplate {
                     const withPanels = panelsOf(layout);
                     const { first, second } = withPanels.panels;
                     const k = pixelWidth / layout.width;
+                    const visibleArea = layout.visibleArea ?? {
+                        x: 0,
+                        y: 0,
+                        width: layout.width,
+                        height: layout.height,
+                    };
+                    // 每张图只在自己那一半里、又在平台看得见的那一截里露出主体。
+                    const framed = async (path: string, panel: Rect) => {
+                        const seen = panelVisibility(panel, visibleArea);
+                        return preparePanelLayer(
+                            path,
+                            Math.round(panel.width * k),
+                            Math.round(panel.height * k),
+                            { focus: await request.focusOf(path), visible: seen },
+                        );
+                    };
                     const images = [
-                        await preparePhotoLayer(
-                            before,
-                            Math.round(first.width * k),
-                            Math.round(first.height * k),
-                        ),
-                        await preparePhotoLayer(
-                            after,
-                            Math.round(second.width * k),
-                            Math.round(second.height * k),
-                        ),
+                        await framed(before, first),
+                        await framed(after, second),
                     ] as const;
                     return createCompareTemplate(text, {
                         layout: withPanels,

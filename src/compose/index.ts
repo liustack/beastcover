@@ -19,6 +19,8 @@ import {
     type Headline,
     headlineClauses,
 } from '../render/layout.ts';
+import { framePhoto, photoFocusTarget, visibleFraction } from '../render/photo-cover.ts';
+import type { PhotoFocus } from '../subject/vision.ts';
 import { guidesOverlay } from './guides.ts';
 
 export interface CoverTemplate {
@@ -163,6 +165,30 @@ function scaleRect(rect: Rect, factor: number): Rect {
     };
 }
 
+function intersect(a: Rect, b: Rect): Rect {
+    const x = Math.max(a.x, b.x);
+    const y = Math.max(a.y, b.y);
+    return {
+        x,
+        y,
+        width: Math.min(a.x + a.width, b.x + b.width) - x,
+        height: Math.min(a.y + a.height, b.y + b.height) - y,
+    };
+}
+
+/** 本次要出的这一族平台都看得见的区域：它们裁切框的交集，母版坐标 */
+export function familyVisibleArea(family: FamilyName, platforms: readonly PlatformName[]): Rect {
+    const crops = platforms
+        .map((name) => getPlatform(name))
+        .filter((platform) => platform.family === family)
+        .map((platform) => platform.crop);
+    const first = crops[0];
+    if (first === undefined) {
+        throw new Error(`No ${family} platform was requested.`);
+    }
+    return crops.slice(1).reduce(intersect, { ...first });
+}
+
 /** 多个平台时每个文件名后面加平台名，只有一个平台时原样返回 */
 export function coverOutputPaths(
     outputPath: string,
@@ -200,7 +226,13 @@ export async function composeCovers(input: {
     for (const [familyName, members] of byFamily) {
         const family = getFamily(familyName);
         const base = familyLayout(familyName);
-        const layout = input.template.layoutFor?.(base) ?? base;
+        const layout = {
+            ...(input.template.layoutFor?.(base) ?? base),
+            visibleArea: familyVisibleArea(
+                familyName,
+                members.map((member) => member.platform.name),
+            ),
+        };
         const headline = await fitHeadline(
             input.renderer,
             input.template,
@@ -271,7 +303,10 @@ export async function composeCustomCover(input: {
     outputPath: string;
 }): Promise<{ outputPath: string; pixelWidth: number; pixelHeight: number }> {
     const base = customLayout(input.width, input.height);
-    const layout = input.template.layoutFor?.(base) ?? base;
+    const layout = {
+        ...(input.template.layoutFor?.(base) ?? base),
+        visibleArea: { x: 0, y: 0, width: input.width, height: input.height },
+    };
     const headline = await fitHeadline(
         input.renderer,
         input.template,
@@ -302,20 +337,27 @@ export function thumbnailWarnings(covers: readonly ComposedCover[]): string[] {
 // 照片放大到这个倍数以上就会明显发虚。
 export const MAX_PHOTO_STRETCH = 1.5;
 
-/** 照片铺满母版再裁出每个平台时要放大多少倍，超过 MAX_PHOTO_STRETCH 的列出来 */
+/**
+ * 照片要放大多少倍，超过 MAX_PHOTO_STRETCH 的列出来。cover 是照片铺满母版再裁出平台，
+ * extend 是清晰照片整个放进同族平台的共同可见区域（模糊背景放大多少不算）。
+ */
 export function photoStretchWarnings(
     photo: { width: number; height: number },
     platforms: readonly PlatformName[],
     scale: number,
+    fit: 'cover' | 'extend' = 'cover',
 ): string[] {
     return platforms.flatMap((name) => {
         const platform = getPlatform(name);
         const family = getFamily(platform.family);
-        const cover = Math.max(
-            family.masterWidth / photo.width,
-            family.masterHeight / photo.height,
-        );
-        const stretch = cover * (platform.width / platform.crop.width) * scale;
+        const fill =
+            fit === 'extend'
+                ? (() => {
+                      const area = familyVisibleArea(platform.family, platforms);
+                      return Math.min(area.width / photo.width, area.height / photo.height);
+                  })()
+                : Math.max(family.masterWidth / photo.width, family.masterHeight / photo.height);
+        const stretch = fill * (platform.width / platform.crop.width) * scale;
         return stretch > MAX_PHOTO_STRETCH
             ? [
                   `Photo: ${photo.width}x${photo.height} is stretched ${stretch.toFixed(1)}x on ${name}. A larger photo stays sharp.`,
@@ -324,27 +366,52 @@ export function photoStretchWarnings(
     });
 }
 
-/** 照片主体比某个族的裁切窗口还大时（比如竖版人像裁进 X 横幅），提示改用 --fit extend */
+/**
+ * 按实际构图算：照片在每族母版里摆好以后，主体范围落不进哪些平台的裁切框，就提示改用 --fit extend。
+ * 构图和出图用的是同一个 framePhoto，提示和成品不会对不上。
+ */
 export function focusCropWarnings(
     photo: { width: number; height: number },
-    focus: { width: number; height: number },
+    focus: PhotoFocus,
     platforms: readonly PlatformName[],
+    hasSubject = false,
 ): string[] {
     const families = [...new Set(platforms.map((name) => getPlatform(name).family))];
     return families.flatMap((familyName) => {
         const family = getFamily(familyName);
-        const aspect = family.masterWidth / family.masterHeight;
-        const windowWidth = Math.min(photo.width, photo.height * aspect);
-        const windowHeight = Math.min(photo.height, photo.width / aspect);
-        const cut =
-            focus.width * photo.width > windowWidth + 1 ||
-            focus.height * photo.height > windowHeight + 1;
-        if (!cut) {
-            return [];
-        }
-        const names = platforms.filter((name) => getPlatform(name).family === familyName);
-        return [
-            `Photo: the subject does not fit the ${names.join(', ')} crop. Add --fit extend to keep the whole photo.`,
-        ];
+        const canvas = { width: family.masterWidth, height: family.masterHeight };
+        const members = platforms.filter((name) => getPlatform(name).family === familyName);
+        const visible = familyVisibleArea(familyName, members);
+        const layout = { ...familyLayout(familyName), visibleArea: visible };
+        const framed = framePhoto({
+            source: photo,
+            canvas,
+            focus,
+            target: photoFocusTarget(layout, hasSubject),
+            visible: visibleFraction(layout),
+        });
+        // 主体范围换到母版坐标。
+        const kx = canvas.width / framed.width;
+        const ky = canvas.height / framed.height;
+        const box: Rect = {
+            x: ((focus.x - focus.width / 2) * photo.width - framed.left) * kx,
+            y: ((focus.y - focus.height / 2) * photo.height - framed.top) * ky,
+            width: focus.width * photo.width * kx,
+            height: focus.height * photo.height * ky,
+        };
+        const cut = members.filter((name) => {
+            const crop = getPlatform(name).crop;
+            return (
+                box.x < crop.x - 1 ||
+                box.y < crop.y - 1 ||
+                box.x + box.width > crop.x + crop.width + 1 ||
+                box.y + box.height > crop.y + crop.height + 1
+            );
+        });
+        return cut.length === 0
+            ? []
+            : [
+                  `Photo: the subject falls outside the ${cut.join(', ')} crop. Add --fit extend to keep the whole photo.`,
+              ];
     });
 }
