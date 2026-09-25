@@ -16,6 +16,8 @@ const PRESETS = [
   'instagram-reels',
   'douyin',
   'tiktok',
+  'og',
+  'github',
 ]
 
 export const name = 'beastcover'

@@ -1,6 +1,6 @@
 ---
 name: beastcover
-description: "Make covers that get the click: a thumbnail or header for an article, video, or post, sized for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, or TikTok. Start with a free photo cover: search cc0 stock, put the headline and project palette on it, no API key and no upload. Use this skill whenever the user asks for a cover, thumbnail, hero image, banner, or a text-led title card. Also use it for BeastCover configuration and offline diagnostics."
+description: "Make covers that get the click: a thumbnail or header for an article, video, or post, sized for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, or TikTok, plus the Open Graph image of a web page and a GitHub social preview. Start with a free photo cover: search cc0 stock, put the headline and project palette on it, no API key and no upload. Use this skill whenever the user asks for a cover, thumbnail, hero image, banner, OG image, social preview, or a text-led title card. Also use it for BeastCover configuration and offline diagnostics."
 compatibility: Requires Node.js 22.19 or newer. Local HTML rendering also requires Playwright Chromium.
 allowed-tools: Bash
 ---
@@ -49,6 +49,8 @@ beastcover styles risograph_editorial
 | `bilibili` | 1146×717 | Keep key content in the middle |
 | `xiaohongshu`, `instagram` | 1080×1440 | Leave about 10% free at the top and bottom |
 | `douyin`, `tiktok`, `instagram-reels` | 1080×1920 | Feeds often show only the centre 3:4. The app UI covers about 220px at the top and 380px at the bottom |
+| `og` | 1200×630 | The Open Graph image of a web page or article, shown when the link is shared |
+| `github` | 1280×640 | A GitHub repository social preview, uploaded in the repository settings |
 
 Platforms with close ratios share one master and are cropped from it: WeChat from the middle of the X banner, Xiaohongshu and Instagram from the middle of the Douyin frame, YouTube from the Bilibili frame. The CLI keeps the headline inside the area every platform in the group shows and sizes it as large as that area allows. The table above is only for choosing platforms and judging the result.
 

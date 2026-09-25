@@ -2,7 +2,7 @@
 
 ## Goal
 
-Provide the `beastcover` CLI and its agent distribution surfaces. BeastCover makes covers only: thumbnails and headers for articles, videos, and posts on WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok.
+Provide the `beastcover` CLI and its agent distribution surfaces. BeastCover makes covers only: thumbnails and headers for articles, videos, and posts on WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok, plus Open Graph link previews and GitHub social previews.
 
 The name plays on Beauty and the Beast: a cover needs that kind of contrast and impact, because people see the title and the cover first and skip anything that does not grab them. The product contract is covers that get the click, with every platform version of one piece in the same style and palette.
 

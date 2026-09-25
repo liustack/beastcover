@@ -36,7 +36,7 @@ Issues are welcome any time. [Open one](https://github.com/liustack/beastcover/i
 
 **🆓 Free, and no API key.** Openverse is the default source, and it only returns CC0 and public domain photos, so there is nothing to credit. Add a Pexels key and Pexels goes first.
 
-**📐 One command, every platform.** `--preset all` makes covers for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok at once, with the headline as big as each safe area allows.
+**📐 One command, every platform.** `--preset all` makes covers for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok at once, plus the Open Graph image for your page and a GitHub social preview, with the headline as big as each safe area allows.
 
 **🔒 Your draft stays home.** Rendering happens in a local Chromium. The only network calls are the photo search and the photo download.
 
@@ -71,8 +71,8 @@ Without a photo, `--source render` makes a text-only cover. `--template poster` 
 
 | Preset | Pixels | Use | Shares a master with |
 | :-- | :-- | :-- | :-- |
-| `youtube` | 1280×720 | YouTube thumbnail | `bilibili` |
-| `bilibili` | 1146×717 | Bilibili video cover | `youtube` |
+| `youtube` | 1280×720 | YouTube thumbnail | `bilibili`, `og`, `github` |
+| `bilibili` | 1146×717 | Bilibili video cover | `youtube`, `og`, `github` |
 | `wechat` | 900×383 | WeChat article cover | `x` |
 | `x` | 1920×368 | X article cover | `wechat` |
 | `xiaohongshu` | 1080×1440 | Xiaohongshu note cover | the other portrait presets |
@@ -80,6 +80,8 @@ Without a photo, `--source render` makes a text-only cover. `--template poster` 
 | `instagram-reels` | 1080×1920 | Instagram Reels cover | the other portrait presets |
 | `douyin` | 1080×1920 | Douyin video cover | the other portrait presets |
 | `tiktok` | 1080×1920 | TikTok video cover | the other portrait presets |
+| `og` | 1200×630 | Open Graph link preview for a web page | `youtube`, `bilibili`, `github` |
+| `github` | 1280×640 | GitHub repository social preview | `youtube`, `bilibili`, `og` |
 
 `--preset` takes one name, a comma list such as `wechat,x,douyin`, or `all`. Several presets write `<name>-<platform>.png`. The default is `youtube`.
 

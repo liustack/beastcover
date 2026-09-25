@@ -38,6 +38,8 @@ describe('platform presets', () => {
             ['instagram-reels', 1080, 1920, 'portrait'],
             ['douyin', 1080, 1920, 'portrait'],
             ['tiktok', 1080, 1920, 'portrait'],
+            ['og', 1200, 630, 'landscape'],
+            ['github', 1280, 640, 'landscape'],
         ]);
         expect(getPlatform('wechat').use).toBe('WeChat article cover');
     });
@@ -106,7 +108,7 @@ describe('platform presets', () => {
 
     it('lists every preset for an unknown name, including inherited object keys', () => {
         const message =
-            'Use youtube, bilibili, wechat, x, xiaohongshu, instagram, instagram-reels, douyin, tiktok.';
+            'Use youtube, bilibili, wechat, x, xiaohongshu, instagram, instagram-reels, douyin, tiktok, og, github.';
         expect(() => getPlatform('square')).toThrowError(
             `Unknown platform preset "square". ${message}`,
         );

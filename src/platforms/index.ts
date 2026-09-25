@@ -8,6 +8,8 @@ export const PLATFORM_NAMES = [
     'instagram-reels',
     'douyin',
     'tiktok',
+    'og',
+    'github',
 ] as const;
 
 export type PlatformName = (typeof PLATFORM_NAMES)[number];
@@ -174,6 +176,27 @@ const PLATFORMS: Readonly<Record<PlatformName, Platform>> = {
         crop: PORTRAIT_FULL_CROP,
         covered: SHORT_VIDEO_UI,
         feedWidth: 125,
+    },
+    // 网页分享卡片通用的 Open Graph 图，X、微信、Slack、LinkedIn 贴链接时都用它。
+    og: {
+        name: 'og',
+        width: 1200,
+        height: 630,
+        use: 'Open Graph link preview',
+        family: 'landscape',
+        crop: { x: 0, y: 96, width: 1920, height: 1008 },
+        covered: [],
+        feedWidth: 500,
+    },
+    github: {
+        name: 'github',
+        width: 1280,
+        height: 640,
+        use: 'GitHub repository social preview',
+        family: 'landscape',
+        crop: { x: 0, y: 120, width: 1920, height: 960 },
+        covered: [],
+        feedWidth: 420,
     },
 };
 

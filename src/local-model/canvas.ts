@@ -111,6 +111,26 @@ const LOCAL_MODEL_CANVAS_PLANS: Record<PlatformName, LocalModelCanvasPlan> = {
     'instagram-reels': { preset: 'instagram-reels', ...PORTRAIT_9X16 },
     douyin: { preset: 'douyin', ...PORTRAIT_9X16 },
     tiktok: { preset: 'tiktok', ...PORTRAIT_9X16 },
+    og: {
+        preset: 'og',
+        ...LANDSCAPE,
+        cropWidth: 1536,
+        cropHeight: 806,
+        cropLeft: 0,
+        cropTop: 109,
+        outputWidth: 1200,
+        outputHeight: 630,
+    },
+    github: {
+        preset: 'github',
+        ...LANDSCAPE,
+        cropWidth: 1536,
+        cropHeight: 768,
+        cropLeft: 0,
+        cropTop: 128,
+        outputWidth: 1280,
+        outputHeight: 640,
+    },
 };
 
 export function getLocalModelCanvasPlan(preset: PlatformName): LocalModelCanvasPlan {

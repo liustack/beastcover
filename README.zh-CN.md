@@ -36,7 +36,7 @@ npx -y skills add liustack/beastcover -g
 
 **🆓 不花钱，不用 key。** 默认走 Openverse，只收 CC0 和公有领域的照片，拿来就能用，也不用署名。配了 Pexels key 就优先用 Pexels。
 
-**📐 一条命令，全平台出齐。** `--preset all` 一次出公众号、X、YouTube、B 站、小红书、Instagram、抖音、TikTok 的封面，标题在每个平台的安全区里尽量放大。
+**📐 一条命令，全平台出齐。** `--preset all` 一次出公众号、X、YouTube、B 站、小红书、Instagram、抖音、TikTok 的封面，外加网页的 OG 分享图和 GitHub 预览图，标题在每个平台的安全区里尽量放大。
 
 **🔒 稿子不出电脑。** 渲染在本机 Chromium 里完成，联网的只有搜图和下载照片。
 
@@ -71,8 +71,8 @@ beastcover gen "人接不住认知以外的流量，也赚不到认知以外的�
 
 | 预设 | 像素 | 用在哪 | 和谁共用母版 |
 | :-- | :-- | :-- | :-- |
-| `youtube` | 1280×720 | YouTube 缩略图 | `bilibili` |
-| `bilibili` | 1146×717 | B 站视频封面 | `youtube` |
+| `youtube` | 1280×720 | YouTube 缩略图 | `bilibili`、`og`、`github` |
+| `bilibili` | 1146×717 | B 站视频封面 | `youtube`、`og`、`github` |
 | `wechat` | 900×383 | 公众号文章封面 | `x` |
 | `x` | 1920×368 | X 文章封面 | `wechat` |
 | `xiaohongshu` | 1080×1440 | 小红书笔记封面 | 其他竖版预设 |
@@ -80,6 +80,8 @@ beastcover gen "人接不住认知以外的流量，也赚不到认知以外的�
 | `instagram-reels` | 1080×1920 | Instagram Reels 封面 | 其他竖版预设 |
 | `douyin` | 1080×1920 | 抖音视频封面 | 其他竖版预设 |
 | `tiktok` | 1080×1920 | TikTok 视频封面 | 其他竖版预设 |
+| `og` | 1200×630 | 网页的 Open Graph 分享图 | `youtube`、`bilibili`、`github` |
+| `github` | 1280×640 | GitHub 仓库的社交预览图 | `youtube`、`bilibili`、`og` |
 
 `--preset` 可以给一个名字、逗号分隔的列表（比如 `wechat,x,douyin`），或者 `all`。出多张时文件名是 `<名字>-<平台>.png`。默认是 `youtube`。
 
