@@ -76,7 +76,7 @@ Search first. Openverse needs no key and returns only cc0 and public-domain phot
 beastcover stock search "harbour dawn" --orientation landscape
 ```
 
-The output lists one photo per line: ref, size, license, creator, thumbnail URL. Do not take the first result by default. Pick by the text you can read: the source page title and creator hint at the subject, and the size must not be smaller than the target preset. When the harness can show images, fetch a thumbnail URL and look for one strong subject and a calm area where the headline can sit. Then render:
+The output lists one photo per line: ref, size, license, creator, thumbnail URL. Do not take the first result by default. Pick by the text you can read: the source page title and creator hint at the subject. The listed size can be optimistic: some Openverse sources only serve a 1024px copy. `stock fetch` and `gen` report the size that was actually served, and `gen` prints a `Photo: ... is stretched` line when a platform needs the photo blown up more than 1.5x. Offer a larger photo when you see it. When the harness can show images, fetch a thumbnail URL and look for one strong subject and a calm area where the headline can sit. Then render:
 
 ```bash
 beastcover gen "<headline>" --source stock --photo openverse:<id> --preset wechat,x,xiaohongshu
@@ -98,13 +98,28 @@ beastcover gen "<headline>" --source stock --photo openverse:<id> --subject /abs
 - A transparent PNG is used as is. On macOS 14 or newer a normal photo is cut out on the machine with the system cutout, and the output says `cut out on this machine with macOS Vision`. The first cutout compiles a small tool, which takes a few seconds.
 - Other systems fail with a message asking for a transparent PNG. Tell the user to cut the photo out first (iPhone or macOS "Copy Subject", remove.bg, Photoshop). Never pass the photo to a local-model CLI to remove the background: the model redraws the face.
 - The person stands on one side (the bottom on portrait covers) with a white outline, and the headline takes the other side. Keep that headline short: three to six characters, or a few words.
+- The cutout keeps everything that stands out in the foreground. When the photo has several people or things close together, crop it to the one person first, or ask for a PNG that is already cut out.
 - `--subject` works with `render` and `stock`, not with `local-model`.
 
 ## Render a text cover
 
+`--source render` has four templates. Pick the one that matches the hook:
+
+| Template | Use it when | Extra options |
+| :-- | :-- | :-- |
+| `text` (default) | A headline on a calm paper background | `--subject` |
+| `poster` | Loud and flat: a full-bleed palette colour, huge type | `--tag "<2 to 6 words>"`, `--subject` |
+| `number` | The hook is a figure: 3 habits, 90%, 10x | `--number <figure>` (required) |
+| `compare` | Before and after, this versus that | `--before <path> --after <path>` (required), `--labels "<first>,<second>"` |
+
 ```bash
 beastcover gen "<headline>" --source render --preset xiaohongshu
+beastcover gen "封面没人点" --source render --template poster --tag "新手必看" --preset all
+beastcover gen "个习惯多出两小时" --source render --template number --number 3 --preset all
+beastcover gen "三个月后" --source render --template compare --before /abs/old.jpg --after /abs/new.jpg --labels "之前,之后" --preset all
 ```
+
+Options that belong to another template fail with a message, so pick the template first. With `number` and `compare` the headline sits in a smaller area: keep it to a few words, or the `Thumbnail:` warning will ask for it.
 
 ```bash
 npx --yes --package @liustack/beastcover@0.2.0 beastcover gen "<headline>" --source render --preset youtube --output <path>.png

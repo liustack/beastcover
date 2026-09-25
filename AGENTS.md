@@ -13,6 +13,7 @@ Phase one currently ships these working surfaces:
 - `render` turns the built-in HTML template and a headline into a local PNG cover
 - `stock search` and `stock fetch` find and download free photos from Openverse (cc0 and pdm only, no key) or Pexels (needs `stock.pexels.apiKey`)
 - `gen --source stock --photo <ref-or-path>` composes a photo cover: the photo is inlined as a data URI, the project palette tints it, and the headline sits on a scrim
+- `gen --source render --template text|poster|number|compare` picks the text cover: a calm headline, a loud full-bleed poster with an optional `--tag`, a huge `--number` beside a short line, or a `--before`/`--after` split with an arrow
 - `gen --subject <path>` puts a person or object on a render or stock cover: a transparent PNG as is, or a photo cut out on macOS 14+ with Vision
 - `local-model` calls the user's own Codex, Grok, or Claude CLI to paint a cover
 - `styles` lists the four self-contained catalog styles
@@ -44,6 +45,9 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - `gen` renders one master per family at 2x or more, then crops and scales every requested platform from it with `sharp`. The renderer finds the largest font that keeps the headline inside the text area, keeps Latin words whole, and keeps punctuated clauses together when that costs under 30% of the size. Headline size is never set by fixed CSS ratios.
 - local-model runs the model once per family, saves the raw image in `.beastcover/cache/`, and crops each platform from it.
 - Subject cutout lives in `src/subject/`. A PNG with at least 2% transparent pixels is used as is. Otherwise the Swift source in `vision.ts` is compiled once into `~/.beastcover/bin/vision-cutout-<hash>` and run on the image, and the result is cached in the workspace `cache/` by image hash. Non-macOS or macOS before 14 fails with a request for a transparent PNG. The person sits in its own subject area, above the headline, and the subject area never overlaps the text area (`src/render/layout.test.ts`).
+- Templates live in `src/render/` (`template.ts`, `poster.ts`, `number.ts`, `compare.ts`, `photo-cover.ts`) and are assembled into a `CoverTemplate` by `src/compose/templates.ts`. A template may change the layout (`layoutFor`) and may fit a second big text (`measureAccentHtml` into `accentArea`, the number figure). Options that belong to another template fail instead of being ignored.
+- Stock downloads are measured with sharp. The sidecar keeps the served size and, when different, the listed size. `gen` warns when a photo is stretched more than 1.5x on a platform.
+- history.jsonl stores output, photo, and subject paths relative to the workspace.
 - Workspace discovery only accepts a `.beastcover/` that contains `project.json`, because the settings folder `~/.beastcover/` has the same name.
 - `local-model` asks the backend for the native generate size, then crops and resizes in-process with `sharp`. It does not shell out to sips or ImageMagick.
 - Each style record is self-contained. Copy its full prompt unchanged and append one subject description.
@@ -65,7 +69,8 @@ src/
 │   └── index.test.ts
 ├── compose/
 │   ├── index.ts            # Family masters, crops, custom canvas, thumbnail check
-│   ├── guides.ts           # --guides overlay for text, focus, and covered areas
+│   ├── templates.ts        # --template name and options to a CoverTemplate
+│   ├── guides.ts           # --guides overlay for text, focus, subject, figure, and covered areas
 │   └── index.test.ts
 ├── subject/
 │   ├── index.ts            # Transparent PNG or cutout, cache by image hash, trim
@@ -84,6 +89,10 @@ src/
 │   ├── layout.ts           # Cover layouts, subject split, headline markup, measuring probes
 │   ├── layout.test.ts
 │   ├── index.test.ts
+│   ├── poster.ts           # Poster template: full-bleed colour, dot texture, tag
+│   ├── number.ts           # Number template: fitted figure beside a short line
+│   ├── compare.ts          # Compare template: split panels, seam arrow, labels
+│   ├── templates.test.ts
 │   ├── photo-cover.ts      # Photo cover template and sharp preprocessing
 │   ├── photo-cover.test.ts
 │   ├── template.ts         # Built-in text-led cover template
@@ -125,6 +134,8 @@ beastcover gen "One headline, every platform" --source render --preset all
 beastcover stock search "harbour dawn" --orientation landscape
 beastcover gen "The tide comes back" --source stock --photo openverse:<id> --preset wechat,x --guides
 beastcover gen "别再乱剪了" --source render --subject me.jpg --preset youtube,xiaohongshu
+beastcover gen "封面没人点" --source render --template poster --tag "新手必看" --preset all
+beastcover gen "个习惯多出两小时" --source render --template number --number 3 --preset all
 beastcover gen "A figure on a shore" --source local-model --via codex --preset xiaohongshu
 beastcover config init
 beastcover config set render.preset x
