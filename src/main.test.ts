@@ -63,6 +63,14 @@ function mockRender() {
     return Object.assign(screenshot, { open: vi.fn(async () => renderer) });
 }
 
+const centreFocus = async (_imagePath: string) => ({
+    x: 0.5,
+    y: 0.5,
+    width: 0.3,
+    height: 0.3,
+    source: 'attention' as const,
+});
+
 async function testPngBytes(width: number, height: number): Promise<Buffer> {
     return sharp({
         create: { width, height, channels: 3, background: { r: 40, g: 80, b: 120 } },
@@ -347,6 +355,7 @@ describe('BeastCover CLI', () => {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
                 openRenderer: renderHtml.open,
+                photoFocus: centreFocus,
                 stdout,
                 now: () => now,
             },
@@ -420,6 +429,7 @@ describe('BeastCover CLI', () => {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
                 openRenderer: renderHtml.open,
+                photoFocus: centreFocus,
                 stdout,
                 now: () => now,
                 stock,
@@ -1198,6 +1208,72 @@ describe('BeastCover CLI', () => {
             });
             expect(exitCode, args.join(' ')).toBe(1);
             expect(stderr.chunks.join(''), args.join(' ')).toBe(`Error: ${message}\n`);
+        }
+    });
+
+    it('frames the photo around its focus and applies the look', async () => {
+        const cwd = tempDir('beastcover-cli-look-');
+        writeFileSync(join(cwd, 'wide.png'), await testPngBytes(400, 200));
+        const renderHtml = mockRender();
+        const photoFocus = vi.fn(centreFocus);
+
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Look',
+                '--source',
+                'stock',
+                '--photo',
+                'wide.png',
+                '--look',
+                'duotone',
+                '--fit',
+                'extend',
+                '--preset',
+                'douyin',
+                '--output',
+                join(cwd, 'look.png'),
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                photoFocus,
+                stdout: captureOutput(),
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(photoFocus).toHaveBeenCalledOnce();
+        expect(photoFocus.mock.calls[0]?.[0]).toBe(join(cwd, 'wide.png'));
+        const html = renderHtml.mock.calls[0]?.[0].html ?? '';
+        expect(html).toContain('class="tone-shadow"');
+        expect(html).toContain('filter: grayscale(1) contrast(1.2)');
+
+        for (const [args, message] of [
+            [
+                ['--look', 'sepia', '--source', 'stock', '--photo', 'wide.png'],
+                'Unknown look "sepia". Use natural, mono, duotone, punch.',
+            ],
+            [
+                ['--fit', 'stretch', '--source', 'stock', '--photo', 'wide.png'],
+                'Unknown fit "stretch". Use cover, extend.',
+            ],
+            [['--look', 'mono'], '--look and --fit work with --source stock.'],
+        ] as const) {
+            const stderr = captureOutput();
+            const code = await runCli(['node', 'beastcover', 'gen', 'Look', ...args], {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: mockRender().open,
+                photoFocus,
+                stdout: captureOutput(),
+                stderr,
+            });
+            expect(code, args.join(' ')).toBe(1);
+            expect(stderr.chunks.join('')).toBe(`Error: ${message}\n`);
         }
     });
 

@@ -211,7 +211,7 @@ describe('macOS Vision cutout', () => {
                 (Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) * 4;
             expect(data[middle + 3]).toBe(255);
             expect(
-                readdirSync(binDir).filter((name) => name.startsWith('vision-cutout-')),
+                readdirSync(binDir).filter((name) => name.startsWith('vision-tool-')),
             ).toHaveLength(1);
 
             const blank = join(directory, 'blank.png');

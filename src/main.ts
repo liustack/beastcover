@@ -58,7 +58,15 @@ import { parseLabels } from './render/compare.ts';
 import { type CoverRenderer, openRenderer } from './render/index.ts';
 import { withSubjectArea } from './render/layout.ts';
 import { validateNumber } from './render/number.ts';
-import { createPhotoCoverTemplate, preparePhotoLayer } from './render/photo-cover.ts';
+import {
+    createPhotoCoverTemplate,
+    PHOTO_LOOKS,
+    parsePhotoFit,
+    parsePhotoLook,
+    photoFocusTarget,
+    photoTextLayout,
+    preparePhotoLayer,
+} from './render/photo-cover.ts';
 import { validateTag } from './render/poster.ts';
 import {
     fetchStockPhoto,
@@ -74,7 +82,14 @@ import {
 } from './stock/index.ts';
 import { listStyles, loadStyle } from './styles/loader.ts';
 import type { StyleDefinition } from './styles/schema.ts';
-import { prepareSubject, type SubjectLayer, visionSubjectCutout } from './subject/index.ts';
+import { findPhotoFocus } from './subject/focus.ts';
+import {
+    prepareSubject,
+    type SubjectLayer,
+    visionCutoutUnavailable,
+    visionSubjectCutout,
+} from './subject/index.ts';
+import { type PhotoFocus, visionFocus } from './subject/vision.ts';
 import {
     appendHistory,
     createWorkspace,
@@ -106,12 +121,19 @@ export interface CliRuntime {
     stock: Pick<StockRuntime, 'fetch' | 'sleep' | 'download'>;
     /** 把普通照片里的主体抠成透明 PNG，默认用 macOS Vision */
     cutout: (inputPath: string, outputPath: string) => Promise<void>;
+    /** 照片主体在哪：macOS 上用 Vision 找人脸和显著区域，其他系统用 sharp */
+    photoFocus: (imagePath: string) => Promise<PhotoFocus>;
 }
 
 export type CliRuntimeOverrides = Partial<CliRuntime>;
 
 function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
     const configPath = overrides.configPath ?? CONFIG_PATH;
+    const vision = {
+        platform: process.platform,
+        binDir: join(dirname(configPath), 'bin'),
+        lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
+    };
     return {
         stdout: overrides.stdout ?? process.stdout,
         stderr: overrides.stderr ?? process.stderr,
@@ -130,13 +152,15 @@ function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
         lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
         runLocalModel: overrides.runLocalModel ?? defaultRunLocalModel,
         stock: overrides.stock ?? {},
-        cutout:
-            overrides.cutout ??
-            visionSubjectCutout({
-                platform: process.platform,
-                binDir: join(dirname(configPath), 'bin'),
-                lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
-            }),
+        cutout: overrides.cutout ?? visionSubjectCutout(vision),
+        photoFocus:
+            overrides.photoFocus ??
+            ((imagePath) =>
+                findPhotoFocus(imagePath, {
+                    ...(visionCutoutUnavailable(vision) === undefined
+                        ? { vision: (path: string) => visionFocus(path, vision) }
+                        : {}),
+                })),
     };
 }
 
@@ -516,6 +540,11 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             '--photo <ref-or-path>',
             'Stock photo ref (pexels:<id>, openverse:<id>) or a local image',
         )
+        .option('--look <name>', `Photo cover colour: ${PHOTO_LOOKS.join(', ')}`)
+        .option(
+            '--fit <mode>',
+            'Photo cover framing: cover (crop, default) or extend (keep the whole photo)',
+        )
         .option('--template <name>', `Text cover template: ${TEMPLATE_NAMES.join(', ')}`)
         .option('--tag <text>', 'Poster template: a short label above the headline')
         .option('--number <figure>', 'Number template: the big figure, like 3, 90%, or 10x')
@@ -543,6 +572,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     photo?: string;
                     subject?: string;
                     template?: string;
+                    look?: string;
+                    fit?: string;
                     tag?: string;
                     number?: string;
                     before?: string;
@@ -563,6 +594,14 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     throw new Error('--photo is only valid with --source stock.');
                 }
                 const templateName = checkTemplateOptions(options, effective.source);
+                if (
+                    (options.look !== undefined || options.fit !== undefined) &&
+                    effective.source !== 'stock'
+                ) {
+                    throw new Error('--look and --fit work with --source stock.');
+                }
+                const look = options.look === undefined ? 'natural' : parsePhotoLook(options.look);
+                const fit = options.fit === undefined ? 'cover' : parsePhotoFit(options.fit);
 
                 if (effective.source === 'stock') {
                     if (options.photo === undefined || options.photo.trim() === '') {
@@ -624,9 +663,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                           : effective.output;
                     const paletteOption = palette ? { palette } : {};
                     const photoSize = await imageSize(photoPath);
+                    const focus = await runtime.photoFocus(photoPath);
                     const subject = await loadSubject(runtime, workspaceDir, options.subject);
                     const template: CoverTemplate = {
-                        ...(subject ? { layoutFor: withSubjectArea } : {}),
+                        layoutFor: subject ? withSubjectArea : photoTextLayout,
                         measureHtml: (layout, headline) =>
                             createPhotoCoverTemplate(text, {
                                 layout,
@@ -638,7 +678,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             createPhotoCoverTemplate(text, {
                                 layout,
                                 headline,
-                                photo: await preparePhotoLayer(photoPath, pixelWidth, pixelHeight),
+                                photo: await preparePhotoLayer(photoPath, pixelWidth, pixelHeight, {
+                                    focus,
+                                    target: photoFocusTarget(layout, subject !== undefined),
+                                    fit,
+                                }),
+                                look,
                                 ...paletteOption,
                                 ...(subject ? { subject: subject.layer } : {}),
                             }),
