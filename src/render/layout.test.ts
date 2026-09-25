@@ -112,6 +112,14 @@ describe('headline runs', () => {
         ]);
         expect(unbreakableRuns('用GPT-5写，Claude审')).toEqual(['GPT-5', 'Claude']);
         expect(unbreakableRuns("don't stop，别停")).toEqual(["don't", 'stop']);
+        // 带重音和附加符号的西文、希腊文、西里尔文也是整词。
+        expect(unbreakableRuns('électroencéphalographiquement')).toEqual([
+            'électroencéphalographiquement',
+        ]);
+        expect(unbreakableRuns('试试naïve和Straße')).toEqual(['naïve', 'Straße']);
+        expect(unbreakableRuns('Привет мир，你好')).toEqual(['Привет', 'мир']);
+        // 组合附加符号（e + U+0301）不能把单词切开。
+        expect(unbreakableRuns('cafe\u0301 au lait')).toEqual(['cafe\u0301', 'au', 'lait']);
         expect(headlineClauses('人接不住认知以外的流量，也赚不到认知以外的钱')).toEqual([
             '人接不住认知以外的流量，',
             '也赚不到认知以外的钱',

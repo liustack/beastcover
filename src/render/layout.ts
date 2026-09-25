@@ -134,8 +134,13 @@ export function escapeHtml(value: string): string {
         .replaceAll("'", '&#39;');
 }
 
-// 连续的西文字母和数字，中间允许撇号和连字符（don't、GPT-5）。
-const LATIN_WORD = /[A-Za-z0-9](?:[A-Za-z0-9'’-]*[A-Za-z0-9])?/g;
+// 连续的拉丁、希腊、西里尔字母和数字，带重音和组合附加符号（é、ß、e + U+0301），
+// 中间允许撇号和连字符（don't、GPT-5）。汉字不在这些文字里，所以中文紧挨着也能切出整词。
+const WORD_CHAR = String.raw`\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{N}`;
+const LATIN_WORD = new RegExp(
+    String.raw`[${WORD_CHAR}][${WORD_CHAR}\p{M}]*(?:['’-][${WORD_CHAR}][${WORD_CHAR}\p{M}]*)*`,
+    'gu',
+);
 
 /**
  * 不该被拆开的西文单词，直接从全文里找，中文紧挨着英文时也能找到。量字号时每个单词单独
