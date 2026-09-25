@@ -21,6 +21,9 @@ export interface SubjectRuntime {
     cutout: (inputPath: string, outputPath: string) => Promise<void>;
 }
 
+// 抠图的处理方式一变（比如开始按 EXIF 转正），这个数就加一，旧版本留下的缓存不再被复用。
+const CUTOUT_CACHE_VERSION = 2;
+
 // 透明像素至少占这么多，才算已经抠好的图。
 const MIN_TRANSPARENT_SHARE = 0.02;
 // 主体嵌进页面前的最长边，够 2 倍母版用，不让 data URI 无谓变大。
@@ -47,7 +50,7 @@ async function transparentShare(imagePath: string): Promise<number> {
 
 async function cutoutCached(imagePath: string, runtime: SubjectRuntime): Promise<string> {
     const hash = createHash('sha256').update(readFileSync(imagePath)).digest('hex').slice(0, 16);
-    const cached = join(runtime.cacheDir, `subject-${hash}.png`);
+    const cached = join(runtime.cacheDir, `subject-v${CUTOUT_CACHE_VERSION}-${hash}.png`);
     if (existsSync(cached)) {
         return cached;
     }

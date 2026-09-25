@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -92,6 +93,26 @@ describe('subject layer', () => {
         expect(second.dataUri).toBe(first.dataUri);
         expect(cutout).toHaveBeenCalledOnce();
         expect(readdirSync(cacheDir).filter((name) => name.startsWith('subject-'))).toHaveLength(1);
+    });
+
+    it('ignores a cutout cached by an older version of the cutout', async () => {
+        const directory = tempDir();
+        const photo = await writeImage(join(directory, 'photo.png'), {
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: 1,
+        });
+        const cacheDir = join(directory, 'cache');
+        mkdirSync(cacheDir, { recursive: true });
+        // 旧版本按图片哈希直接存 subject-<hash>.png，方向可能是错的。
+        const hash = createHash('sha256').update(readFileSync(photo)).digest('hex').slice(0, 16);
+        await writeImage(join(cacheDir, `subject-${hash}.png`), { r: 0, g: 0, b: 0, alpha: 0 });
+        const cutout = vi.fn(writeCutout);
+
+        await prepareSubject(photo, { cacheDir, cutout });
+
+        expect(cutout).toHaveBeenCalledOnce();
     });
 
     it('treats a PNG with an alpha channel but no real transparency as a photo', async () => {
