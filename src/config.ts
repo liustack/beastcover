@@ -63,7 +63,7 @@ export const BUILT_IN_CONFIG = {
     source: 'render',
     output: 'beastcover.png',
     render: {
-        preset: '16:9',
+        preset: 'youtube',
         scale: 1,
     },
 } as const;
@@ -178,8 +178,10 @@ function validateConfig(parsed: Record<string, unknown>, configPath: string): Be
             }
             try {
                 getDimensionPreset(parsed.render.preset);
-            } catch {
-                invalidConfig(configPath, 'render.preset', 'one of 16:9, 5:2, 3:2, 3:4');
+            } catch (error) {
+                throw new Error(
+                    `${configPath} has invalid "render.preset". ${(error as Error).message}`,
+                );
             }
         }
         for (const key of ['width', 'height'] as const) {

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+import { DIMENSION_PRESET_NAMES } from '../src/dimensions.ts'
 import { apply, inject, name } from './index.js'
 
 describe('dsh plugin', () => {
-  it('registers an BeastCover generation tool backed by the bundled CLI', () => {
+  it('registers a BeastCover generation tool backed by the bundled CLI', () => {
     const register = vi.fn()
 
     apply({ tools: { register } })
@@ -16,5 +17,12 @@ describe('dsh plugin', () => {
         required: ['text'],
       },
     })
+  })
+
+  it('offers exactly the CLI platform presets', () => {
+    const register = vi.fn()
+    apply({ tools: { register } })
+
+    expect(register.mock.calls[0]?.[0].parameters.properties.preset.enum).toEqual([...DIMENSION_PRESET_NAMES])
   })
 })

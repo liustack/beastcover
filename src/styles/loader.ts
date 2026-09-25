@@ -9,11 +9,24 @@ export function listStyles(): readonly StyleDefinition[] {
     return BUILT_IN_STYLES;
 }
 
+// 只做封面之后删掉的风格：缩成缩略图就认不出来。给个明确提示，免得像拼错了名字。
+const RETIRED_STYLES = new Set([
+    'minimal_watercolor',
+    'freehand_doodle',
+    'memory_color_blocks',
+    'single_line_sketch',
+    'extreme_minimal_abstraction',
+    'monet_editorial_impressionism',
+]);
+
 export function loadStyle(name: string): StyleDefinition {
     const style = stylesByName.get(name);
     if (!style) {
+        const names = BUILT_IN_STYLES.map((item) => item.name).join(', ');
         throw new Error(
-            `Unknown style "${name}". Use ${BUILT_IN_STYLES.map((item) => item.name).join(', ')}.`,
+            RETIRED_STYLES.has(name)
+                ? `Style "${name}" was removed because it does not hold up as a cover. Use ${names}.`
+                : `Unknown style "${name}". Use ${names}.`,
         );
     }
 

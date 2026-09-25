@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
+import { listDimensionPresets } from '../dimensions.ts';
 import { createPhotoCoverTemplate, preparePhotoLayer } from './photo-cover.ts';
 
 const tempDirectories: string[] = [];
@@ -109,11 +110,10 @@ describe('photo cover', () => {
         }
 
         try {
-            for (const viewport of [
-                { width: 1600, height: 900 },
-                { width: 1242, height: 1656 },
-                { width: 1600, height: 640 },
-            ]) {
+            for (const viewport of listDimensionPresets().map(({ width, height }) => ({
+                width,
+                height,
+            }))) {
                 const page = await browser.newPage({ viewport });
                 await page.setContent(
                     createPhotoCoverTemplate('人接不住认知以外的流量，也赚不到认知以外的钱', {

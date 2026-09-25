@@ -39,12 +39,7 @@ export const risographEditorial = {
             css: '#ff48a5',
         },
     ],
-    canvas: {
-        strategy: 'full-bleed',
-        guidance: '2026-08-23 实测定案：孔版色块出血到画面边缘，不留纸边。',
-    },
-    tier: 'accent',
-    isFallback: false,
-    coverOnly: false,
+    composition: '2026-08-23 实测定案：孔版色块出血到画面边缘，不留纸边。',
+    isFallback: true,
     requiresScene: false,
 } as const satisfies StyleDefinition;

@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
+import { DIMENSION_PRESET_NAMES } from '../dimensions.ts';
 import {
     cropLocalModelImage,
     finishLocalModelImage,
@@ -12,7 +13,6 @@ import {
 } from './index.ts';
 
 const tempDirectories: string[] = [];
-const PRESETS = ['3:2', '16:9', '5:2', '3:4'] as const;
 const MID_GREEN = { r: 0, g: 255, b: 0 };
 
 afterEach(() => {
@@ -53,9 +53,10 @@ async function writeBandedPng(path: string, plan: LocalModelCanvasPlan): Promise
         }
         for (let x = 0; x < width; x++) {
             const offset = (y * width + x) * channels;
-            raw[offset] = r;
-            raw[offset + 1] = g;
-            raw[offset + 2] = b;
+            const outsideColumns = x < plan.cropLeft || x >= plan.cropLeft + plan.cropWidth;
+            raw[offset] = outsideColumns ? 255 : r;
+            raw[offset + 1] = outsideColumns ? 0 : g;
+            raw[offset + 2] = outsideColumns ? 0 : b;
         }
     }
     await sharp(raw, { raw: { width, height, channels } }).png().toFile(path);
@@ -85,8 +86,8 @@ async function assertSolidGreen(source: string | Buffer): Promise<void> {
 }
 
 describe('local-model finish', () => {
-    for (const preset of PRESETS) {
-        it(`crops ${preset} to the mid band then resizes to production pixels`, async () => {
+    for (const preset of DIMENSION_PRESET_NAMES) {
+        it(`crops ${preset} to the centre box then resizes to production pixels`, async () => {
             const plan = getLocalModelCanvasPlan(preset);
             const sourcePath = join(tempDir('beastcover-finish-crop-'), 'source.png');
             await writeBandedPng(sourcePath, plan);
@@ -126,20 +127,8 @@ describe('local-model finish', () => {
         });
     }
 
-    it('leaves 3:2 bytes unchanged when source and output are the same path', async () => {
-        const plan = getLocalModelCanvasPlan('3:2');
-        const path = join(tempDir('beastcover-finish-same-'), 'same.png');
-        await writeBandedPng(path, plan);
-        const before = readFileSync(path);
-        await finishLocalModelImage({ sourcePath: path, outputPath: path, plan });
-        expect(readFileSync(path).equals(before)).toBe(true);
-        const meta = await sharp(path).metadata();
-        expect(meta.width).toBe(1536);
-        expect(meta.height).toBe(1024);
-    });
-
     it('rejects a source whose pixels are not the generate size', async () => {
-        const plan = getLocalModelCanvasPlan('3:2');
+        const plan = getLocalModelCanvasPlan('youtube');
         const directory = tempDir('beastcover-finish-size-');
         const sourcePath = join(directory, 'wrong.png');
         await sharp({
@@ -180,7 +169,7 @@ describe('local-model finish', () => {
     });
 
     it('rejects a source that is not an image', async () => {
-        const plan = getLocalModelCanvasPlan('3:2');
+        const plan = getLocalModelCanvasPlan('youtube');
         const directory = tempDir('beastcover-finish-not-image-');
         const sourcePath = join(directory, 'not-image.bin');
         writeFileSync(sourcePath, 'not-an-image');

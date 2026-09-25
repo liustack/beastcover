@@ -1,4 +1,4 @@
-import { copyFileSync, renameSync, writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import sharp from 'sharp';
 import type { LocalModelCanvasPlan } from './canvas.ts';
 
@@ -15,19 +15,6 @@ async function assertGenerateSize(sourcePath: string, plan: LocalModelCanvasPlan
             `local-model image is ${meta.width}x${meta.height}, expected ${plan.generateWidth}x${plan.generateHeight}.`,
         );
     }
-}
-
-function needsCrop(plan: LocalModelCanvasPlan): boolean {
-    return (
-        plan.cropLeft !== 0 ||
-        plan.cropTop !== 0 ||
-        plan.cropWidth !== plan.generateWidth ||
-        plan.cropHeight !== plan.generateHeight
-    );
-}
-
-function needsResize(plan: LocalModelCanvasPlan): boolean {
-    return plan.outputWidth !== plan.cropWidth || plan.outputHeight !== plan.cropHeight;
 }
 
 function writeFinishedPng(outputPath: string, bytes: Buffer, sourcePath: string): void {
@@ -60,7 +47,7 @@ export async function resizeLocalModelImage(
     cropped: Buffer,
     plan: LocalModelCanvasPlan,
 ): Promise<Buffer> {
-    // 5:2 中带是 614，和 1600x640 差一个像素比例，resize 用 fill 拉满。
+    // 裁切框取整后和成品比例差不到一个像素，resize 用 fill 拉满。
     return sharp(cropped)
         .resize(plan.outputWidth, plan.outputHeight, { fit: 'fill' })
         .png()
@@ -77,20 +64,6 @@ export async function finishLocalModelImage(input: {
     outputWidth: number;
     outputHeight: number;
 }> {
-    await assertGenerateSize(input.sourcePath, input.plan);
-
-    if (!needsCrop(input.plan) && !needsResize(input.plan)) {
-        if (input.sourcePath !== input.outputPath) {
-            copyFileSync(input.sourcePath, input.outputPath);
-        }
-        return {
-            cropWidth: input.plan.cropWidth,
-            cropHeight: input.plan.cropHeight,
-            outputWidth: input.plan.outputWidth,
-            outputHeight: input.plan.outputHeight,
-        };
-    }
-
     const cropped = await cropLocalModelImage(input.sourcePath, input.plan);
     const finished = await resizeLocalModelImage(cropped, input.plan);
     writeFinishedPng(input.outputPath, finished, input.sourcePath);

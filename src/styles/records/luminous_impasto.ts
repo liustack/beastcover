@@ -22,12 +22,7 @@ export const luminousImpasto = {
             css: '#3a8fd4',
         },
     ],
-    canvas: {
-        strategy: 'full-bleed',
-        guidance: '画面要满，四角都有内容，不留空白纸面。',
-    },
-    tier: 'accent',
+    composition: '画面要满，四角都有内容，不留空白纸面。',
     isFallback: false,
-    coverOnly: true,
     requiresScene: true,
 } as const satisfies StyleDefinition;

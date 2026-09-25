@@ -31,20 +31,20 @@ describe('layered config', () => {
                 {
                     source: 'stock',
                     output: 'from-file.png',
-                    render: { preset: '5:2', width: 1200, scale: 2 },
+                    render: { preset: 'x', width: 1200, scale: 2 },
                 },
                 { source: 'render', width: 800 },
             ),
         ).toMatchObject({
             source: 'render',
             output: 'from-file.png',
-            render: { preset: '5:2', width: 800, height: 640, scale: 2 },
+            render: { preset: 'x', width: 800, height: 368, scale: 2 },
         });
 
         expect(resolveEffectiveConfig({}, {})).toMatchObject({
             source: 'render',
             output: 'beastcover.png',
-            render: { preset: '16:9', width: 1600, height: 900, scale: 1 },
+            render: { preset: 'youtube', width: 1280, height: 720, scale: 1 },
         });
     });
 
@@ -76,6 +76,11 @@ describe('layered config', () => {
         expect(() => loadConfigFile(configPath)).toThrowError(
             `${configPath} has invalid "render.scale". Expected a number from 1 to 4.`,
         );
+
+        writeFileSync(configPath, '{"render":{"preset":"16:9"}}\n', 'utf8');
+        expect(() => loadConfigFile(configPath)).toThrowError(
+            `${configPath} has invalid "render.preset". Preset "16:9" is now "youtube".`,
+        );
     });
 
     it('rejects unknown stock providers and non-string credentials at the config boundary', () => {
@@ -106,7 +111,7 @@ describe('layered config', () => {
         const configPath = tempConfigPath();
 
         setConfigValue('source', 'stock', configPath);
-        setConfigValue('render.preset', '3:2', configPath);
+        setConfigValue('render.preset', 'bilibili', configPath);
         setConfigValue('render.scale', '2', configPath);
         setConfigValue('stock.pexels.apiKey', 'sk-private-value', configPath);
         setConfigValue('stock.openverse.clientId', 'ov-client', configPath);
@@ -115,7 +120,7 @@ describe('layered config', () => {
 
         expect(loadConfigFile(configPath)).toEqual({
             source: 'stock',
-            render: { preset: '3:2', scale: 2 },
+            render: { preset: 'bilibili', scale: 2 },
             stock: {
                 pexels: { apiKey: 'sk-private-value' },
                 openverse: { clientId: 'ov-client', clientSecret: 'ov-secret' },
@@ -123,6 +128,9 @@ describe('layered config', () => {
             localModel: { via: 'codex' },
         });
         expect(statSync(configPath).mode & 0o777).toBe(0o600);
+        expect(() => setConfigValue('render.preset', '3:2', configPath)).toThrowError(
+            'Preset "3:2" is gone. Use "youtube" or "bilibili" for a landscape cover.',
+        );
         expect(() => setConfigValue('render.unknown', '1', configPath)).toThrowError(
             'Unknown config key "render.unknown".',
         );
@@ -143,7 +151,7 @@ describe('layered config', () => {
         expect(JSON.parse(shown)).toMatchObject({
             source: 'render',
             output: 'beastcover.png',
-            render: { preset: '16:9', width: 1600, height: 900, scale: 1 },
+            render: { preset: 'youtube', width: 1280, height: 720, scale: 1 },
         });
     });
 });

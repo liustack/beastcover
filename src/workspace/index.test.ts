@@ -36,11 +36,14 @@ describe('project workspace', () => {
         writeFileSync(gitignore, 'node_modules/\n', 'utf8');
         writeFileSync(exclude, '# local\n', 'utf8');
 
-        const created = createWorkspace(cwd, { name: 'demo', styleName: 'minimal_watercolor' });
-        const style = loadStyle('minimal_watercolor');
+        const created = createWorkspace(cwd, {
+            name: 'demo',
+            styleName: 'torn_paper_editorial_collage',
+        });
+        const style = loadStyle('torn_paper_editorial_collage');
 
         expect(created.path).toBe(join(cwd, '.beastcover'));
-        expect(created.pack.style).toBe('minimal_watercolor');
+        expect(created.pack.style).toBe('torn_paper_editorial_collage');
         expect(created.pack.palette).toEqual(
             Object.fromEntries(
                 style.paletteSlots.map((slot) => [
@@ -67,7 +70,7 @@ describe('project workspace', () => {
         const cwd = tempDir('beastcover-fallback-');
         const created = createWorkspace(cwd, { name: 'safe' });
         expect(created.pack.style).toBe(loadFallbackStyle().name);
-        expect(created.pack.style).toBe('memory_color_blocks');
+        expect(created.pack.style).toBe('risograph_editorial');
     });
 
     it('finds a parent workspace and refuses to create a second one', () => {
@@ -78,7 +81,7 @@ describe('project workspace', () => {
 
         expect(findWorkspace(nested)).toBe(join(root, '.beastcover'));
         expect(() => createWorkspace(nested, { name: 'nested' })).toThrowError(
-            `An BeastCover workspace already exists at ${join(root, '.beastcover')}.`,
+            `A BeastCover workspace already exists at ${join(root, '.beastcover')}.`,
         );
         expect(existsSync(join(nested, '.beastcover'))).toBe(false);
     });
@@ -101,14 +104,28 @@ describe('project workspace', () => {
             join(workspaceDir, 'project.json'),
             `${JSON.stringify({
                 name: 'demo',
-                style: 'memory_color_blocks',
+                style: 'risograph_editorial',
                 palette: { unknown: '#fff' },
-                composition: { strategy: 'paper-border', guidance: 'x' },
+                composition: 'x',
             })}\n`,
             'utf8',
         );
         expect(() => loadStylePack(workspaceDir)).toThrowError(
             `${join(workspaceDir, 'project.json')} contains unknown palette slot "unknown".`,
+        );
+
+        writeFileSync(
+            join(workspaceDir, 'project.json'),
+            `${JSON.stringify({
+                name: 'demo',
+                style: 'risograph_editorial',
+                palette: {},
+                composition: { strategy: 'full-bleed', guidance: 'x' },
+            })}\n`,
+            'utf8',
+        );
+        expect(() => loadStylePack(workspaceDir)).toThrowError(
+            `${join(workspaceDir, 'project.json')} has invalid "composition". Expected a non-empty string.`,
         );
     });
 
@@ -120,9 +137,9 @@ describe('project workspace', () => {
             packPath,
             `${JSON.stringify({
                 name: 'demo',
-                style: 'memory_color_blocks',
+                style: 'risograph_editorial',
                 palette: { paper: '纯白' },
-                composition: { strategy: 'paper-border', guidance: 'x' },
+                composition: 'x',
             })}\n`,
             'utf8',
         );
@@ -139,9 +156,9 @@ describe('project workspace', () => {
             packPath,
             `${JSON.stringify({
                 name: 'demo',
-                style: 'memory_color_blocks',
+                style: 'risograph_editorial',
                 palette: { paper: { prompt: '纯白', css: '暖白' } },
-                composition: { strategy: 'paper-border', guidance: 'x' },
+                composition: 'x',
             })}\n`,
             'utf8',
         );
@@ -152,17 +169,20 @@ describe('project workspace', () => {
 
     it('lets a slot override only css or only prompt and fills the rest from the catalog', () => {
         const cwd = tempDir('beastcover-pack-partial-');
-        const created = createWorkspace(cwd, { name: 'demo', styleName: 'minimal_watercolor' });
+        const created = createWorkspace(cwd, {
+            name: 'demo',
+            styleName: 'torn_paper_editorial_collage',
+        });
         const packPath = join(created.path, 'project.json');
 
         writeFileSync(
             packPath,
             `${JSON.stringify({
                 name: 'demo',
-                style: 'minimal_watercolor',
+                style: 'torn_paper_editorial_collage',
                 palette: {
                     paper: { css: '#ff0000' },
-                    accent: { prompt: '低饱和暖黄' },
+                    accent: { prompt: '赭色' },
                 },
                 composition: created.pack.composition,
             })}\n`,
@@ -172,14 +192,12 @@ describe('project workspace', () => {
         const loaded = loadStylePack(created.path);
         expect(loaded.palette).toEqual({
             paper: { css: '#ff0000' },
-            accent: { prompt: '低饱和暖黄' },
+            accent: { prompt: '赭色' },
         });
         expect(mergedPalette(loaded)).toEqual({
-            paper: { prompt: '暖白', css: '#ff0000' },
-            primary: { prompt: '低饱和雾蓝与灰青绿', css: '#7a93a0' },
-            secondary: { prompt: '沙色、米白', css: '#d8cbb8' },
-            accent: { prompt: '低饱和暖黄', css: '#d4b56a' },
-            dark: { prompt: '淡墨', css: '#5c5a54' },
+            paper: { prompt: '米白', css: '#ff0000' },
+            neutrals: { prompt: '暖灰、深蓝灰、墨绿、浅卡其、灰黑', css: '#8a8580' },
+            accent: { prompt: '赭色', css: '#c46a38' },
         });
     });
 
@@ -188,9 +206,9 @@ describe('project workspace', () => {
         const workspaceDir = createWorkspace(cwd, { name: 'demo' }).path;
         const first = {
             createdAt: '2026-08-23T00:00:00.000Z',
-            style: 'memory_color_blocks',
-            palette: { paper: { prompt: '纯白', css: '#ffffff' } },
-            text: 'One visual family',
+            style: 'risograph_editorial',
+            palette: { paper: { prompt: '亮白', css: '#ffffff' } },
+            text: 'One headline, every platform',
             output: join(workspaceDir, 'out', 'beastcover.png'),
         };
         const second = {
@@ -215,10 +233,13 @@ describe('project workspace', () => {
 describe('history paths', () => {
     it('stores the output path relative to the workspace, not absolute', () => {
         const cwd = tempDir('beastcover-history-relative-');
-        const created = createWorkspace(cwd, { name: 'demo', styleName: 'minimal_watercolor' });
+        const created = createWorkspace(cwd, {
+            name: 'demo',
+            styleName: 'torn_paper_editorial_collage',
+        });
         appendHistory(created.path, {
             createdAt: '2026-08-23T00:00:00.000Z',
-            style: 'minimal_watercolor',
+            style: 'torn_paper_editorial_collage',
             palette: {},
             text: '碎玻璃上的反光',
             output: join(created.path, 'out', 'a.png'),
@@ -231,14 +252,14 @@ describe('history paths', () => {
     it('round-trips optional source, via, and catalogPalette when present', () => {
         const cwd = tempDir('beastcover-history-optional-');
         const workspaceDir = createWorkspace(cwd, { name: 'demo' }).path;
-        const palette = { paper: { prompt: '纯白', css: '#ffffff' } };
+        const palette = { paper: { prompt: '亮白', css: '#ffffff' } };
         const record = {
             createdAt: '2026-08-23T00:00:00.000Z',
-            style: 'memory_color_blocks',
+            style: 'risograph_editorial',
             palette,
             catalogPalette: {
-                paper: { prompt: '纯白', css: '#ffffff' },
-                landscape: { prompt: '浅蓝、雾蓝、蓝灰、灰青绿、湖青、米白', css: '#8aa3b5' },
+                paper: { prompt: '亮白', css: '#ffffff' },
+                spot: { prompt: '荧光粉加靛蓝、或亮蓝加荧光橙、或青加荧光粉加黄', css: '#ff48a5' },
             },
             text: 'A figure on a shore',
             output: join(workspaceDir, 'out', 'beastcover.png'),
@@ -260,9 +281,9 @@ describe('history paths', () => {
         const workspaceDir = createWorkspace(cwd, { name: 'demo' }).path;
         const record = {
             createdAt: '2026-08-23T00:00:00.000Z',
-            style: 'memory_color_blocks',
-            palette: { paper: { prompt: '纯白', css: '#ffffff' } },
-            text: 'One visual family',
+            style: 'risograph_editorial',
+            palette: { paper: { prompt: '亮白', css: '#ffffff' } },
+            text: 'One headline, every platform',
             output: join('out', 'beastcover.png'),
         };
         writeFileSync(join(workspaceDir, 'history.jsonl'), `${JSON.stringify(record)}\n`, 'utf8');
@@ -280,7 +301,7 @@ describe('history paths', () => {
             join(created.path, 'history.jsonl'),
             `${JSON.stringify({
                 createdAt: '2026-08-23T00:00:00.000Z',
-                style: 'memory_color_blocks',
+                style: 'risograph_editorial',
                 palette: { paper: '纯白' },
                 text: 'old',
                 output: join('out', 'a.png'),

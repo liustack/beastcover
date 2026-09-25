@@ -5,7 +5,18 @@ import { fileURLToPath } from 'node:url'
 
 const CLI_PATH = fileURLToPath(new URL('../dist/main.js', import.meta.url))
 const CLI_TIMEOUT_MS = 120_000
-const PRESETS = ['16:9', '5:2', '3:2', '3:4']
+// 与 src/dimensions.ts 的 DIMENSION_PRESET_NAMES 保持一致，dsh/index.test.js 会比对。
+const PRESETS = [
+  'youtube',
+  'bilibili',
+  'wechat',
+  'x',
+  'xiaohongshu',
+  'instagram',
+  'instagram-reels',
+  'douyin',
+  'tiktok',
+]
 
 export const name = 'beastcover'
 export const inject = ['tools']
@@ -57,13 +68,13 @@ export function createGenerateTool(toolName = 'beastcover_generate_image') {
   return {
     name: toolName,
     description:
-      'Render text into a local PNG with BeastCover. Use for editable text-led cards that should stay inside one coherent visual system. The render source runs locally and sends no content over the network.',
+      'Render a headline into a local PNG cover with BeastCover, sized for one platform. Use for text-led covers whose wording may change. The render source runs locally and sends no content over the network.',
     parameters: {
       type: 'object',
       properties: {
         text: {
           type: 'string',
-          description: 'The text to place in the image',
+          description: 'The cover headline',
         },
         output: {
           type: 'string',
@@ -72,7 +83,7 @@ export function createGenerateTool(toolName = 'beastcover_generate_image') {
         preset: {
           type: 'string',
           enum: PRESETS,
-          description: 'Canvas ratio and production pixel preset',
+          description: 'Platform the cover is for. Sets its production pixel size',
         },
       },
       required: ['text'],

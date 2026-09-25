@@ -96,23 +96,27 @@ describe('BeastCover CLI', () => {
         const listCode = await runCli(['node', 'beastcover', 'styles'], { stdout });
         expect(listCode).toBe(0);
         const listed = stdout.chunks.join('');
-        expect(listed).toContain('minimal_watercolor');
-        expect(listed).toContain('memory_color_blocks');
-        expect(listed).toContain('primary');
-        expect(listed).toContain('fallback');
-        expect(listed).toContain('luminous_impasto');
-        expect(listed).toContain('cover-only');
+        const lines = listed.trimEnd().split('\n');
+        expect(lines.map((line) => line.split(/\s+/)[0])).toEqual([
+            'risograph_editorial',
+            'luminous_impasto',
+            'torn_paper_editorial_collage',
+            'conceptual_colorfield',
+        ]);
+        expect(lines[0]).toContain('fallback');
+        expect(lines[1]).toContain('needs-scene');
 
         const detailOut = captureOutput();
-        const detailCode = await runCli(['node', 'beastcover', 'styles', 'memory_color_blocks'], {
+        const detailCode = await runCli(['node', 'beastcover', 'styles', 'risograph_editorial'], {
             stdout: detailOut,
         });
         expect(detailCode).toBe(0);
         const detail = detailOut.chunks.join('');
-        expect(detail).toContain(loadStyle('memory_color_blocks').prompt);
-        expect(detail).toContain('配色是这个式子的身份');
-        expect(detail).toContain('paper: 纯白 / #ffffff');
-        expect(detail).toContain('accent: 暖黄点 / #e6b84d');
+        expect(detail).toContain(loadStyle('risograph_editorial').prompt);
+        expect(detail).toContain('paper: 亮白 / #ffffff');
+        expect(detail).toContain('spot: 荧光粉加靛蓝、或亮蓝加荧光橙、或青加荧光粉加黄 / #ff48a5');
+        expect(detail).toContain('composition: 2026-08-23 实测定案');
+        expect(detail).not.toContain('tier');
         expect(detail).not.toContain('defaultValue');
 
         const unknownOut = captureOutput();
@@ -133,7 +137,7 @@ describe('BeastCover CLI', () => {
         const stdout = captureOutput();
 
         const exitCode = await runCli(
-            ['node', 'beastcover', 'new', 'demo', '--style', 'freehand_doodle'],
+            ['node', 'beastcover', 'new', 'demo', '--style', 'conceptual_colorfield'],
             { cwd, stdout },
         );
 
@@ -141,7 +145,7 @@ describe('BeastCover CLI', () => {
         expect(stdout.chunks.join('')).toBe(
             [
                 'Created .beastcover/',
-                '  project.json    your visual system, commit this',
+                '  project.json    style and palette, commit this',
                 '  .gitignore      keeps out/, cache/, refs/ out of git',
                 '  refs/ out/ cache/',
                 '',
@@ -151,7 +155,7 @@ describe('BeastCover CLI', () => {
         );
         expect(
             JSON.parse(readFileSync(join(cwd, '.beastcover', 'project.json'), 'utf8')).style,
-        ).toBe('freehand_doodle');
+        ).toBe('conceptual_colorfield');
         expect(readFileSync(join(cwd, '.gitignore'), 'utf8')).toBe('dist/\n');
         expect(readFileSync(join(cwd, '.git', 'info', 'exclude'), 'utf8')).toBe('secret\n');
 
@@ -161,9 +165,12 @@ describe('BeastCover CLI', () => {
             stdout: projectOut,
         });
         expect(projectCode).toBe(0);
-        expect(projectOut.chunks.join('')).toContain('Style: freehand_doodle');
-        expect(projectOut.chunks.join('')).toContain('paper: 纯白 / #ffffff');
-        expect(projectOut.chunks.join('')).toContain('fill: 雾蓝加陶土色 / #8a9aaa');
+        expect(projectOut.chunks.join('')).toContain('Style: conceptual_colorfield');
+        expect(projectOut.chunks.join('')).toContain('background: 暖白 / #f4efe6');
+        expect(projectOut.chunks.join('')).toContain('accent: 柔和暖色 / #d4a574');
+        expect(projectOut.chunks.join('')).toContain(
+            'Composition: 色域铺满整幅画布，负空间由大面积色块自身承担。',
+        );
         expect(projectOut.chunks.join('')).toContain('Images: 0');
     });
 
@@ -186,7 +193,7 @@ describe('BeastCover CLI', () => {
         const configPath = join(directory, 'config.json');
         const outputPath = join(directory, 'result.png');
         setConfigValue('source', 'stock', configPath);
-        setConfigValue('render.preset', '5:2', configPath);
+        setConfigValue('render.preset', 'x', configPath);
         setConfigValue('render.scale', '2', configPath);
 
         const renderHtml = mockRender();
@@ -198,7 +205,7 @@ describe('BeastCover CLI', () => {
                 'node',
                 'beastcover',
                 'gen',
-                'All images belong to one visual family',
+                'One headline for every platform',
                 '--source',
                 'render',
                 '--output',
@@ -215,12 +222,10 @@ describe('BeastCover CLI', () => {
         expect(renderHtml.mock.calls[0]?.[0]).toMatchObject({
             outputPath,
             width: 800,
-            height: 640,
+            height: 368,
             scale: 2,
         });
-        expect(renderHtml.mock.calls[0]?.[0].html).toContain(
-            'All images belong to one visual family',
-        );
+        expect(renderHtml.mock.calls[0]?.[0].html).toContain('One headline for every platform');
         expect(stdout.chunks.join('')).toContain('Privacy: render stayed on this machine.');
         expect(readdirSync(directory)).not.toContain('.beastcover');
     });
@@ -228,7 +233,7 @@ describe('BeastCover CLI', () => {
     it('writes workspace gen output under .beastcover/out and records history', async () => {
         const cwd = tempDir('beastcover-cli-ws-');
         const stdout = captureOutput();
-        await runCli(['node', 'beastcover', 'new', 'demo', '--style', 'minimal_watercolor'], {
+        await runCli(['node', 'beastcover', 'new', 'demo', '--style', 'conceptual_colorfield'], {
             cwd,
             stdout,
         });
@@ -257,8 +262,8 @@ describe('BeastCover CLI', () => {
         expect(renderHtml.mock.calls[0]?.[0].outputPath).toBe(outputPath);
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('Workspace card');
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('暖白');
-        expect(renderHtml.mock.calls[0]?.[0].html).toContain('#f4efe6');
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('--cover-paper: #f4efe6');
+        expect(renderHtml.mock.calls[0]?.[0].html).toContain('--cover-ink: #3a3a38');
         const historyLines = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
             .trimEnd()
             .split('\n');
@@ -266,14 +271,8 @@ describe('BeastCover CLI', () => {
         const history = JSON.parse(historyLines[0] ?? '{}');
         expect(history).toEqual({
             createdAt: '2026-08-23T00:00:00.000Z',
-            style: 'minimal_watercolor',
-            palette: {
-                paper: { prompt: '暖白', css: '#f4efe6' },
-                primary: { prompt: '低饱和雾蓝与灰青绿', css: '#7a93a0' },
-                secondary: { prompt: '沙色、米白', css: '#d8cbb8' },
-                accent: { prompt: '低饱和暖黄', css: '#d4b56a' },
-                dark: { prompt: '淡墨', css: '#5c5a54' },
-            },
+            style: 'conceptual_colorfield',
+            palette: catalogPalette('conceptual_colorfield'),
             text: 'Workspace card',
             output: join('out', 'beastcover-2026-08-23T00-00-00.000Z.png'),
         });
@@ -312,7 +311,7 @@ describe('BeastCover CLI', () => {
 
     it('renders a photo cover from a local image and records the photo in history', async () => {
         const cwd = tempDir('beastcover-photo-local-');
-        await runCli(['node', 'beastcover', 'new', 'demo', '--style', 'minimal_watercolor'], {
+        await runCli(['node', 'beastcover', 'new', 'demo', '--style', 'conceptual_colorfield'], {
             cwd,
             stdout: captureOutput(),
         });
@@ -606,7 +605,7 @@ describe('BeastCover CLI', () => {
                 '--via',
                 'codex',
                 '--preset',
-                '3:2',
+                'wechat',
             ],
             {
                 cwd,
@@ -631,7 +630,7 @@ describe('BeastCover CLI', () => {
         expect(stderr.chunks).toEqual([]);
         expect(printed).toContain(`Created ${outputPath}`);
         expect(printed).toContain('Backend: codex');
-        expect(printed).toContain('Canvas: 1536x1024');
+        expect(printed).toContain('Canvas: 900x383');
         expect(printed).not.toContain('at 1x');
         expect(printed).toContain(
             'Privacy: local-model used your own CLI. We did not handle the data.',
@@ -648,19 +647,21 @@ describe('BeastCover CLI', () => {
             provider: 'codex',
             commandPath: '/fake/codex',
             outputPath,
-            preset: '3:2',
+            preset: 'wechat',
             verbose: false,
         });
-        expect(localInput.prompt).toContain('Landscape 1536x1024');
+        expect(localInput.prompt).toContain(
+            '主体集中在画面正中，四周只放背景. Landscape 1536x1024',
+        );
 
         const historyPath = join(cwd, '.beastcover', 'history.jsonl');
         const historyText = readFileSync(historyPath, 'utf8');
         const historyLines = historyText.trimEnd().split('\n');
         expect(historyLines).toHaveLength(1);
-        const palette = catalogPalette('memory_color_blocks');
+        const palette = catalogPalette('risograph_editorial');
         expect(JSON.parse(historyLines[0] ?? '{}')).toEqual({
             createdAt: '2026-08-23T00:00:00.000Z',
-            style: 'memory_color_blocks',
+            style: 'risograph_editorial',
             palette,
             catalogPalette: palette,
             text: 'A figure on a shore',
@@ -671,8 +672,8 @@ describe('BeastCover CLI', () => {
         expect(historyText).not.toContain(cwd);
     });
 
-    it('prints 16:9 production canvas and keeps generate size in the prompt', async () => {
-        const cwd = tempDir('beastcover-local-16-9-');
+    it('prints the douyin production canvas and keeps generate size in the prompt', async () => {
+        const cwd = tempDir('beastcover-local-douyin-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
 
         const runLocalModel = mockRunLocalModel();
@@ -688,7 +689,7 @@ describe('BeastCover CLI', () => {
                 '--source',
                 'local-model',
                 '--preset',
-                '16:9',
+                'douyin',
             ],
             {
                 cwd,
@@ -703,15 +704,15 @@ describe('BeastCover CLI', () => {
 
         expect(exitCode).toBe(0);
         expect(stderr.chunks).toEqual([]);
-        expect(stdout.chunks.join('')).toContain('Canvas: 1600x900');
+        expect(stdout.chunks.join('')).toContain('Canvas: 1080x1920');
         expect(runLocalModel).toHaveBeenCalledOnce();
         const input = runLocalModel.mock.calls[0]?.[0];
         if (input === undefined) {
             throw new Error('runLocalModel was not called.');
         }
-        expect(input.preset).toBe('16:9');
-        expect(input.prompt).toContain('Landscape 1536x1024');
-        expect(input.prompt).not.toContain('1600x900');
+        expect(input.preset).toBe('douyin');
+        expect(input.prompt).toContain('竖版 1024x1536');
+        expect(input.prompt).not.toContain('1080x1920');
     });
 
     it('passes verbose true to runLocalModel', async () => {
@@ -729,7 +730,7 @@ describe('BeastCover CLI', () => {
                 '--via',
                 'codex',
                 '--preset',
-                '3:2',
+                'wechat',
                 '--verbose',
             ],
             {
@@ -744,6 +745,25 @@ describe('BeastCover CLI', () => {
 
         expect(exitCode).toBe(0);
         expect(runLocalModel.mock.calls[0]?.[0]).toMatchObject({ verbose: true });
+    });
+
+    it('names the platform preset when an old ratio preset is passed', async () => {
+        const renderHtml = mockRender();
+        const stderr = captureOutput();
+        const exitCode = await runCli(
+            ['node', 'beastcover', 'gen', 'A', '--source', 'render', '--preset', '16:9'],
+            {
+                cwd: tempDir('beastcover-old-preset-'),
+                configPath: join(tempDir('beastcover-old-preset-config-'), 'config.json'),
+                renderHtml,
+                stdout: captureOutput(),
+                stderr,
+            },
+        );
+
+        expect(exitCode).toBe(1);
+        expect(renderHtml).not.toHaveBeenCalled();
+        expect(stderr.chunks.join('')).toBe('Error: Preset "16:9" is now "youtube".\n');
     });
 
     it('rejects local-model width overrides that leave preset sizes', async () => {
@@ -822,42 +842,6 @@ describe('BeastCover CLI', () => {
 
         expect(exitCode).toBe(0);
         expect(runLocalModel).toHaveBeenCalledOnce();
-    });
-
-    it('prints a relationship hint for extreme_minimal_abstraction', async () => {
-        const cwd = tempDir('beastcover-local-hint-');
-        await runCli(
-            ['node', 'beastcover', 'new', 'demo', '--style', 'extreme_minimal_abstraction'],
-            {
-                cwd,
-                stdout: captureOutput(),
-            },
-        );
-        const stdout = captureOutput();
-        const exitCode = await runCli(
-            [
-                'node',
-                'beastcover',
-                'gen',
-                'A figure on a shore',
-                '--source',
-                'local-model',
-                '--via',
-                'codex',
-            ],
-            {
-                cwd,
-                configPath: join(cwd, 'unused-config.json'),
-                runLocalModel: mockRunLocalModel(),
-                lookupCommand: () => '/fake/codex',
-                stdout,
-                now: () => new Date('2026-08-23T00:00:00.000Z'),
-            },
-        );
-
-        expect(exitCode).toBe(0);
-        expect(stdout.chunks.join('')).toContain('This style fills a relationship, not a subject.');
-        expect(stdout.chunks.join('')).toContain('same event in the article');
     });
 
     it('allows --via when config source is already local-model', async () => {

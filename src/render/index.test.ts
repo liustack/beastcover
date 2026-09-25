@@ -43,7 +43,7 @@ describe('HTML renderer', () => {
         const outputPath = join(directory, 'nested', 'card.png');
 
         const result = await renderHtml({
-            html: createRenderTemplate('A coherent visual system'),
+            html: createRenderTemplate('A headline that gets the click'),
             outputPath,
             width: 320,
             height: 180,
@@ -95,7 +95,7 @@ describe('HTML renderer', () => {
     it('changes the rendered PNG when project palette css changes', async () => {
         const cwd = mkdtempSync(join(tmpdir(), 'beastcover-palette-render-'));
         tempDirectories.push(cwd);
-        const created = createWorkspace(cwd, { name: 'demo', styleName: 'minimal_watercolor' });
+        const created = createWorkspace(cwd, { name: 'demo', styleName: 'risograph_editorial' });
         const text = 'Palette css probe';
         const canvas = { width: 320, height: 180, scale: 1 as const };
 

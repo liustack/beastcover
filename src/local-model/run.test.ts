@@ -32,7 +32,7 @@ function baseInput(outputPath: string) {
         prompt: 'Use your image generation capability. 主体：海岸.',
         referencePaths: [] as string[],
         outputPath,
-        preset: '3:2' as const,
+        preset: 'youtube' as const,
     };
 }
 
@@ -199,82 +199,49 @@ describe('spawnCapturedProcess', () => {
 });
 
 describe('local-model finish after verify', () => {
-    it('finishes a verified PNG at 3:2 output size', async () => {
+    async function generate(outputPath: string, width: number, height: number, jpeg = false) {
+        const image = sharp({
+            create: { width, height, channels: 3, background: { r: 0, g: 255, b: 0 } },
+        });
+        await (jpeg ? image.jpeg() : image.png()).toFile(outputPath);
+    }
+
+    it('crops and resizes a verified PNG to youtube production pixels', async () => {
         const outputPath = join(tempDir('beastcover-run-finish-png-'), 'out.png');
         const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
-            await sharp({
-                create: {
-                    width: 1536,
-                    height: 1024,
-                    channels: 3,
-                    background: { r: 0, g: 255, b: 0 },
-                },
-            })
-                .png()
-                .toFile(outputPath);
+            await generate(outputPath, 1536, 1024);
         });
 
-        await expect(
-            runLocalModel({
-                ...baseInput(outputPath),
-                spawn,
-            }),
-        ).resolves.toEqual({ outputPath });
+        await expect(runLocalModel({ ...baseInput(outputPath), spawn })).resolves.toEqual({
+            outputPath,
+        });
         const meta = await sharp(outputPath).metadata();
-        expect(meta.width).toBe(1536);
-        expect(meta.height).toBe(1024);
+        expect([meta.width, meta.height]).toEqual([1280, 720]);
     });
 
-    it('finishes a verified JPEG at 3:2 output size', async () => {
-        const outputPath = join(tempDir('beastcover-run-finish-jpeg-'), 'out.jpg');
+    it('rewrites JPEG bytes saved under the .png target as a PNG at youtube size', async () => {
+        const outputPath = join(tempDir('beastcover-run-finish-jpeg-'), 'out.png');
         const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
-            await sharp({
-                create: {
-                    width: 1536,
-                    height: 1024,
-                    channels: 3,
-                    background: { r: 0, g: 255, b: 0 },
-                },
-            })
-                .jpeg()
-                .toFile(outputPath);
+            await generate(outputPath, 1536, 1024, true);
         });
 
-        await expect(
-            runLocalModel({
-                ...baseInput(outputPath),
-                spawn,
-            }),
-        ).resolves.toEqual({ outputPath });
+        await expect(runLocalModel({ ...baseInput(outputPath), spawn })).resolves.toEqual({
+            outputPath,
+        });
         const meta = await sharp(outputPath).metadata();
-        expect(meta.width).toBe(1536);
-        expect(meta.height).toBe(1024);
+        expect([meta.format, meta.width, meta.height]).toEqual(['png', 1280, 720]);
     });
 
-    it('crops and resizes a 16:9 generate PNG to production pixels', async () => {
-        const outputPath = join(tempDir('beastcover-run-16x9-'), 'ok.png');
+    it('crops a portrait generate PNG to douyin production pixels', async () => {
+        const outputPath = join(tempDir('beastcover-run-douyin-'), 'ok.png');
         const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
-            await sharp({
-                create: {
-                    width: 1536,
-                    height: 1024,
-                    channels: 3,
-                    background: { r: 12, g: 34, b: 56 },
-                },
-            })
-                .png()
-                .toFile(outputPath);
+            await generate(outputPath, 1024, 1536);
         });
 
         await expect(
-            runLocalModel({
-                ...baseInput(outputPath),
-                preset: '16:9',
-                spawn,
-            }),
+            runLocalModel({ ...baseInput(outputPath), preset: 'douyin', spawn }),
         ).resolves.toEqual({ outputPath });
         const meta = await sharp(outputPath).metadata();
-        expect(meta.width).toBe(1600);
-        expect(meta.height).toBe(900);
+        expect([meta.width, meta.height]).toEqual([1080, 1920]);
     });
 });

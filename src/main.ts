@@ -61,7 +61,7 @@ import {
 } from './workspace/index.ts';
 
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0-dev';
-const DEFAULT_RENDER_TEXT = 'One story. One visual language.';
+const DEFAULT_RENDER_TEXT = 'Your headline here';
 
 interface OutputWriter {
     write(chunk: string): unknown;
@@ -208,28 +208,25 @@ function flagsFromOptions(options: {
 }
 
 function formatStyleListLine(style: StyleDefinition): string {
-    const tags: string[] = [style.tier];
+    const tags: string[] = [];
     if (style.isFallback) {
         tags.push('fallback');
     }
-    if (style.coverOnly) {
-        tags.push('cover-only');
+    if (style.requiresScene) {
+        tags.push('needs-scene');
     }
-    return `${style.name.padEnd(34)}${tags.join(' ').padEnd(22)}${style.scenarios.join('、')}`;
+    return `${style.name.padEnd(32)}${tags.join(' ').padEnd(22)}${style.scenarios.join('、')}`;
 }
 
 function formatStyleDetail(style: StyleDefinition): string {
     return [
         `name: ${style.name}`,
         `displayName: ${style.displayName}`,
-        `tier: ${style.tier}`,
         `fallback: ${style.isFallback ? 'yes' : 'no'}`,
-        `coverOnly: ${style.coverOnly ? 'yes' : 'no'}`,
         `requiresScene: ${style.requiresScene ? 'yes' : 'no'}`,
         `scenarios: ${style.scenarios.join('、')}`,
         `avoid: ${style.avoid.join('、')}`,
-        `canvas: ${style.canvas.strategy}`,
-        `guidance: ${style.canvas.guidance}`,
+        `composition: ${style.composition}`,
         'palette:',
         ...style.paletteSlots.map((slot) => `  ${slot.name}: ${slot.prompt} / ${slot.css}`),
         'prompt:',
@@ -244,7 +241,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
 
     program
         .name('beastcover')
-        .description('Keep every image in an article inside one coherent visual system')
+        .description('Make covers for every platform you publish to, rendered on your machine')
         .version(APP_VERSION)
         .showSuggestionAfterError()
         .configureOutput({
@@ -255,11 +252,15 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
 
     program
         .command('gen')
-        .description('Generate an image from text')
-        .argument('[text]', 'Text rendered into the image', DEFAULT_RENDER_TEXT)
+        .description('Generate a cover from a headline')
+        .argument(
+            '[text]',
+            'Headline for the cover, or the subject for local-model',
+            DEFAULT_RENDER_TEXT,
+        )
         .option('--source <source>', 'Image source: render, stock, or local-model')
         .option('-o, --output <path>', 'Output PNG path')
-        .option('--preset <ratio>', `Canvas preset: ${DIMENSION_PRESET_NAMES.join(', ')}`)
+        .option('--preset <platform>', `Platform preset: ${DIMENSION_PRESET_NAMES.join(', ')}`)
         .option('--width <pixels>', 'Override canvas width')
         .option('--height <pixels>', 'Override canvas height')
         .option('--scale <factor>', 'Device scale factor from 1 to 4')
@@ -482,19 +483,15 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         output: result.outputPath,
                     });
 
-                    const lines = [
-                        `Created ${result.outputPath}`,
-                        `Backend: ${selected.provider}`,
-                        `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
-                    ];
-                    if (style.subjectSlot?.hint !== undefined) {
-                        lines.push(style.subjectSlot.hint);
-                    }
-                    lines.push(
-                        'Privacy: local-model used your own CLI. We did not handle the data.',
-                        '',
+                    runtime.stdout.write(
+                        [
+                            `Created ${result.outputPath}`,
+                            `Backend: ${selected.provider}`,
+                            `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
+                            'Privacy: local-model used your own CLI. We did not handle the data.',
+                            '',
+                        ].join('\n'),
                     );
-                    runtime.stdout.write(lines.join('\n'));
                     return;
                 }
 
@@ -606,7 +603,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
 
     program
         .command('new')
-        .description('Create a visual project workspace')
+        .description('Create a cover workspace in this project')
         .argument('<name>', 'Project name')
         .option('--style <style>', 'Catalog style name')
         .action((name: string, options: { style?: string }) => {
@@ -617,7 +614,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             runtime.stdout.write(
                 [
                     'Created .beastcover/',
-                    '  project.json    your visual system, commit this',
+                    '  project.json    style and palette, commit this',
                     '  .gitignore      keeps out/, cache/, refs/ out of git',
                     '  refs/ out/ cache/',
                     '',
@@ -629,7 +626,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
 
     program
         .command('project')
-        .description('Show the current visual project')
+        .description('Show the current cover workspace')
         .action(() => {
             const workspaceDir = findWorkspace(runtime.cwd);
             if (!workspaceDir) {
@@ -643,7 +640,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     `Project: ${pack.name}`,
                     `Path: ${workspaceDir}`,
                     `Style: ${pack.style}`,
-                    `Composition: ${pack.composition.strategy}`,
+                    `Composition: ${pack.composition}`,
                     'Palette:',
                     ...Object.entries(palette).map(
                         ([slot, value]) => `  ${slot}: ${value.prompt} / ${value.css}`,

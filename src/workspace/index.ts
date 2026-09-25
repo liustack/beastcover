@@ -16,7 +16,6 @@ import {
 import { STOCK_PROVIDERS, type StockProvider } from '../stock/types.ts';
 import { loadFallbackStyle, loadStyle } from '../styles/loader.ts';
 import {
-    type CanvasStrategy,
     isCssColorValue,
     type PaletteSlotOverride,
     type PaletteSlotValue,
@@ -32,10 +31,7 @@ export interface StylePack {
     name: string;
     style: string;
     palette: Record<string, PaletteSlotOverride>;
-    composition: {
-        strategy: CanvasStrategy;
-        guidance: string;
-    };
+    composition: string;
 }
 
 export interface HistoryPhoto {
@@ -81,9 +77,7 @@ export interface CreatedWorkspace {
 }
 
 const STYLE_PACK_KEYS = new Set(['name', 'style', 'palette', 'composition']);
-const COMPOSITION_KEYS = new Set(['strategy', 'guidance']);
 const PALETTE_SLOT_KEYS = new Set(['prompt', 'css']);
-const CANVAS_STRATEGIES = new Set<CanvasStrategy>(['paper-border', 'full-bleed']);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -208,35 +202,15 @@ export function loadStylePack(workspaceDir: string): StylePack {
         palette[key] = parsePaletteSlotOverride(packPath, key, value);
     }
 
-    if (!isPlainObject(parsed.composition)) {
-        invalidPack(packPath, 'composition', 'an object');
-    }
-    for (const key of Object.keys(parsed.composition)) {
-        if (!COMPOSITION_KEYS.has(key)) {
-            throw new Error(`${packPath} contains unknown key "composition.${key}".`);
-        }
-    }
-    if (
-        typeof parsed.composition.strategy !== 'string' ||
-        !CANVAS_STRATEGIES.has(parsed.composition.strategy as CanvasStrategy)
-    ) {
-        invalidPack(packPath, 'composition.strategy', 'paper-border or full-bleed');
-    }
-    if (
-        typeof parsed.composition.guidance !== 'string' ||
-        parsed.composition.guidance.trim() === ''
-    ) {
-        invalidPack(packPath, 'composition.guidance', 'a non-empty string');
+    if (typeof parsed.composition !== 'string' || parsed.composition.trim() === '') {
+        invalidPack(packPath, 'composition', 'a non-empty string');
     }
 
     return {
         name: parsed.name,
         style: parsed.style,
         palette,
-        composition: {
-            strategy: parsed.composition.strategy as CanvasStrategy,
-            guidance: parsed.composition.guidance,
-        },
+        composition: parsed.composition,
     };
 }
 
@@ -254,12 +228,12 @@ export function createWorkspace(cwd: string, options: CreateWorkspaceOptions): C
 
     const target = workspacePath(cwd);
     if (existsSync(target)) {
-        throw new Error(`An BeastCover workspace already exists at ${target}.`);
+        throw new Error(`A BeastCover workspace already exists at ${target}.`);
     }
 
     const existing = findWorkspace(cwd);
     if (existing) {
-        throw new Error(`An BeastCover workspace already exists at ${existing}.`);
+        throw new Error(`A BeastCover workspace already exists at ${existing}.`);
     }
 
     const style =
@@ -272,10 +246,7 @@ export function createWorkspace(cwd: string, options: CreateWorkspaceOptions): C
         name,
         style: style.name,
         palette,
-        composition: {
-            strategy: style.canvas.strategy,
-            guidance: style.canvas.guidance,
-        },
+        composition: style.composition,
     };
 
     mkdirSync(target, { recursive: true });

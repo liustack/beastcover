@@ -43,12 +43,7 @@ export const conceptualColorfield = {
         { name: 'neutral', role: '中性色域', prompt: '米色', css: '#e6dcc8' },
         { name: 'accent', role: '唯一强调色', prompt: '柔和暖色', css: '#d4a574' },
     ],
-    canvas: {
-        strategy: 'full-bleed',
-        guidance: '色域铺满整幅画布，负空间由大面积色块自身承担。',
-    },
-    tier: 'accent',
+    composition: '色域铺满整幅画布，负空间由大面积色块自身承担。',
     isFallback: false,
-    coverOnly: false,
     requiresScene: false,
 } as const satisfies StyleDefinition;

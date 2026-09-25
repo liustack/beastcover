@@ -1,7 +1,3 @@
-export type CanvasStrategy = 'paper-border' | 'full-bleed';
-
-export type StyleTier = 'primary' | 'accent';
-
 export interface PaletteSlot {
     name: string;
     role: string;
@@ -19,13 +15,6 @@ export interface PaletteSlotOverride {
     css?: string;
 }
 
-export interface SubjectSlot {
-    /** Exact placeholder text inside `prompt`. Replaced with the subject. */
-    marker: string;
-    /** Printed by the CLI when this style is used. */
-    hint?: string;
-}
-
 export interface StyleDefinition {
     name: string;
     displayName: string;
@@ -33,15 +22,10 @@ export interface StyleDefinition {
     prompt: string;
     avoid: readonly string[];
     paletteSlots: readonly PaletteSlot[];
-    canvas: {
-        strategy: CanvasStrategy;
-        guidance: string;
-    };
-    tier: StyleTier;
+    /** How the picture fills the canvas. Recorded in the workspace, never added to the prompt. */
+    composition: string;
     isFallback: boolean;
-    coverOnly: boolean;
     requiresScene: boolean;
-    subjectSlot?: SubjectSlot;
 }
 
 const CSS_COLOR = /^(#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|rgb\(|hsl\(|oklch\()/;
