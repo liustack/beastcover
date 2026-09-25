@@ -86,6 +86,27 @@ describe('project workspace', () => {
         expect(existsSync(join(nested, '.beastcover'))).toBe(false);
     });
 
+    it('skips a .beastcover directory that has no project.json, like the home config dir', () => {
+        const home = tempDir('beastcover-home-');
+        mkdirSync(join(home, '.beastcover', 'bin'), { recursive: true });
+        writeFileSync(join(home, '.beastcover', 'config.json'), '{}\n', 'utf8');
+        const project = join(home, 'projects', 'post');
+        mkdirSync(project, { recursive: true });
+
+        expect(findWorkspace(project)).toBeUndefined();
+        const created = createWorkspace(project, { name: 'post' });
+        expect(created.path).toBe(join(project, '.beastcover'));
+        expect(findWorkspace(join(project, 'drafts'))).toBe(join(project, '.beastcover'));
+    });
+
+    it('refuses to turn an existing non-workspace .beastcover directory into a workspace', () => {
+        const home = tempDir('beastcover-home-new-');
+        mkdirSync(join(home, '.beastcover'), { recursive: true });
+        expect(() => createWorkspace(home, { name: 'home' })).toThrowError(
+            `${join(home, '.beastcover')} already exists and is not a BeastCover workspace. It may be the settings folder. Run beastcover new in a project folder instead.`,
+        );
+    });
+
     it('does not create a workspace when none exists', () => {
         const cwd = tempDir('beastcover-missing-');
         expect(findWorkspace(cwd)).toBeUndefined();

@@ -98,12 +98,14 @@ export function findWorkspace(startDir: string): string | undefined {
     let directory = resolve(startDir);
     while (true) {
         const candidate = join(directory, WORKSPACE_DIRNAME);
+        // 只认带 project.json 的目录。家目录的 ~/.beastcover 是设置目录，同名但不是工作区。
         try {
-            if (statSync(candidate).isDirectory()) {
+            if (statSync(join(candidate, PROJECT_PACK_FILE)).isFile()) {
                 return candidate;
             }
         } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code !== 'ENOENT' && code !== 'ENOTDIR') {
                 throw new Error(
                     `Cannot inspect ${candidate}: ${error instanceof Error ? error.message : String(error)}`,
                 );
@@ -230,8 +232,13 @@ export function createWorkspace(cwd: string, options: CreateWorkspaceOptions): C
     }
 
     const target = workspacePath(cwd);
-    if (existsSync(target)) {
+    if (existsSync(join(target, PROJECT_PACK_FILE))) {
         throw new Error(`A BeastCover workspace already exists at ${target}.`);
+    }
+    if (existsSync(target)) {
+        throw new Error(
+            `${target} already exists and is not a BeastCover workspace. It may be the settings folder. Run beastcover new in a project folder instead.`,
+        );
     }
 
     const existing = findWorkspace(cwd);
