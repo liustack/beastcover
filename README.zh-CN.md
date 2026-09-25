@@ -61,6 +61,8 @@ beastcover gen "人接不住认知以外的流量，也赚不到认知以外的�
 
 有工作区时，照片和它的来源记录存进 `.beastcover/refs/`，封面写到 `.beastcover/out/`。`project.json` 记着这个项目的风格和配色，`history.jsonl` 记着每一张封面，两个文件都可以提交。
 
+照片封面会按照片自己的主体来构图，让主体避开标题。`--look mono|duotone|punch` 给照片调色，`--fit extend` 在照片形状不适合平台时保留整张照片，其余部分用模糊的同一张补满。装了模型 CLI 的话，`--source local-model --remix me.jpg` 按项目画风重绘你的图，再加一个 `--remix 场景.jpg` 就能把你放进那个场景。
+
 加上 `--subject me.jpg` 就能把人放上封面：人站在一侧，带白描边，标题让到另一侧。给透明 PNG 直接用。在 macOS 14 及以上，普通照片会用系统自带的抠图在本机抠好，不上传，也不会被模型重画脸。其他系统请先抠好（iPhone 和 Mac 的「拷贝主体」、remove.bg、Photoshop 都行）再把 PNG 给它。
 
 不要照片的话，`--source render` 出纯文字封面。`--template poster` 是大字报：满版纯色、超大字，可以用 `--tag` 加一个痛点标签。`--template number --number 3` 是数字钩子：一个超大数字配一句短话。`--template compare --before 旧.jpg --after 新.jpg` 是前后对比：两张图分屏，接缝处一个箭头。每个模板都会按各平台的安全区排版。装了模型 CLI 的话，`--source local-model --via codex` 按项目风格画封面，`beastcover styles` 列出四种画风。

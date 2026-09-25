@@ -86,6 +86,11 @@ beastcover gen "<headline>" --source stock --photo openverse:<id> --preset wecha
 
 Use a short concrete English query of two to four words. Keep mood words and negatives out of it.
 
+The photo is framed around its own subject (faces first on macOS, the most striking area elsewhere) and moved clear of the headline, which keeps to the lower part of the cover. Two options change the photo itself, all on the machine:
+
+- `--look mono|duotone|punch` grades it: black and white, the palette's dark and accent colours, or more saturation and contrast. The default `natural` keeps the palette wash.
+- `--fit extend` keeps the whole photo and fills the rest with a blurred copy. Use it when the output says `Photo: the subject does not fit the ... crop`, typically a portrait photo on the X or WeChat banner.
+
 ## Put a person on the cover
 
 A face with an expression is the strongest hook a cover can have. When the user has a photo of themselves, a guest, or a character, add it with `--subject`:
@@ -143,6 +148,20 @@ beastcover gen "<subject>" --source local-model --via grok --ref /absolute/a.png
 The model runs once per group of platforms, saves its image in `.beastcover/cache/`, and each platform is cropped from that image. `xiaohongshu,douyin` is one model call. `wechat,youtube` is two.
 
 `--via` chooses `codex`, `grok`, or `claude`. It is only valid with `--source local-model`. `--ref` names files only. Do not glob. Do not pass a directory.
+
+### Redraw or combine images
+
+Only when the user asks for it, `--remix` hands their images to the model:
+
+```bash
+beastcover gen "<subject>" --source local-model --via codex --remix /abs/me.jpg --preset youtube
+beastcover gen "<subject>" --source local-model --via codex --remix /abs/me.jpg --remix /abs/scene.jpg --preset douyin
+```
+
+- One image: redrawn in the project style, keeping the composition, pose, and face.
+- Two images: the person from the first is put into the scene from the second.
+- Only the user's own images or cc0/pdm photos go to the model. A photo fetched from Pexels is refused.
+- The model redraws the face and invents what the photo does not show, like the rest of a body. When the face must stay exact, use `--subject` on a render or stock cover instead.
 
 After the command finishes, verify the image at the reported path. Tell the user: `Privacy: local-model used your own CLI. We did not handle the data.`
 

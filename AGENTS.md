@@ -15,7 +15,8 @@ Phase one currently ships these working surfaces:
 - `gen --source stock --photo <ref-or-path>` composes a photo cover: the photo is inlined as a data URI, the project palette tints it, and the headline sits on a scrim
 - `gen --source render --template text|poster|number|compare` picks the text cover: a calm headline, a loud full-bleed poster with an optional `--tag`, a huge `--number` beside a short line, or a `--before`/`--after` split with an arrow
 - `gen --subject <path>` puts a person or object on a render or stock cover: a transparent PNG as is, or a photo cut out on macOS 14+ with Vision
-- `local-model` calls the user's own Codex, Grok, or Claude CLI to paint a cover
+- `gen --source stock` frames the photo around its subject (Vision faces and saliency on macOS, sharp attention elsewhere), and takes `--look natural|mono|duotone|punch` and `--fit cover|extend`
+- `local-model` calls the user's own Codex, Grok, or Claude CLI to paint a cover, and `--remix` redraws one image or puts the person from one image into the scene of another
 - `styles` lists the four self-contained catalog styles
 - `new` and `project` manage a per-project `.beastcover/` workspace
 
@@ -46,6 +47,8 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - local-model runs the model once per family, saves the raw image in `.beastcover/cache/`, and crops each platform from it.
 - Subject cutout lives in `src/subject/`. A PNG with at least 2% transparent pixels is used as is. Otherwise the Swift source in `vision.ts` is compiled once into `~/.beastcover/bin/vision-tool-<hash>` and run on the image, and the result is cached in the workspace `cache/` by image hash. Non-macOS or macOS before 14 fails with a request for a transparent PNG. The person sits in its own subject area, above the headline, and the subject area never overlaps the text area (`src/render/layout.test.ts`).
 - Templates live in `src/render/` (`template.ts`, `poster.ts`, `number.ts`, `compare.ts`, `photo-cover.ts`) and are assembled into a `CoverTemplate` by `src/compose/templates.ts`. A template may change the layout (`layoutFor`) and may fit a second big text (`measureAccentHtml` into `accentArea`, the number figure). Options that belong to another template fail instead of being ignored.
+- Photo framing lives in `src/subject/focus.ts` (where the subject is) and `src/render/photo-cover.ts` (`placeWindow`, `photoFocusTarget`, `photoTextLayout`). The crop window keeps the whole subject box when it fits and moves its centre toward a target clear of the headline. When the subject cannot fit a family crop, `gen` suggests `--fit extend` instead of switching by itself.
+- `--remix` images go first in the model reference list, the instruction joins the subject line, and `src/local-model/remix.ts` refuses images whose stock sidecar is not openverse cc0 or pdm.
 - Stock downloads are measured with sharp. The sidecar keeps the served size and, when different, the listed size. `gen` warns when a photo is stretched more than 1.5x on a platform.
 - history.jsonl stores output, photo, and subject paths relative to the workspace.
 - Workspace discovery only accepts a `.beastcover/` that contains `project.json`, because the settings folder `~/.beastcover/` has the same name.
@@ -74,7 +77,8 @@ src/
 │   └── index.test.ts
 ├── subject/
 │   ├── index.ts            # Transparent PNG or cutout, cache by image hash, trim
-│   ├── vision.ts           # macOS Vision cutout tool: Swift source, one-time build, run
+│   ├── vision.ts           # macOS Vision tool: cutout and focus modes, one-time build, run
+│   ├── focus.ts            # Photo subject: Vision faces or saliency, else sharp attention
 │   └── index.test.ts
 ├── local-model/
 │   ├── index.ts            # Prompt envelope, argv, provider selection, spawn
@@ -82,6 +86,7 @@ src/
 │   ├── argv.ts             # Codex/Grok/Claude argv and named --ref files
 │   ├── provider.ts         # Backend selection with no silent fallback
 │   ├── canvas.ts           # Generate plan per family, centred crop box per platform
+│   ├── remix.ts            # --remix mode and the own-or-cc0/pdm license gate
 │   ├── finish.ts           # sharp crop then resize
 │   └── run.ts              # rm, spawn, captured stdio, on-disk image verification
 ├── render/
@@ -93,7 +98,8 @@ src/
 │   ├── number.ts           # Number template: fitted figure beside a short line
 │   ├── compare.ts          # Compare template: split panels, seam arrow, labels
 │   ├── templates.test.ts
-│   ├── photo-cover.ts      # Photo cover template and sharp preprocessing
+│   ├── photo-cover.ts      # Photo cover template, subject framing, looks, extend fit
+│   ├── photo-framing.test.ts
 │   ├── photo-cover.test.ts
 │   ├── template.ts         # Built-in text-led cover template
 │   └── template.test.ts
