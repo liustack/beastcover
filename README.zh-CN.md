@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.zh-CN.jpg" alt="同一篇文章的三张封面：16:9 站内封面、5:2 横幅和 3:4 竖版，底图是同一张 CC0 城市夜景" width="100%"></p>
+<p align="center"><img src="assets/banner.zh-CN.jpg" alt="同一篇文章的三张封面：横版视频封面、超宽文章横幅和竖版笔记封面，底图是同一张 CC0 城市夜景" width="100%"></p>
 
 <h1 align="center">BeastCover</h1>
 
@@ -36,11 +36,11 @@ npx -y skills add liustack/beastcover -g
 
 **🆓 不花钱，不用 key。** 默认走 Openverse，只收 CC0 和公有领域的照片，拿来就能用，也不用署名。配了 Pexels key 就优先用 Pexels。
 
-**📐 一篇文章一套尺寸。** 16:9 站内封面、3:4 小红书竖版、5:2 公众号和 X 横幅，配色和字都跟着同一个项目走。
+**📐 一篇内容，各平台都有。** 公众号、X、YouTube、B 站、小红书、Instagram、抖音、TikTok 都有预设，配色和字都跟着同一个项目走。
 
 **🔒 稿子不出电脑。** 渲染在本机 Chromium 里完成，联网的只有搜图和下载照片。
 
-**🎨 有模型 CLI 还能出插图。** 装了 Codex、Grok 或 Claude CLI，就能用十种画风画正文插图，花的是你自己的订阅。
+**🎨 有模型 CLI 还能画封面。** 装了 Codex、Grok 或 Claude CLI，就能用四种高冲击画风画封面，花的是你自己的订阅。
 
 ## 命令
 
@@ -52,33 +52,38 @@ npx --yes --package @liustack/beastcover playwright install chromium
 
 beastcover new my-post
 beastcover stock search "harbour night" --orientation landscape
-beastcover gen "人接不住认知以外的流量，也赚不到认知以外的钱" --source stock --photo openverse:<id> --preset 16:9
+beastcover gen "人接不住认知以外的流量，也赚不到认知以外的钱" --source stock --photo openverse:<id> --preset wechat
 ```
 
 浏览器要用 beastcover 自带的 Playwright 来装，直接 `npx playwright` 可能拿到 npx 缓存里的旧版本，装出来的 Chromium 对不上。
 
 `stock search` 每行列一张照片：ref、尺寸、授权、作者、缩略图地址。挑一张，把 ref 交给 `--photo`。`--photo` 也收本地图片路径。
 
-有工作区时，照片和它的来源记录存进 `.beastcover/refs/`，封面写到 `.beastcover/out/`。`project.json` 记着这个项目的风格和配色，`history.jsonl` 记着每一张图，两个文件都可以提交。
+有工作区时，照片和它的来源记录存进 `.beastcover/refs/`，封面写到 `.beastcover/out/`。`project.json` 记着这个项目的风格和配色，`history.jsonl` 记着每一张封面，两个文件都可以提交。
 
-不要照片的话，`--source render` 出纯文字卡片。装了模型 CLI 的话，`--source local-model --via codex` 按项目风格画插图，`beastcover styles` 列出十种画风。
+不要照片的话，`--source render` 出纯文字封面。装了模型 CLI 的话，`--source local-model --via codex` 按项目风格画封面，`beastcover styles` 列出四种画风。
 
 ## 尺寸
 
 | 预设 | 像素 | 用在哪 |
 | :-- | :-- | :-- |
-| `16:9` | 1600×900 | 站内文章封面 |
-| `5:2` | 1600×640 | 公众号封面、X 横幅、文内过渡条 |
-| `3:2` | 1536×1024 | 正文插图 |
-| `3:4` | 1242×1656 | 小红书等竖版封面 |
+| `youtube` | 1280×720 | YouTube 缩略图 |
+| `bilibili` | 1146×717 | B 站视频封面 |
+| `wechat` | 900×383 | 公众号文章封面 |
+| `x` | 1920×368 | X 文章封面 |
+| `xiaohongshu` | 1080×1440 | 小红书笔记封面 |
+| `instagram` | 1080×1440 | Instagram 帖子 |
+| `instagram-reels` | 1080×1920 | Instagram Reels 封面 |
+| `douyin` | 1080×1920 | 抖音视频封面 |
+| `tiktok` | 1080×1920 | TikTok 视频封面 |
 
-尺寸不够用时，`--width`、`--height`、`--scale` 可以直接指定画布。
+X 官方没公布文章封面尺寸，1920×368 是别人上传实测出来的。默认预设是 `youtube`。尺寸不够用时，`--width`、`--height`、`--scale` 可以直接指定画布。旧的比例名（`16:9`、`5:2`、`3:2`、`3:4`）已经去掉，用到时会提示改用哪个预设。
 
 ## 配置
 
 ```bash
 beastcover config set stock.pexels.apiKey <key>
-beastcover config set render.preset 3:4
+beastcover config set render.preset xiaohongshu
 beastcover config show
 ```
 

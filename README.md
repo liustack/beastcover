@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.jpg" alt="Three covers for one article: a 16:9 site cover, a 5:2 banner, and a 3:4 portrait, all on the same CC0 night skyline" width="100%"></p>
+<p align="center"><img src="assets/banner.jpg" alt="Three covers for one post: a landscape video thumbnail, a wide article banner, and a portrait note cover, all on the same CC0 night skyline" width="100%"></p>
 
 <h1 align="center">BeastCover</h1>
 
@@ -36,11 +36,11 @@ Issues are welcome any time. [Open one](https://github.com/liustack/beastcover/i
 
 **🆓 Free, and no API key.** Openverse is the default source, and it only returns CC0 and public domain photos, so there is nothing to credit. Add a Pexels key and Pexels goes first.
 
-**📐 One post, every size.** A 16:9 site cover, a 3:4 portrait for social feeds, and a 5:2 banner for X and newsletters, all sharing the project's palette and type.
+**📐 One post, every platform.** Presets for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok, all sharing the project's palette and type.
 
 **🔒 Your draft stays home.** Rendering happens in a local Chromium. The only network calls are the photo search and the photo download.
 
-**🎨 Illustrations if you have a model CLI.** With Codex, Grok, or Claude CLI installed, you can draw body illustrations in ten styles, on your own subscription.
+**🎨 Painted covers if you have a model CLI.** With Codex, Grok, or Claude CLI installed, you can paint a cover in one of four bold styles, on your own subscription.
 
 ## Commands
 
@@ -52,33 +52,38 @@ npx --yes --package @liustack/beastcover playwright install chromium
 
 beastcover new my-post
 beastcover stock search "harbour night" --orientation landscape
-beastcover gen "You can't catch the traffic you don't understand" --source stock --photo openverse:<id> --preset 16:9
+beastcover gen "You can't catch the traffic you don't understand" --source stock --photo openverse:<id> --preset youtube
 ```
 
 Install Chromium through the Playwright that ships with beastcover. A bare `npx playwright` can pick up an older copy from the npx cache and download a browser that does not match.
 
 `stock search` prints one photo per line: ref, size, license, creator, thumbnail URL. Pick one and pass its ref to `--photo`. `--photo` also takes a local image path.
 
-With a workspace, the photo and its provenance record land in `.beastcover/refs/` and the cover lands in `.beastcover/out/`. `project.json` holds the project's style and palette, `history.jsonl` records every image, and both are safe to commit.
+With a workspace, the photo and its provenance record land in `.beastcover/refs/` and the cover lands in `.beastcover/out/`. `project.json` holds the project's style and palette, `history.jsonl` records every cover, and both are safe to commit.
 
-Without a photo, `--source render` makes a text-only card. With a model CLI, `--source local-model --via codex` draws an illustration in the project style, and `beastcover styles` lists all ten.
+Without a photo, `--source render` makes a text-only cover. With a model CLI, `--source local-model --via codex` paints a cover in the project style, and `beastcover styles` lists all four.
 
 ## Sizes
 
 | Preset | Pixels | Use |
 | :-- | :-- | :-- |
-| `16:9` | 1600×900 | Site article cover |
-| `5:2` | 1600×640 | Newsletter header, X banner, section break |
-| `3:2` | 1536×1024 | Body illustration |
-| `3:4` | 1242×1656 | Portrait social cover |
+| `youtube` | 1280×720 | YouTube thumbnail |
+| `bilibili` | 1146×717 | Bilibili video cover |
+| `wechat` | 900×383 | WeChat article cover |
+| `x` | 1920×368 | X article cover |
+| `xiaohongshu` | 1080×1440 | Xiaohongshu note cover |
+| `instagram` | 1080×1440 | Instagram post |
+| `instagram-reels` | 1080×1920 | Instagram Reels cover |
+| `douyin` | 1080×1920 | Douyin video cover |
+| `tiktok` | 1080×1920 | TikTok video cover |
 
-When a preset does not fit, set the canvas with `--width`, `--height`, and `--scale`.
+X has not published a size for article covers. 1920×368 is what others measured by uploading. The default preset is `youtube`. When a preset does not fit, set the canvas with `--width`, `--height`, and `--scale`. The old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone, and using one tells you which preset replaces it.
 
 ## Configuration
 
 ```bash
 beastcover config set stock.pexels.apiKey <key>
-beastcover config set render.preset 3:4
+beastcover config set render.preset xiaohongshu
 beastcover config show
 ```
 

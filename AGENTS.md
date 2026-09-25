@@ -2,19 +2,19 @@
 
 ## Goal
 
-Provide the `beastcover` CLI and its agent distribution surfaces. BeastCover creates image sets for articles, presentations, products, and campaigns that remain inside one coherent visual system.
+Provide the `beastcover` CLI and its agent distribution surfaces. BeastCover makes covers only: thumbnails and headers for articles, videos, and posts on WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok.
 
-The product contract is article-level consistency. A cover, body illustration, social crop, and transition graphic belong to the same visual family instead of looking like unrelated one-off generations.
+The name plays on Beauty and the Beast: a cover needs that kind of contrast and impact, because people see the title and the cover first and skip anything that does not grab them. The product contract is covers that get the click, with every platform version of one piece in the same style and palette.
 
 ## Scope
 
 Phase one currently ships these working surfaces:
 
-- `render` turns the built-in HTML template and user text into a local PNG
+- `render` turns the built-in HTML template and a headline into a local PNG cover
 - `stock search` and `stock fetch` find and download free photos from Openverse (cc0 and pdm only, no key) or Pexels (needs `stock.pexels.apiKey`)
 - `gen --source stock --photo <ref-or-path>` composes a photo cover: the photo is inlined as a data URI, the project palette tints it, and the headline sits on a scrim
-- `local-model` calls the user's own Codex, Grok, or Claude CLI to generate an image
-- `styles` lists the ten self-contained catalog styles
+- `local-model` calls the user's own Codex, Grok, or Claude CLI to paint a cover
+- `styles` lists the four self-contained catalog styles
 - `new` and `project` manage a per-project `.beastcover/` workspace
 
 Do not add:
@@ -24,8 +24,9 @@ Do not add:
 - a global prompt assembler that combines style, palette, and discipline fragments
 - silent source substitution when a requested source is unavailable
 - defaults that hide malformed internal state
+- article illustrations or styles that only work as illustrations (thin lines, watercolor, low-contrast soft color, single-line sketch)
 
-The ten-style catalog is in `src/styles/`. Each style prompt is copied unchanged from the artwork source. Palette slots and canvas strategy are metadata on that record, not extra prompt layers. Recenter and contact-sheet tools remain outside this pass. local-model crop and resize are part of generation, not those tools.
+The four-style catalog is in `src/styles/`. Each style prompt is copied unchanged from the artwork source. Palette slots and the composition note are metadata on that record, not extra prompt layers. Removed style names fail with a message that says they were removed. Recenter and contact-sheet tools remain outside this pass. local-model crop and resize are part of generation, not those tools.
 
 ## Technical Approach
 
@@ -36,9 +37,9 @@ The ten-style catalog is in `src/styles/`. Each style prompt is copied unchanged
 - The render engine uses Playwright Chromium directly. It disables JavaScript and blocks HTTP and HTTPS requests, then captures the requested viewport as PNG. Photo covers therefore inline the photo as a JPEG data URI after `sharp` has cropped it to the canvas pixel size.
 - Stock providers never fall back to each other. A missing Pexels key is an error, not a switch to Openverse. Openverse results are filtered to cc0 and pdm at search time and re-checked at download time.
 - Stock downloads go through `src/stock/ssrf.ts`: blocked hostnames, private and reserved IP ranges, DNS resolved up front, and the socket pinned to the address that passed. `fetch` and `sleep` are injected so tests never touch the network.
-- Size presets are production pixels. `scale` controls Chromium device scale and therefore output pixel density.
+- Size presets are named after platforms and hold production pixels. Old ratio names fail with a message naming the replacement. `scale` controls Chromium device scale and therefore output pixel density.
 - `local-model` asks the backend for the native generate size, then crops and resizes in-process with `sharp`. It does not shell out to sips or ImageMagick.
-- Each style record is self-contained. Copy its full prompt unchanged. Append one subject description, or fill a declared subject slot in place instead of appending.
+- Each style record is self-contained. Copy its full prompt unchanged and append one subject description.
 - A project workspace lives at `.beastcover/` inside the user project. Discovery walks up from the current directory. Missing workspaces are reported, never created silently.
 - Workspace ignore rules live only in `src/workspace/ignore.ts`. The CLI writes `.beastcover/.gitignore` (`/out/`, `/cache/`, `/refs/`) and never touches the user's `.gitignore` or `.git/info/exclude`. `project.json` and `history.jsonl` stay commitable.
 - Tests live next to their modules as `*.test.ts` or `*.test.js`.
@@ -52,14 +53,14 @@ src/
 ├── config.test.ts
 ├── doctor.ts               # Offline Node, Chromium, config permission, and local CLI checks
 ├── doctor.test.ts
-├── dimensions.ts           # Four production size presets
+├── dimensions.ts           # Platform size presets and retired ratio names
 ├── dimensions.test.ts
 ├── local-model/
 │   ├── index.ts            # Prompt envelope, argv, provider selection, spawn
 │   ├── prompt.ts           # Style prompt plus 主体, conditional palette replace
 │   ├── argv.ts             # Codex/Grok/Claude argv and named --ref files
 │   ├── provider.ts         # Backend selection with no silent fallback
-│   ├── canvas.ts           # Native generate size, crop box, production size
+│   ├── canvas.ts           # Native generate size, centred crop box, production size per platform
 │   ├── finish.ts           # sharp crop then resize
 │   └── run.ts              # rm, spawn, captured stdio, on-disk image verification
 ├── render/
@@ -67,7 +68,7 @@ src/
 │   ├── index.test.ts
 │   ├── photo-cover.ts      # Photo cover template and sharp preprocessing
 │   ├── photo-cover.test.ts
-│   ├── template.ts         # Built-in text-led visual template
+│   ├── template.ts         # Built-in text-led cover template
 │   └── template.test.ts
 ├── stock/
 │   ├── index.ts            # Provider selection, search, fetch, file stems
@@ -79,10 +80,10 @@ src/
 │   ├── download.ts         # https-only download, content-type gate, sidecar
 │   └── ssrf.ts             # Hostname and IP checks, DNS pin
 ├── styles/
-│   ├── schema.ts           # Style, palette slot, canvas, and catalog metadata types
-│   ├── catalog.ts          # Ten self-contained styles
+│   ├── schema.ts           # Style, palette slot, and catalog metadata types
+│   ├── catalog.ts          # Four self-contained cover styles
 │   ├── records/            # One file per style, prompt copied verbatim
-│   ├── loader.ts           # Exact-name style lookup with no fallback
+│   ├── loader.ts           # Exact-name style lookup with no fallback, removed-style message
 │   ├── loader.test.ts
 │   └── catalog.test.ts
 └── workspace/
@@ -100,14 +101,14 @@ cordis.patch.yml            # DSH bundle mount
 
 ```bash
 beastcover styles
-beastcover new demo --style memory_color_blocks
+beastcover new demo --style risograph_editorial
 beastcover project
-beastcover gen "One visual family across the whole story" --source render --preset 16:9
+beastcover gen "One headline, every platform" --source render --preset youtube
 beastcover stock search "harbour dawn" --orientation landscape
-beastcover gen "The tide comes back" --source stock --photo openverse:<id> --preset 16:9
-beastcover gen "A figure on a shore" --source local-model --via codex --preset 3:2
+beastcover gen "The tide comes back" --source stock --photo openverse:<id> --preset wechat
+beastcover gen "A figure on a shore" --source local-model --via codex --preset xiaohongshu
 beastcover config init
-beastcover config set render.preset 3:2
+beastcover config set render.preset x
 beastcover config set stock.pexels.apiKey <key>
 beastcover config show
 beastcover doctor
@@ -118,4 +119,4 @@ beastcover doctor
 - Run `pnpm check` for type checking, Biome, and all Vitest suites.
 - Run `pnpm build` and confirm it produces `dist/main.js`.
 - Run the built CLI against the real local Chromium and inspect the generated PNG dimensions and appearance.
-- UI-facing template changes require a newly rendered PNG and visual inspection.
+- UI-facing template changes require a newly rendered PNG and visual inspection on every platform preset.

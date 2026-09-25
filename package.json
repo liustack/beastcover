@@ -1,7 +1,7 @@
 {
     "name": "@liustack/beastcover",
     "version": "0.2.0",
-    "description": "Free article covers from real photos: your agent picks a CC0 or Pexels photo, adds your headline and palette, and renders it locally",
+    "description": "Covers that get the click, for WeChat, X, YouTube, Xiaohongshu, Douyin and more: your agent picks a free photo, adds your headline and palette, and renders it locally",
     "type": "module",
     "bin": {
         "beastcover": "./dist/main.js"
@@ -29,10 +29,11 @@
         "cli",
         "cover-image",
         "article-cover",
+        "thumbnail",
+        "youtube-thumbnail",
         "stock-photos",
         "openverse",
         "pexels",
-        "illustration",
         "html-to-png",
         "playwright",
         "agent-skill",
