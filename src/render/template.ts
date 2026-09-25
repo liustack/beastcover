@@ -98,7 +98,7 @@ export function createRenderTemplate(text: string, options: RenderTemplateOption
         #canvas {
             position: relative;
             display: grid;
-            grid-template-rows: auto 1fr auto;
+            grid-template-rows: minmax(0, 1fr);
             width: 100vw;
             height: 100vh;
             padding: 6.2vh 5.6vw 5.4vh;
@@ -114,39 +114,12 @@ export function createRenderTemplate(text: string, options: RenderTemplateOption
             background: var(--cover-accent);
         }
 
-        header,
-        footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-            font-size: clamp(11px, 1.05vw, 18px);
-            font-weight: 650;
-            letter-spacing: 0.13em;
-            line-height: 1;
-            text-transform: uppercase;
-        }
-
-        header {
-            padding-bottom: 2.1vh;
-            border-bottom: 1px solid rgba(22, 23, 17, 0.28);
-        }
-
-        .brand {
-            font-family: "Helvetica Neue", "PingFang SC", sans-serif;
-            font-size: clamp(18px, 1.75vw, 30px);
-            font-weight: 800;
-            letter-spacing: -0.045em;
-            text-transform: none;
-        }
-
         .copy-wrap {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(70px, 11vw);
             gap: 5vw;
             align-items: center;
             min-height: 0;
-            padding: 4.5vh 0 5vh;
         }
 
         .copy {
@@ -196,30 +169,14 @@ export function createRenderTemplate(text: string, options: RenderTemplateOption
             border-bottom: 0;
         }
 
-        footer {
-            padding-top: 2.1vh;
-            border-top: 1px solid rgba(22, 23, 17, 0.28);
-        }
-
-        .local {
-            color: var(--cover-accent);
-        }
     </style>
 </head>
 <body>
     <main id="canvas">
-        <header>
-            <span class="brand">BeastCover</span>
-            <span>Visual system / 001</span>
-        </header>
         <section class="copy-wrap" aria-label="Rendered text">
             <p class="copy" data-density="${density}">${safeText}</p>
             <div class="system-mark" aria-hidden="true"><span></span><span></span><span></span></div>
         </section>
-        <footer>
-            <span>One story · one visual language</span>
-            <span class="local">Local render</span>
-        </footer>
     </main>
     <script type="application/json" id="beastcover-palette">${paletteJson}</script>
 </body>

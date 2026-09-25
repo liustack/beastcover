@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { describe, expect, it } from 'vitest';
+import { listDimensionPresets } from '../dimensions.ts';
 import { createRenderTemplate, DEFAULT_RENDER_COLORS } from './template.ts';
 
 describe('built-in render template', () => {
@@ -52,26 +53,48 @@ describe('built-in render template', () => {
         ).toThrowError('Invalid CSS color "暖白".');
     });
 
-    it('keeps paragraph copy above the footer on the shallow 5:2 canvas', async () => {
-        const paragraphs = [
-            '同一个项目里的封面、正文插图、社交平台变体和章节过渡图，应当共享同一套配色、字体与构图纪律。修改一个词时，版面保持稳定，整篇文章的视觉体系也不会散架。',
-            '同一项目保持视觉一致。'.repeat(28),
+    it('prints only the headline, with no tool branding on the cover', () => {
+        const html = createRenderTemplate('人接不住认知以外的流量');
+        for (const label of [
+            'Visual system',
+            'visual language',
+            'Local render',
+            '<header',
+            '<footer',
+        ]) {
+            expect(html, label).not.toContain(label);
+        }
+        expect(html.match(/BeastCover/g)).toEqual(['BeastCover']);
+    });
+
+    it('keeps short and long copy inside every platform canvas', async () => {
+        const texts = [
+            '人接不住认知以外的流量',
+            '同一篇内容要发到公众号、X、YouTube、小红书和抖音，每个平台的封面比例都不一样，标题要在每个画布里都放得下，不能被裁掉或者挤出画面。',
+            '每个平台的封面都要放得下标题。'.repeat(20),
         ];
         const browser = await chromium.launch({ headless: true });
 
         try {
-            const page = await browser.newPage({ viewport: { width: 1600, height: 640 } });
-            for (const text of paragraphs) {
-                await page.setContent(createRenderTemplate(text), { waitUntil: 'load' });
-                const copy = await page.locator('.copy').boundingBox();
-                const footer = await page.locator('footer').boundingBox();
-
-                expect(copy).not.toBeNull();
-                expect(footer).not.toBeNull();
-                expect((copy?.y ?? 0) + (copy?.height ?? 0)).toBeLessThanOrEqual(footer?.y ?? 0);
+            for (const preset of listDimensionPresets()) {
+                const page = await browser.newPage({
+                    viewport: { width: preset.width, height: preset.height },
+                });
+                for (const text of texts) {
+                    await page.setContent(createRenderTemplate(text), { waitUntil: 'load' });
+                    const copy = await page.locator('.copy').boundingBox();
+                    expect(copy, preset.name).not.toBeNull();
+                    const box = copy ?? { x: 0, y: 0, width: 0, height: 0 };
+                    const label = `${preset.name}: ${text.slice(0, 8)}`;
+                    expect(box.y, label).toBeGreaterThanOrEqual(0);
+                    expect(box.x, label).toBeGreaterThanOrEqual(0);
+                    expect(box.y + box.height, label).toBeLessThanOrEqual(preset.height);
+                    expect(box.x + box.width, label).toBeLessThanOrEqual(preset.width);
+                }
+                await page.close();
             }
         } finally {
             await browser.close();
         }
-    }, 30_000);
+    }, 60_000);
 });
