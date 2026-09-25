@@ -1,0 +1,99 @@
+name: release
+
+# Publishes to npm and creates the GitHub Release when a v* tag is pushed. The
+# tag is normally created by scripts/release.mjs (`pnpm release <version>`),
+# which runs the same guards locally and pushes the tag but does NOT publish.
+# This workflow is the single place that publishes, so the two can never race.
+#
+# npm side (set up outside this file): the @liustack/beastcover package lists
+# this repository and this workflow (liustack/beastcover,
+# .github/workflows/release.yml) as a trusted publisher. npm then mints a
+# short-lived credential from the OIDC token below, so there is no NPM_TOKEN
+# secret. Without that setting `npm publish --provenance` fails to authenticate.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # write is needed to create the GitHub Release from the pushed tag.
+  contents: write
+  # Required for provenance and OIDC trusted publishing.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      # OIDC trusted publishing and --provenance need npm 11.5.1+, newer than
+      # what Node 22 ships with.
+      - run: npm install -g npm@11
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # Same guards release.mjs runs, before anything irreversible.
+      - run: pnpm lint
+      - run: pnpm typecheck
+      # The pushed tag must be the version the tree says it is.
+      - run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "tag v$VERSION does not match package.json version $PKG_VERSION" >&2
+            exit 1
+          fi
+      # The skill pins the package version in its npx commands. A stale pin
+      # would send agents to the previous release.
+      - run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if grep -oE '@liustack/beastcover@[0-9]+\.[0-9]+\.[0-9]+' skills/beastcover/SKILL.md | grep -v "@$VERSION\$"; then
+            echo "skills/beastcover/SKILL.md pins a version other than $VERSION" >&2
+            exit 1
+          fi
+      - run: pnpm test
+      - run: pnpm build
+      # Everything that can refuse the release runs before the one irreversible
+      # step, so the notes are extracted and checked before publishing.
+      - name: Extract release notes from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # This version's section: from its "## <version>" heading up to the
+          # next "## " heading.
+          awk -v ver="$version" '
+            $0 == "## " ver || index($0, "## " ver " ") == 1 { grab=1; next }
+            grab && /^## / { exit }
+            grab { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG section for $version" >&2
+            exit 1
+          fi
+      # Idempotent: a manual publish must not turn this run red when the tag
+      # arrives later.
+      - name: Publish to npm (skipped when the version is already live)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').name")"
+          if npm view "$PKG@$VERSION" version >/dev/null 2>&1; then
+            echo "$PKG@$VERSION is already on the registry; skipping publish."
+          else
+            npm publish --provenance --access public
+          fi
+      - name: Create GitHub Release from the tag and CHANGELOG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; skipping."
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+          fi

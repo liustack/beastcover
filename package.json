@@ -12,9 +12,10 @@
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
         "coverage": "vitest run --coverage",
-        "lint": "biome check src dsh",
-        "format": "biome check --write src dsh",
+        "lint": "biome check src dsh scripts",
+        "format": "biome check --write src dsh scripts",
         "check": "pnpm typecheck && pnpm lint && pnpm test",
+        "release": "node scripts/release.mjs",
         "prepublishOnly": "pnpm build"
     },
     "files": [
@@ -23,7 +24,8 @@
         "dsh/index.js",
         "cordis.patch.yml",
         "README.md",
-        "README.zh-CN.md"
+        "README.zh-CN.md",
+        "CHANGELOG.md"
     ],
     "keywords": [
         "cli",
