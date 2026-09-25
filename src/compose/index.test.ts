@@ -16,6 +16,7 @@ import {
     composeCovers,
     composeCustomCover,
     coverOutputPaths,
+    focusCropWarnings,
     photoStretchWarnings,
     thumbnailWarnings,
 } from './index.ts';
@@ -406,5 +407,25 @@ describe('photo stretch check', () => {
         expect(photoStretchWarnings({ width: 1280, height: 800 }, ['youtube'], 2)).toEqual([
             'Photo: 1280x800 is stretched 2.0x on youtube. A larger photo stays sharp.',
         ]);
+    });
+});
+
+describe('focus crop check', () => {
+    it('suggests extend when the subject is taller than the crop window', () => {
+        // 783x1023 的竖版人像，脸占 60% 高：X 母版 5.2:1，窗口只有 150px 高。
+        expect(
+            focusCropWarnings({ width: 783, height: 1023 }, { width: 0.5, height: 0.6 }, [
+                'x',
+                'wechat',
+                'youtube',
+                'douyin',
+            ]),
+        ).toEqual([
+            'Photo: the subject does not fit the x, wechat crop. Add --fit extend to keep the whole photo.',
+            'Photo: the subject does not fit the youtube crop. Add --fit extend to keep the whole photo.',
+        ]);
+        expect(
+            focusCropWarnings({ width: 3000, height: 2000 }, { width: 0.2, height: 0.2 }, ['x']),
+        ).toEqual([]);
     });
 });

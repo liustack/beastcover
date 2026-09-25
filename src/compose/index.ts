@@ -323,3 +323,28 @@ export function photoStretchWarnings(
             : [];
     });
 }
+
+/** 照片主体比某个族的裁切窗口还大时（比如竖版人像裁进 X 横幅），提示改用 --fit extend */
+export function focusCropWarnings(
+    photo: { width: number; height: number },
+    focus: { width: number; height: number },
+    platforms: readonly PlatformName[],
+): string[] {
+    const families = [...new Set(platforms.map((name) => getPlatform(name).family))];
+    return families.flatMap((familyName) => {
+        const family = getFamily(familyName);
+        const aspect = family.masterWidth / family.masterHeight;
+        const windowWidth = Math.min(photo.width, photo.height * aspect);
+        const windowHeight = Math.min(photo.height, photo.width / aspect);
+        const cut =
+            focus.width * photo.width > windowWidth + 1 ||
+            focus.height * photo.height > windowHeight + 1;
+        if (!cut) {
+            return [];
+        }
+        const names = platforms.filter((name) => getPlatform(name).family === familyName);
+        return [
+            `Photo: the subject does not fit the ${names.join(', ')} crop. Add --fit extend to keep the whole photo.`,
+        ];
+    });
+}

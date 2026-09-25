@@ -15,6 +15,7 @@ import {
     composeCovers,
     composeCustomCover,
     coverOutputPaths,
+    focusCropWarnings,
     MAX_PHOTO_STRETCH,
     photoStretchWarnings,
     thumbnailWarnings,
@@ -725,6 +726,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             ...coverLines(written.covers, effective.render.scale),
                             ...written.warnings,
                             ...stretchLines(photoSize, effective.render),
+                            ...(fit === 'cover' && effective.render.canvas === undefined
+                                ? focusCropWarnings(photoSize, focus, effective.render.presets)
+                                : []),
                             ...subjectLine(subject),
                             `Photo: ${photoMeta.ref ?? photoPath}`,
                             ...creditLines(photoMeta),
