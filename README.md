@@ -61,6 +61,8 @@ Install Chromium through the Playwright that ships with beastcover. A bare `npx 
 
 With a workspace, the photo and its provenance record land in `.beastcover/refs/` and the cover lands in `.beastcover/out/`. `project.json` holds the project's style and palette, `history.jsonl` records every cover, and both are safe to commit.
 
+Add `--subject me.jpg` to put a person on the cover: they stand on one side with a white outline, and the headline moves to the other side. A transparent PNG is used as is. On macOS 14 or newer, a normal photo is cut out on your machine with the system's own subject cutout, so nothing is uploaded and your face is not redrawn. Elsewhere, cut the photo out first (iPhone and macOS "Copy Subject", remove.bg, Photoshop) and pass the PNG.
+
 Without a photo, `--source render` makes a text-only cover. With a model CLI, `--source local-model --via codex` paints a cover in the project style, and `beastcover styles` lists all four.
 
 ## Sizes
@@ -101,6 +103,7 @@ Settings live in `~/.beastcover/config.json` with file mode 0600, and `config sh
 | :-- | :-- |
 | `stock` | The search words, and the request that downloads the chosen photo |
 | `render` | Nothing |
+| `--subject` | Nothing. The cutout runs on your Mac |
 | `local-model` | Goes through your own CLI and subscription. BeastCover never sees it |
 
 Photo downloads connect straight to the image host, over https only, with private addresses blocked and a 40 MB cap per photo. A proxy set only through `HTTPS_PROXY` is not used. Proxies that take over DNS (fake-ip mode) work.

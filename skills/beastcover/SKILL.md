@@ -86,6 +86,20 @@ beastcover gen "<headline>" --source stock --photo openverse:<id> --preset wecha
 
 Use a short concrete English query of two to four words. Keep mood words and negatives out of it.
 
+## Put a person on the cover
+
+A face with an expression is the strongest hook a cover can have. When the user has a photo of themselves, a guest, or a character, add it with `--subject`:
+
+```bash
+beastcover gen "<1 to 6 words>" --source render --subject /absolute/me.jpg --preset youtube,xiaohongshu
+beastcover gen "<headline>" --source stock --photo openverse:<id> --subject /absolute/me.png --preset all
+```
+
+- A transparent PNG is used as is. On macOS 14 or newer a normal photo is cut out on the machine with the system cutout, and the output says `cut out on this machine with macOS Vision`. The first cutout compiles a small tool, which takes a few seconds.
+- Other systems fail with a message asking for a transparent PNG. Tell the user to cut the photo out first (iPhone or macOS "Copy Subject", remove.bg, Photoshop). Never pass the photo to a local-model CLI to remove the background: the model redraws the face.
+- The person stands on one side (the bottom on portrait covers) with a white outline, and the headline takes the other side. Keep that headline short: three to six characters, or a few words.
+- `--subject` works with `render` and `stock`, not with `local-model`.
+
 ## Render a text cover
 
 ```bash

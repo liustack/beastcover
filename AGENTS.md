@@ -13,6 +13,7 @@ Phase one currently ships these working surfaces:
 - `render` turns the built-in HTML template and a headline into a local PNG cover
 - `stock search` and `stock fetch` find and download free photos from Openverse (cc0 and pdm only, no key) or Pexels (needs `stock.pexels.apiKey`)
 - `gen --source stock --photo <ref-or-path>` composes a photo cover: the photo is inlined as a data URI, the project palette tints it, and the headline sits on a scrim
+- `gen --subject <path>` puts a person or object on a render or stock cover: a transparent PNG as is, or a photo cut out on macOS 14+ with Vision
 - `local-model` calls the user's own Codex, Grok, or Claude CLI to paint a cover
 - `styles` lists the four self-contained catalog styles
 - `new` and `project` manage a per-project `.beastcover/` workspace
@@ -25,6 +26,7 @@ Do not add:
 - silent source substitution when a requested source is unavailable
 - defaults that hide malformed internal state
 - article illustrations or styles that only work as illustrations (thin lines, watercolor, low-contrast soft color, single-line sketch)
+- a bundled cutout model (BiRefNet, RMBG, or any ONNX runtime), or background removal through a generative model that redraws the face
 
 The four-style catalog is in `src/styles/`. Each style prompt is copied unchanged from the artwork source. Palette slots and the composition note are metadata on that record, not extra prompt layers. Removed style names fail with a message that says they were removed. Recenter and contact-sheet tools remain outside this pass. local-model crop and resize are part of generation, not those tools.
 
@@ -41,6 +43,8 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - Platforms belong to three families (landscape, portrait, ultrawide). Each family has one master size, a text area, and a focus area, all in master coordinates, and each platform has a crop box in that master plus the rectangles its app UI covers. `src/platforms/index.test.ts` proves the text and focus areas sit inside every member crop and outside every covered rectangle. Change the geometry only together with that test.
 - `gen` renders one master per family at 2x or more, then crops and scales every requested platform from it with `sharp`. The renderer finds the largest font that keeps the headline inside the text area, keeps Latin words whole, and keeps punctuated clauses together when that costs under 30% of the size. Headline size is never set by fixed CSS ratios.
 - local-model runs the model once per family, saves the raw image in `.beastcover/cache/`, and crops each platform from it.
+- Subject cutout lives in `src/subject/`. A PNG with at least 2% transparent pixels is used as is. Otherwise the Swift source in `vision.ts` is compiled once into `~/.beastcover/bin/vision-cutout-<hash>` and run on the image, and the result is cached in the workspace `cache/` by image hash. Non-macOS or macOS before 14 fails with a request for a transparent PNG. The person sits in its own subject area, above the headline, and the subject area never overlaps the text area (`src/render/layout.test.ts`).
+- Workspace discovery only accepts a `.beastcover/` that contains `project.json`, because the settings folder `~/.beastcover/` has the same name.
 - `local-model` asks the backend for the native generate size, then crops and resizes in-process with `sharp`. It does not shell out to sips or ImageMagick.
 - Each style record is self-contained. Copy its full prompt unchanged and append one subject description.
 - A project workspace lives at `.beastcover/` inside the user project. Discovery walks up from the current directory. Missing workspaces are reported, never created silently.
@@ -54,7 +58,7 @@ src/
 ├── main.ts                 # Commander entry and command assembly
 ├── config.ts               # Layered config, typed writes, private file mode, redacted display
 ├── config.test.ts
-├── doctor.ts               # Offline Node, Chromium, config permission, and local CLI checks
+├── doctor.ts               # Offline Node, Chromium, config permission, cutout, and local CLI checks
 ├── doctor.test.ts
 ├── platforms/
 │   ├── index.ts            # Platform presets, families, crops, safe areas, retired ratio names
@@ -62,6 +66,10 @@ src/
 ├── compose/
 │   ├── index.ts            # Family masters, crops, custom canvas, thumbnail check
 │   ├── guides.ts           # --guides overlay for text, focus, and covered areas
+│   └── index.test.ts
+├── subject/
+│   ├── index.ts            # Transparent PNG or cutout, cache by image hash, trim
+│   ├── vision.ts           # macOS Vision cutout tool: Swift source, one-time build, run
 │   └── index.test.ts
 ├── local-model/
 │   ├── index.ts            # Prompt envelope, argv, provider selection, spawn
@@ -73,7 +81,8 @@ src/
 │   └── run.ts              # rm, spawn, captured stdio, on-disk image verification
 ├── render/
 │   ├── index.ts            # Playwright renderer: fit the headline, screenshot a page
-│   ├── layout.ts           # Cover layouts, headline markup, measuring probes
+│   ├── layout.ts           # Cover layouts, subject split, headline markup, measuring probes
+│   ├── layout.test.ts
 │   ├── index.test.ts
 │   ├── photo-cover.ts      # Photo cover template and sharp preprocessing
 │   ├── photo-cover.test.ts
@@ -115,6 +124,7 @@ beastcover project
 beastcover gen "One headline, every platform" --source render --preset all
 beastcover stock search "harbour dawn" --orientation landscape
 beastcover gen "The tide comes back" --source stock --photo openverse:<id> --preset wechat,x --guides
+beastcover gen "别再乱剪了" --source render --subject me.jpg --preset youtube,xiaohongshu
 beastcover gen "A figure on a shore" --source local-model --via codex --preset xiaohongshu
 beastcover config init
 beastcover config set render.preset x

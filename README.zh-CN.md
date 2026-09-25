@@ -61,6 +61,8 @@ beastcover gen "人接不住认知以外的流量，也赚不到认知以外的�
 
 有工作区时，照片和它的来源记录存进 `.beastcover/refs/`，封面写到 `.beastcover/out/`。`project.json` 记着这个项目的风格和配色，`history.jsonl` 记着每一张封面，两个文件都可以提交。
 
+加上 `--subject me.jpg` 就能把人放上封面：人站在一侧，带白描边，标题让到另一侧。给透明 PNG 直接用。在 macOS 14 及以上，普通照片会用系统自带的抠图在本机抠好，不上传，也不会被模型重画脸。其他系统请先抠好（iPhone 和 Mac 的「拷贝主体」、remove.bg、Photoshop 都行）再把 PNG 给它。
+
 不要照片的话，`--source render` 出纯文字封面。装了模型 CLI 的话，`--source local-model --via codex` 按项目风格画封面，`beastcover styles` 列出四种画风。
 
 ## 尺寸
@@ -101,6 +103,7 @@ beastcover config show
 | :-- | :-- |
 | `stock` | 搜索词，以及下载所选照片的请求 |
 | `render` | 什么都不出去 |
+| `--subject` | 什么都不出去，抠图在你的 Mac 上完成 |
 | `local-model` | 走你自己的 CLI 和订阅，我们不经手 |
 
 照片下载直连图片服务器，只认 https，内网地址一律拦下，单张上限 40MB。只靠 `HTTPS_PROXY` 设的代理用不上，接管 DNS 的代理（fake-ip 模式）可以正常下载。
