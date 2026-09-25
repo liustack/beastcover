@@ -82,14 +82,18 @@ export function headlineCss(layout: CoverLayout, headline: Headline, text: strin
             line-height: ${lineHeightFor(text)};
             text-wrap: balance;
             white-space: pre-wrap;
-            /* 中文按字正常断行，balance 才能把几行排匀，不会只剩一个字挂在最后一行。
-               西文单词不拆开，量字号时的探针保证最长的单词放得下。 */
+            /* 中文在词与词之间断行，balance 才能把几行排匀，不会只剩一个字挂在最后一行。
+               西文单词和中文词都不拆开，量字号时的探针保证最长的词放得下。 */
             word-break: normal;
             overflow-wrap: anywhere;
         }
 
         .clause {
             display: inline-block;
+        }
+
+        .word {
+            white-space: nowrap;
         }
 
         .probe {

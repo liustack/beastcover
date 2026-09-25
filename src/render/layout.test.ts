@@ -7,9 +7,11 @@ import {
     type Rect,
 } from '../platforms/index.ts';
 import {
+    chineseWords,
     customLayout,
     familyLayout,
     headlineClauses,
+    headlineMarkup,
     subjectRect,
     unbreakableRuns,
     withSubjectArea,
@@ -125,5 +127,18 @@ describe('headline runs', () => {
             '也赚不到认知以外的钱',
         ]);
         expect(headlineClauses('Wait, what?')).toEqual(['Wait,', 'what?']);
+    });
+
+    it('finds Chinese words of two or more characters and keeps them on one line', () => {
+        expect(chineseWords('封面不抓人，标题白写')).toEqual(['封面', '抓人', '标题']);
+        // 单字、标点和西文不算中文词，西文另有自己的探针。
+        expect(chineseWords('用AI三天做完一个App')).toEqual(['三天', '做完', '一个']);
+        expect(chineseWords('Get it')).toEqual([]);
+        expect(headlineMarkup('封面不抓人', { fontPx: 10, keepClauses: false })).toBe(
+            '<span class="word">封面</span>不<span class="word">抓人</span>',
+        );
+        expect(headlineMarkup('标题<封面>，再说', { fontPx: 10, keepClauses: true })).toBe(
+            '<span class="clause"><span class="word">标题</span>&lt;<span class="word">封面</span>&gt;，</span><span class="clause"><span class="word">再说</span></span>',
+        );
     });
 });

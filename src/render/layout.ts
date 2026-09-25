@@ -145,10 +145,33 @@ const LATIN_WORD = new RegExp(
 /**
  * 不该被拆开的西文单词，直接从全文里找，中文紧挨着英文时也能找到。量字号时每个单词单独
  * 不换行排一次，最宽的那个不能超出标题区域，否则大字号会把单词从中间劈开。
- * 中文按字换行是常规排法，不设探针，字号可以更大。
+ * 中文词另由 chineseWords 找。
  */
 export function unbreakableRuns(text: string): string[] {
     return text.match(LATIN_WORD) ?? [];
+}
+
+const CHINESE_SEGMENTER = new Intl.Segmenter('zh', { granularity: 'word' });
+const HAN_WORD = /^\p{Script=Han}{2,}$/u;
+
+/**
+ * 两个字以上的中文词（封面、标题、一件事），按 Intl.Segmenter 的词典切。浏览器会在任意
+ * 两个汉字之间断行，这些词要包成不换行的片段，量字号时也各放一个探针。词典切错时要么
+ * 多连了两个字（少一个断行点），要么少连（和按字断一样），都不会比按字断更差。
+ */
+export function chineseWords(text: string): string[] {
+    return Array.from(CHINESE_SEGMENTER.segment(text), (part) => part.segment).filter((word) =>
+        HAN_WORD.test(word),
+    );
+}
+
+/** 转义后的标题文字，中文词包进 .word，词内不换行 */
+function wordMarkup(text: string): string {
+    return Array.from(CHINESE_SEGMENTER.segment(text), ({ segment }) =>
+        HAN_WORD.test(segment)
+            ? `<span class="word">${escapeHtml(segment)}</span>`
+            : escapeHtml(segment),
+    ).join('');
 }
 
 export interface Headline {
@@ -170,16 +193,20 @@ export function headlineClauses(text: string): string[] {
 
 export function headlineMarkup(text: string, headline: Headline): string {
     if (!headline.keepClauses) {
-        return escapeHtml(text);
+        return wordMarkup(text);
     }
     return headlineClauses(text)
-        .map((clause) => `<span class="clause">${escapeHtml(clause)}</span>`)
+        .map((clause) => `<span class="clause">${wordMarkup(clause)}</span>`)
         .join('');
 }
 
 /** 量字号用的隐藏探针，和标题共用 .copy 的字体样式 */
 export function probeMarkup(text: string, headline: Headline): string {
-    const runs = [...unbreakableRuns(text), ...(headline.keepClauses ? headlineClauses(text) : [])];
+    const runs = [
+        ...unbreakableRuns(text),
+        ...chineseWords(text),
+        ...(headline.keepClauses ? headlineClauses(text) : []),
+    ];
     return runs
         .map((run) => `<span class="copy probe" aria-hidden="true">${escapeHtml(run)}</span>`)
         .join('');

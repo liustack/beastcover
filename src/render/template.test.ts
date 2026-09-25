@@ -147,7 +147,9 @@ describe('built-in render template', () => {
     it('wraps each clause in an unbreakable span only when asked to keep clauses', () => {
         const text = '人接不住认知以外的流量，也赚不到认知以外的钱';
         const free = createRenderTemplate(text, BASE);
-        expect(free).toContain(`<p class="copy">${text}</p>`);
+        expect(free).toContain(
+            '<p class="copy">人接<span class="word">不住</span><span class="word">认知</span><span class="word">以外</span>的<span class="word">流量</span>，也赚<span class="word">不到</span><span class="word">认知</span><span class="word">以外</span>的钱</p>',
+        );
 
         const clauses = createRenderTemplate(text, {
             ...BASE,
@@ -155,7 +157,7 @@ describe('built-in render template', () => {
             measure: true,
         });
         expect(clauses).toContain(
-            '<p class="copy"><span class="clause">人接不住认知以外的流量，</span><span class="clause">也赚不到认知以外的钱</span></p>',
+            '<p class="copy"><span class="clause">人接<span class="word">不住</span><span class="word">认知</span><span class="word">以外</span>的<span class="word">流量</span>，</span><span class="clause">也赚<span class="word">不到</span><span class="word">认知</span><span class="word">以外</span>的钱</span></p>',
         );
         expect(clauses).toContain(
             '<span class="copy probe" aria-hidden="true">也赚不到认知以外的钱</span>',

@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium, type Page } from 'playwright';
 import { describe, expect, it } from 'vitest';
 import { panelVisibility } from '../compose/templates.ts';
 import {
@@ -10,7 +10,7 @@ import {
 } from '../platforms/index.ts';
 import { compareLayout, createCompareTemplate, parseLabels } from './compare.ts';
 import { openRenderer } from './index.ts';
-import { customLayout, familyLayout } from './layout.ts';
+import { customLayout, familyLayout, withSubjectArea } from './layout.ts';
 import { createNumberTemplate, numberLayout, validateNumber } from './number.ts';
 import { createPosterTemplate, validateTag } from './poster.ts';
 import { contrastingText } from './template.ts';
@@ -151,6 +151,91 @@ describe('big text templates in every family', () => {
                         for (const covered of platform.covered) {
                             expect(overlaps(box, covered), `${preset} ${selector} covered`).toBe(
                                 false,
+                            );
+                        }
+                    }
+                }
+                await page.close();
+            }
+        } finally {
+            await browser.close();
+            await renderer.close();
+        }
+    }, 180_000);
+});
+
+/** 标题里每个字所在行的顶边，跳过标签，顺序和标题原文一致。tsconfig 不带 DOM 类型，脚本写成字符串 */
+const CHAR_TOPS_SCRIPT = `(() => {
+    const copy = document.querySelector('.copy:not(.probe)');
+    const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
+    let text = '';
+    const tops = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (node.parentElement.closest('.tag') !== null) continue;
+        const value = node.textContent;
+        for (let index = 0; index < value.length; index += 1) {
+            const range = document.createRange();
+            range.setStart(node, index);
+            range.setEnd(node, index + 1);
+            text += value[index];
+            tops.push(Math.round(range.getBoundingClientRect().top));
+        }
+    }
+    return { text, tops };
+})()`;
+
+function charTops(page: Page): Promise<{ text: string; tops: number[] }> {
+    return page.evaluate(CHAR_TOPS_SCRIPT);
+}
+
+describe('Chinese headline line breaks', () => {
+    it('never splits a Chinese word across two lines', async () => {
+        const renderer = await openRenderer();
+        const browser = await chromium.launch({ headless: true });
+        const cases = [
+            { text: '封面不抓人，标题白写', words: ['封面', '抓人', '标题'] },
+            { text: '月薪三千到三万，我只做对了一件事', words: ['月薪', '三千', '三万', '一件事'] },
+        ];
+        try {
+            // 带人物时标题区只有半幅宽，最容易把词拆开。
+            for (const layout of FAMILY_NAMES.flatMap((name) => [
+                familyLayout(name),
+                withSubjectArea(familyLayout(name)),
+            ])) {
+                const familyName = `${layout.family} ${layout.textArea.width}`;
+                const page = await browser.newPage({
+                    viewport: { width: layout.width, height: layout.height },
+                });
+                for (const { text, words } of cases) {
+                    for (const keepClauses of [false, true]) {
+                        const fontPx = await renderer.fitText({
+                            html: (px) =>
+                                createPosterTemplate(text, {
+                                    layout,
+                                    headline: { fontPx: px, keepClauses },
+                                    tag: 'BeastCover',
+                                    measure: true,
+                                }),
+                            width: layout.width,
+                            height: layout.height,
+                            box: layout.textArea,
+                            minPx: 16,
+                            maxPx: 900,
+                        });
+                        await page.setContent(
+                            createPosterTemplate(text, {
+                                layout,
+                                headline: { fontPx, keepClauses },
+                                tag: 'BeastCover',
+                            }),
+                        );
+                        const lines = await charTops(page);
+                        expect(lines.text).toBe(text);
+                        for (const word of words) {
+                            const start = lines.text.indexOf(word);
+                            const tops = new Set(lines.tops.slice(start, start + word.length));
+                            expect(tops.size, `${familyName} ${keepClauses} ${text} ${word}`).toBe(
+                                1,
                             );
                         }
                     }
