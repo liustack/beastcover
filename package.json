@@ -4,7 +4,7 @@
     "description": "Covers that get the click, for WeChat, X, YouTube, Xiaohongshu, Douyin and more: your agent picks a free photo, adds your headline and palette, and renders it locally",
     "type": "module",
     "bin": {
-        "beastcover": "./dist/main.js"
+        "beastcover": "dist/main.js"
     },
     "scripts": {
         "dev": "vite build --watch",
