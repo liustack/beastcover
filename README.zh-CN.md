@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.zh-CN.jpg" alt="同一句标题配一头咆哮的狮子，裁成 YouTube、小红书、抖音、X 头图和公众号五种封面" width="100%"></p>
+<p align="center"><img src="assets/banner.zh-CN.jpg" alt="同一句标题配一头咆哮的狮子，裁成 YouTube、小红书、抖音、X 文章和公众号五种封面" width="100%"></p>
 
 <h1 align="center">BeastCover</h1>
 
