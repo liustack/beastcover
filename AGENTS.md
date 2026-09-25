@@ -38,6 +38,9 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - Stock providers never fall back to each other. A missing Pexels key is an error, not a switch to Openverse. Openverse results are filtered to cc0 and pdm at search time and re-checked at download time.
 - Stock downloads go through `src/stock/ssrf.ts`: blocked hostnames, private and reserved IP ranges, DNS resolved up front, and the socket pinned to the address that passed. `fetch` and `sleep` are injected so tests never touch the network.
 - Size presets are named after platforms and hold production pixels. Old ratio names fail with a message naming the replacement. `scale` controls Chromium device scale and therefore output pixel density.
+- Platforms belong to three families (landscape, portrait, ultrawide). Each family has one master size, a text area, and a focus area, all in master coordinates, and each platform has a crop box in that master plus the rectangles its app UI covers. `src/platforms/index.test.ts` proves the text and focus areas sit inside every member crop and outside every covered rectangle. Change the geometry only together with that test.
+- `gen` renders one master per family at 2x or more, then crops and scales every requested platform from it with `sharp`. The renderer finds the largest font that keeps the headline inside the text area, keeps Latin words whole, and keeps punctuated clauses together when that costs under 30% of the size. Headline size is never set by fixed CSS ratios.
+- local-model runs the model once per family, saves the raw image in `.beastcover/cache/`, and crops each platform from it.
 - `local-model` asks the backend for the native generate size, then crops and resizes in-process with `sharp`. It does not shell out to sips or ImageMagick.
 - Each style record is self-contained. Copy its full prompt unchanged and append one subject description.
 - A project workspace lives at `.beastcover/` inside the user project. Discovery walks up from the current directory. Missing workspaces are reported, never created silently.
@@ -54,18 +57,23 @@ src/
 ├── doctor.ts               # Offline Node, Chromium, config permission, and local CLI checks
 ├── doctor.test.ts
 ├── platforms/
-│   ├── index.ts            # Platform presets and retired ratio names
+│   ├── index.ts            # Platform presets, families, crops, safe areas, retired ratio names
+│   └── index.test.ts
+├── compose/
+│   ├── index.ts            # Family masters, crops, custom canvas, thumbnail check
+│   ├── guides.ts           # --guides overlay for text, focus, and covered areas
 │   └── index.test.ts
 ├── local-model/
 │   ├── index.ts            # Prompt envelope, argv, provider selection, spawn
 │   ├── prompt.ts           # Style prompt plus 主体, conditional palette replace
 │   ├── argv.ts             # Codex/Grok/Claude argv and named --ref files
 │   ├── provider.ts         # Backend selection with no silent fallback
-│   ├── canvas.ts           # Native generate size, centred crop box, production size per platform
+│   ├── canvas.ts           # Generate plan per family, centred crop box per platform
 │   ├── finish.ts           # sharp crop then resize
 │   └── run.ts              # rm, spawn, captured stdio, on-disk image verification
 ├── render/
-│   ├── index.ts            # Playwright HTML to PNG engine
+│   ├── index.ts            # Playwright renderer: fit the headline, screenshot a page
+│   ├── layout.ts           # Cover layouts, headline markup, measuring probes
 │   ├── index.test.ts
 │   ├── photo-cover.ts      # Photo cover template and sharp preprocessing
 │   ├── photo-cover.test.ts
@@ -104,9 +112,9 @@ cordis.patch.yml            # DSH bundle mount
 beastcover styles
 beastcover new demo --style risograph_editorial
 beastcover project
-beastcover gen "One headline, every platform" --source render --preset youtube
+beastcover gen "One headline, every platform" --source render --preset all
 beastcover stock search "harbour dawn" --orientation landscape
-beastcover gen "The tide comes back" --source stock --photo openverse:<id> --preset wechat
+beastcover gen "The tide comes back" --source stock --photo openverse:<id> --preset wechat,x --guides
 beastcover gen "A figure on a shore" --source local-model --via codex --preset xiaohongshu
 beastcover config init
 beastcover config set render.preset x

@@ -37,9 +37,9 @@ beastcover styles risograph_editorial
 
 `risograph_editorial` is the fallback style when the choice is uncertain. `luminous_impasto` needs a scene with depth: a landscape or street, not a desk still life.
 
-## Pick the platform
+## Pick the platforms
 
-`--preset` takes the platform name. Ask which platforms the user publishes to when it is not obvious.
+`--preset` takes one platform, a comma list such as `wechat,x,douyin`, or `all`. Ask which platforms the user publishes to when it is not obvious, then make them all in one command. Several presets write `<name>-<platform>.png` next to each other.
 
 | Preset | Pixels | Keep in mind |
 | :-- | :-- | :-- |
@@ -49,6 +49,12 @@ beastcover styles risograph_editorial
 | `bilibili` | 1146×717 | Keep key content in the middle |
 | `xiaohongshu`, `instagram` | 1080×1440 | Leave about 10% free at the top and bottom |
 | `douyin`, `tiktok`, `instagram-reels` | 1080×1920 | Feeds often show only the centre 3:4. The app UI covers about 220px at the top and 380px at the bottom |
+
+Platforms with close ratios share one master and are cropped from it: WeChat from the middle of the X banner, Xiaohongshu and Instagram from the middle of the Douyin frame, YouTube from the Bilibili frame. The CLI keeps the headline inside the area every platform in the group shows and sizes it as large as that area allows. The table above is only for choosing platforms and judging the result.
+
+Add `--guides` to draw the headline area (green), the focus area (orange), and app UI (red) on each cover when the user wants to check a layout. Do not hand guided covers over as finished files.
+
+When the output has a `Thumbnail:` line, the headline will be hard to read in that platform's feed. Offer a shorter headline.
 
 Old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone. The CLI names the replacement if one is used.
 
@@ -73,7 +79,7 @@ beastcover stock search "harbour dawn" --orientation landscape
 The output lists one photo per line: ref, size, license, creator, thumbnail URL. Do not take the first result by default. Pick by the text you can read: the source page title and creator hint at the subject, and the size must not be smaller than the target preset. When the harness can show images, fetch a thumbnail URL and look for one strong subject and a calm area where the headline can sit. Then render:
 
 ```bash
-beastcover gen "<headline>" --source stock --photo openverse:<id> --preset wechat
+beastcover gen "<headline>" --source stock --photo openverse:<id> --preset wechat,x,xiaohongshu
 ```
 
 `--photo` also accepts a local image path. A fetched photo and its provenance sidecar land in `.beastcover/refs/` when a workspace exists, otherwise in a temp directory. The command prints `License`, `Credit`, and `Source` lines. Repeat the `Credit` line to the user when it is present. cc0 and pdm photos print no credit because none is required.
@@ -102,8 +108,10 @@ Copy the selected style prompt in full, then append one subject description (`�
 
 ```bash
 beastcover gen "<subject>" --source local-model --via codex --preset youtube
-beastcover gen "<subject>" --source local-model --via grok --ref /absolute/a.png --preset douyin
+beastcover gen "<subject>" --source local-model --via grok --ref /absolute/a.png --preset xiaohongshu,douyin
 ```
+
+The model runs once per group of platforms, saves its image in `.beastcover/cache/`, and each platform is cropped from that image. `xiaohongshu,douyin` is one model call. `wechat,youtube` is two.
 
 `--via` chooses `codex`, `grok`, or `claude`. It is only valid with `--source local-model`. `--ref` names files only. Do not glob. Do not pass a directory.
 
@@ -112,7 +120,7 @@ After the command finishes, verify the image at the reported path. Tell the user
 ## Make it land
 
 - One subject, one headline. Cut the headline to the fewest words that still make someone curious.
-- Check the cover at thumbnail size, about 160px wide. If the subject or the headline is hard to read there, simplify.
+- Check the cover at thumbnail size. The CLI already warns when the headline gets too small in a feed. If the subject is hard to make out there, pick another photo.
 - Lock one style and one palette for every platform version of the same piece.
 - Treat every style prompt as self-contained source text. Never assemble a prompt from global style, palette, and discipline fragments.
 
@@ -120,7 +128,7 @@ After the command finishes, verify the image at the reported path. Tell the user
 
 ```bash
 beastcover config init
-beastcover config set render.preset wechat
+beastcover config set render.preset wechat,x,xiaohongshu
 beastcover config set render.scale 2
 beastcover config set stock.pexels.apiKey <key>
 beastcover config show

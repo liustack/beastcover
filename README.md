@@ -36,7 +36,7 @@ Issues are welcome any time. [Open one](https://github.com/liustack/beastcover/i
 
 **🆓 Free, and no API key.** Openverse is the default source, and it only returns CC0 and public domain photos, so there is nothing to credit. Add a Pexels key and Pexels goes first.
 
-**📐 One post, every platform.** Presets for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok, all sharing the project's palette and type.
+**📐 One command, every platform.** `--preset all` makes covers for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok at once, with the headline as big as each safe area allows.
 
 **🔒 Your draft stays home.** Rendering happens in a local Chromium. The only network calls are the photo search and the photo download.
 
@@ -52,7 +52,7 @@ npx --yes --package @liustack/beastcover playwright install chromium
 
 beastcover new my-post
 beastcover stock search "harbour night" --orientation landscape
-beastcover gen "You can't catch the traffic you don't understand" --source stock --photo openverse:<id> --preset youtube
+beastcover gen "You can't catch the traffic you don't understand" --source stock --photo openverse:<id> --preset all
 ```
 
 Install Chromium through the Playwright that ships with beastcover. A bare `npx playwright` can pick up an older copy from the npx cache and download a browser that does not match.
@@ -65,19 +65,25 @@ Without a photo, `--source render` makes a text-only cover. With a model CLI, `-
 
 ## Sizes
 
-| Preset | Pixels | Use |
-| :-- | :-- | :-- |
-| `youtube` | 1280×720 | YouTube thumbnail |
-| `bilibili` | 1146×717 | Bilibili video cover |
-| `wechat` | 900×383 | WeChat article cover |
-| `x` | 1920×368 | X article cover |
-| `xiaohongshu` | 1080×1440 | Xiaohongshu note cover |
-| `instagram` | 1080×1440 | Instagram post |
-| `instagram-reels` | 1080×1920 | Instagram Reels cover |
-| `douyin` | 1080×1920 | Douyin video cover |
-| `tiktok` | 1080×1920 | TikTok video cover |
+| Preset | Pixels | Use | Shares a master with |
+| :-- | :-- | :-- | :-- |
+| `youtube` | 1280×720 | YouTube thumbnail | `bilibili` |
+| `bilibili` | 1146×717 | Bilibili video cover | `youtube` |
+| `wechat` | 900×383 | WeChat article cover | `x` |
+| `x` | 1920×368 | X article cover | `wechat` |
+| `xiaohongshu` | 1080×1440 | Xiaohongshu note cover | the other portrait presets |
+| `instagram` | 1080×1440 | Instagram post | the other portrait presets |
+| `instagram-reels` | 1080×1920 | Instagram Reels cover | the other portrait presets |
+| `douyin` | 1080×1920 | Douyin video cover | the other portrait presets |
+| `tiktok` | 1080×1920 | TikTok video cover | the other portrait presets |
 
-X has not published a size for article covers. 1920×368 is what others measured by uploading. The default preset is `youtube`. When a preset does not fit, set the canvas with `--width`, `--height`, and `--scale`. The old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone, and using one tells you which preset replaces it.
+`--preset` takes one name, a comma list such as `wechat,x,douyin`, or `all`. Several presets write `<name>-<platform>.png`. The default is `youtube`.
+
+Platforms with close ratios share one master, and each cover is cropped from it. The WeChat cover is the middle of the X banner, and the Xiaohongshu cover is the middle of the Douyin frame. The headline sits in the area every platform in the group shows and no app UI covers: the Douyin buttons, the YouTube duration badge, the Bilibili stats bar. Add `--guides` to draw that area on each cover and check the layout.
+
+After rendering, BeastCover works out how big the headline will be in each platform's feed thumbnail and warns when it drops below 10px. A shorter headline reads bigger.
+
+For a canvas no platform uses, set `--width` and `--height`. The old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone, and using one tells you which preset replaces it.
 
 ## Configuration
 

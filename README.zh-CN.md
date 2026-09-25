@@ -36,7 +36,7 @@ npx -y skills add liustack/beastcover -g
 
 **🆓 不花钱，不用 key。** 默认走 Openverse，只收 CC0 和公有领域的照片，拿来就能用，也不用署名。配了 Pexels key 就优先用 Pexels。
 
-**📐 一篇内容，各平台都有。** 公众号、X、YouTube、B 站、小红书、Instagram、抖音、TikTok 都有预设，配色和字都跟着同一个项目走。
+**📐 一条命令，全平台出齐。** `--preset all` 一次出公众号、X、YouTube、B 站、小红书、Instagram、抖音、TikTok 的封面，标题在每个平台的安全区里尽量放大。
 
 **🔒 稿子不出电脑。** 渲染在本机 Chromium 里完成，联网的只有搜图和下载照片。
 
@@ -52,7 +52,7 @@ npx --yes --package @liustack/beastcover playwright install chromium
 
 beastcover new my-post
 beastcover stock search "harbour night" --orientation landscape
-beastcover gen "人接不住认知以外的流量，也赚不到认知以外的钱" --source stock --photo openverse:<id> --preset wechat
+beastcover gen "人接不住认知以外的流量，也赚不到认知以外的钱" --source stock --photo openverse:<id> --preset all
 ```
 
 浏览器要用 beastcover 自带的 Playwright 来装，直接 `npx playwright` 可能拿到 npx 缓存里的旧版本，装出来的 Chromium 对不上。
@@ -65,19 +65,25 @@ beastcover gen "人接不住认知以外的流量，也赚不到认知以外的�
 
 ## 尺寸
 
-| 预设 | 像素 | 用在哪 |
-| :-- | :-- | :-- |
-| `youtube` | 1280×720 | YouTube 缩略图 |
-| `bilibili` | 1146×717 | B 站视频封面 |
-| `wechat` | 900×383 | 公众号文章封面 |
-| `x` | 1920×368 | X 文章封面 |
-| `xiaohongshu` | 1080×1440 | 小红书笔记封面 |
-| `instagram` | 1080×1440 | Instagram 帖子 |
-| `instagram-reels` | 1080×1920 | Instagram Reels 封面 |
-| `douyin` | 1080×1920 | 抖音视频封面 |
-| `tiktok` | 1080×1920 | TikTok 视频封面 |
+| 预设 | 像素 | 用在哪 | 和谁共用母版 |
+| :-- | :-- | :-- | :-- |
+| `youtube` | 1280×720 | YouTube 缩略图 | `bilibili` |
+| `bilibili` | 1146×717 | B 站视频封面 | `youtube` |
+| `wechat` | 900×383 | 公众号文章封面 | `x` |
+| `x` | 1920×368 | X 文章封面 | `wechat` |
+| `xiaohongshu` | 1080×1440 | 小红书笔记封面 | 其他竖版预设 |
+| `instagram` | 1080×1440 | Instagram 帖子 | 其他竖版预设 |
+| `instagram-reels` | 1080×1920 | Instagram Reels 封面 | 其他竖版预设 |
+| `douyin` | 1080×1920 | 抖音视频封面 | 其他竖版预设 |
+| `tiktok` | 1080×1920 | TikTok 视频封面 | 其他竖版预设 |
 
-X 官方没公布文章封面尺寸，1920×368 是别人上传实测出来的。默认预设是 `youtube`。尺寸不够用时，`--width`、`--height`、`--scale` 可以直接指定画布。旧的比例名（`16:9`、`5:2`、`3:2`、`3:4`）已经去掉，用到时会提示改用哪个预设。
+`--preset` 可以给一个名字、逗号分隔的列表（比如 `wechat,x,douyin`），或者 `all`。出多张时文件名是 `<名字>-<平台>.png`。默认是 `youtube`。
+
+比例接近的平台共用一张母版，每张封面从母版里裁出来：公众号封面就是 X 横幅的中间一段，小红书封面就是抖音画面的中间一段。标题放在同组平台都看得见、又不被界面挡住的区域里，比如抖音右侧的按钮、YouTube 右下角的时长、B 站底部的播放数据。加 `--guides` 会把这块区域画在每张封面上，方便检查排版。
+
+出完图，BeastCover 会算出标题在各平台信息流缩略图里有多大，小于 10px 时提示你。标题越短，字越大。
+
+要用平台以外的画布，直接给 `--width` 和 `--height`。旧的比例名（`16:9`、`5:2`、`3:2`、`3:4`）已经去掉，用到时会提示改用哪个预设。
 
 ## 配置
 
