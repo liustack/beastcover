@@ -151,6 +151,8 @@ describe('cover renderer', () => {
 
         // 同样的高度，长单词要整词放得进一行，字号只能更小。
         expect(await measure('Understanding it')).toBeLessThan(await measure('Get it'));
+        // 中文紧挨着长单词时也一样。
+        expect(await measure('试试Understanding')).toBeLessThan(await measure('试试Get'));
     }, 30_000);
 
     it('changes the rendered PNG when project palette css changes', async () => {

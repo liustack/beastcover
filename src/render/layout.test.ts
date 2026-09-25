@@ -79,6 +79,12 @@ describe('subject layouts', () => {
 describe('headline runs', () => {
     it('protects Latin words and splits clauses after punctuation', () => {
         expect(unbreakableRuns('人接不住 the beast 流量')).toEqual(['the', 'beast']);
+        // 中文紧挨着英文、全角标点紧挨着英文，英文单词也要整个保护起来。
+        expect(unbreakableRuns('试试Supercalifragilisticexpialidocious')).toEqual([
+            'Supercalifragilisticexpialidocious',
+        ]);
+        expect(unbreakableRuns('用GPT-5写，Claude审')).toEqual(['GPT-5', 'Claude']);
+        expect(unbreakableRuns("don't stop，别停")).toEqual(["don't", 'stop']);
         expect(headlineClauses('人接不住认知以外的流量，也赚不到认知以外的钱')).toEqual([
             '人接不住认知以外的流量，',
             '也赚不到认知以外的钱',

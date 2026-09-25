@@ -104,16 +104,16 @@ export function escapeHtml(value: string): string {
         .replaceAll("'", '&#39;');
 }
 
-const CJK = /[　-鿿豈-﫿＀-￯]/;
+// 连续的西文字母和数字，中间允许撇号和连字符（don't、GPT-5）。
+const LATIN_WORD = /[A-Za-z0-9](?:[A-Za-z0-9'’-]*[A-Za-z0-9])?/g;
+
 /**
- * 不该被拆开的西文单词。量字号时每个单词单独不换行排一次，最宽的那个不能超出标题区域，
- * 否则大字号会把单词从中间劈开。中文按字换行是常规排法，不设探针，字号可以更大。
+ * 不该被拆开的西文单词，直接从全文里找，中文紧挨着英文时也能找到。量字号时每个单词单独
+ * 不换行排一次，最宽的那个不能超出标题区域，否则大字号会把单词从中间劈开。
+ * 中文按字换行是常规排法，不设探针，字号可以更大。
  */
 export function unbreakableRuns(text: string): string[] {
-    return text
-        .trim()
-        .split(/\s+/)
-        .filter((word) => word !== '' && !CJK.test(word));
+    return text.match(LATIN_WORD) ?? [];
 }
 
 export interface Headline {
