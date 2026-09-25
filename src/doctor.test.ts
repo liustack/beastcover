@@ -26,11 +26,20 @@ describe('offline doctor', () => {
             chromiumPath,
             configPath,
             platform: 'darwin',
+            osRelease: '24.3.0',
             lookupCommand: () => undefined,
         });
 
         expect(healthy.healthy).toBe(true);
-        expect(healthy.checks).toHaveLength(6);
+        expect(healthy.checks).toHaveLength(7);
+        // 没有 swiftc 时自动抠图不可用，只是提醒，不影响健康。
+        expect(healthy.checks.find((check) => check.id === 'cutout')).toEqual({
+            id: 'cutout',
+            label: 'Subject cutout',
+            status: 'warn',
+            message:
+                '--subject needs a transparent PNG here: automatic cutout needs the Swift compiler. Run xcode-select --install.',
+        });
         expect(healthy.checks.find((check) => check.id === 'node')).toMatchObject({
             id: 'node',
             status: 'ok',
@@ -67,6 +76,32 @@ describe('offline doctor', () => {
         });
         expect(unsafe.checks.find((check) => check.id === 'codex')).toMatchObject({
             status: 'warn',
+        });
+    });
+
+    it('reports the macOS cutout as ok when swiftc is on PATH and as a warning elsewhere', () => {
+        const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-cutout-'));
+        tempDirectories.push(directory);
+        const configPath = join(directory, 'config.json');
+        writeFileSync(configPath, '{}\n', { mode: 0o600 });
+        const base = { nodeVersion: '22.19.0', chromiumPath: configPath, configPath };
+
+        const mac = runDoctor({
+            ...base,
+            platform: 'darwin',
+            osRelease: '24.3.0',
+            lookupCommand: (name) => (name === 'swiftc' ? '/usr/bin/swiftc' : undefined),
+        });
+        expect(mac.checks.find((check) => check.id === 'cutout')).toMatchObject({
+            status: 'ok',
+            message: '--subject photos are cut out on this machine with macOS Vision.',
+        });
+
+        const linux = runDoctor({ ...base, platform: 'linux', lookupCommand: () => '/usr/bin/x' });
+        expect(linux.checks.find((check) => check.id === 'cutout')).toMatchObject({
+            status: 'warn',
+            message:
+                '--subject needs a transparent PNG here: automatic cutout needs macOS 14 or newer.',
         });
     });
 

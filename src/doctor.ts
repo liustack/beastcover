@@ -1,14 +1,15 @@
 import { accessSync, constants, type Stats, statSync } from 'node:fs';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { chromium } from 'playwright';
 import { CONFIG_PATH, LOCAL_MODEL_PROVIDERS, type LocalModelProvider } from './config.ts';
+import { visionCutoutUnavailable } from './subject/vision.ts';
 
 const MINIMUM_NODE_VERSION = { major: 22, minor: 19, patch: 0 } as const;
 
 export type DoctorStatus = 'ok' | 'warn' | 'error';
 
 export interface DoctorCheck {
-    id: 'node' | 'chromium' | 'config-permissions' | LocalModelProvider;
+    id: 'node' | 'chromium' | 'config-permissions' | 'cutout' | LocalModelProvider;
     label: string;
     status: DoctorStatus;
     message: string;
@@ -24,6 +25,7 @@ export interface DoctorOptions {
     chromiumPath?: string;
     configPath?: string;
     platform?: NodeJS.Platform;
+    osRelease?: string;
     lookupCommand?: (name: string) => string | undefined;
 }
 
@@ -182,6 +184,34 @@ function localModelCliCheck(
     };
 }
 
+function cutoutCheck(
+    platform: NodeJS.Platform,
+    osRelease: string | undefined,
+    configPath: string,
+    lookup: (commandName: string) => string | undefined,
+): DoctorCheck {
+    const unavailable = visionCutoutUnavailable({
+        platform,
+        ...(osRelease === undefined ? {} : { osRelease }),
+        binDir: join(dirname(configPath), 'bin'),
+        lookupCommand: lookup,
+    });
+    if (unavailable !== undefined) {
+        return {
+            id: 'cutout',
+            label: 'Subject cutout',
+            status: 'warn',
+            message: `--subject needs a transparent PNG here: ${unavailable}.`,
+        };
+    }
+    return {
+        id: 'cutout',
+        label: 'Subject cutout',
+        status: 'ok',
+        message: '--subject photos are cut out on this machine with macOS Vision.',
+    };
+}
+
 export function runDoctor(options: DoctorOptions = {}): DoctorReport {
     const platform = options.platform ?? process.platform;
     const lookup = options.lookupCommand ?? lookupCommandOnPath;
@@ -189,6 +219,7 @@ export function runDoctor(options: DoctorOptions = {}): DoctorReport {
         nodeVersionCheck(options.nodeVersion ?? process.versions.node),
         chromiumCheck(options.chromiumPath ?? chromium.executablePath(), platform),
         configPermissionsCheck(options.configPath ?? CONFIG_PATH, platform),
+        cutoutCheck(platform, options.osRelease, options.configPath ?? CONFIG_PATH, lookup),
         ...LOCAL_MODEL_PROVIDERS.map((name) => localModelCliCheck(name, lookup)),
     ];
 
