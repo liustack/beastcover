@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.jpg" alt="Three covers for one post: a landscape video thumbnail, a wide article banner, and a portrait note cover, all on the same CC0 night skyline" width="100%"></p>
+<p align="center"><img src="assets/banner.jpg" alt="One poster cover with a roaring lion, cut for YouTube, Xiaohongshu, TikTok, the X header, and WeChat from the same headline" width="100%"></p>
 
 <h1 align="center">BeastCover</h1>
 
