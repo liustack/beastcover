@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setConfigValue } from './config.ts';
 import type { LocalModelRunInput } from './local-model/index.ts';
 import { createProgram, runCli } from './main.ts';
+import type { CoverRenderer, RenderPage } from './render/index.ts';
 import { loadStyle } from './styles/loader.ts';
 
 const tempDirectories: string[] = [];
@@ -40,18 +41,26 @@ function captureOutput(): { chunks: string[]; write: (chunk: string) => void } {
     };
 }
 
+/** 假渲染器：量字号固定返回 64px，截图按请求尺寸返回纯色 PNG。screenshot 的调用记录就是渲染过的页面 */
 function mockRender() {
-    return vi.fn(async (options) => ({
-        pngPath: options.outputPath,
-        meta: {
-            width: options.width,
-            height: options.height,
-            scale: options.scale,
-            pixelWidth: options.width * options.scale,
-            pixelHeight: options.height * options.scale,
-            generatedAt: '2026-08-23T00:00:00.000Z',
-        },
-    }));
+    const screenshot = vi.fn(async (page: RenderPage) =>
+        sharp({
+            create: {
+                width: Math.round(page.width * page.scale),
+                height: Math.round(page.height * page.scale),
+                channels: 3,
+                background: { r: 20, g: 20, b: 20 },
+            },
+        })
+            .png()
+            .toBuffer(),
+    );
+    const renderer: CoverRenderer = {
+        fitText: vi.fn(async () => 64),
+        screenshot,
+        close: vi.fn(async () => undefined),
+    };
+    return Object.assign(screenshot, { open: vi.fn(async () => renderer) });
 }
 
 async function testPngBytes(width: number, height: number): Promise<Buffer> {
@@ -213,19 +222,17 @@ describe('BeastCover CLI', () => {
                 '--width',
                 '800',
             ],
-            { cwd: directory, configPath, renderHtml, stdout, stderr },
+            { cwd: directory, configPath, openRenderer: renderHtml.open, stdout, stderr },
         );
 
         expect(exitCode).toBe(0);
         expect(stderr.chunks).toEqual([]);
         expect(renderHtml).toHaveBeenCalledOnce();
-        expect(renderHtml.mock.calls[0]?.[0]).toMatchObject({
-            outputPath,
-            width: 800,
-            height: 368,
-            scale: 2,
-        });
+        expect(renderHtml.mock.calls[0]?.[0]).toMatchObject({ width: 800, height: 368, scale: 2 });
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('One headline for every platform');
+        const meta = await sharp(outputPath).metadata();
+        expect([meta.width, meta.height]).toEqual([1600, 736]);
+        expect(stdout.chunks.join('')).toContain(`Created ${outputPath}\nCanvas: 800x368 at 2x`);
         expect(stdout.chunks.join('')).toContain('Privacy: render stayed on this machine.');
         expect(readdirSync(directory)).not.toContain('.beastcover');
     });
@@ -246,7 +253,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                renderHtml,
+                openRenderer: renderHtml.open,
                 stdout: genOut,
                 now: () => now,
             },
@@ -259,7 +266,13 @@ describe('BeastCover CLI', () => {
             'out',
             'beastcover-2026-08-23T00-00-00.000Z.png',
         );
-        expect(renderHtml.mock.calls[0]?.[0].outputPath).toBe(outputPath);
+        expect(existsSync(outputPath)).toBe(true);
+        expect(genOut.chunks.join('')).toContain(`Created ${outputPath}\nCanvas: 1280x720 at 1x`);
+        expect(renderHtml.mock.calls[0]?.[0]).toMatchObject({
+            width: 1920,
+            height: 1200,
+            scale: 2,
+        });
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('Workspace card');
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('暖白');
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('--cover-paper: #f4efe6');
@@ -274,6 +287,7 @@ describe('BeastCover CLI', () => {
             style: 'conceptual_colorfield',
             palette: catalogPalette('conceptual_colorfield'),
             text: 'Workspace card',
+            preset: 'youtube',
             output: join('out', 'beastcover-2026-08-23T00-00-00.000Z.png'),
         });
     });
@@ -282,13 +296,13 @@ describe('BeastCover CLI', () => {
         const directory = tempDir('beastcover-source-');
         const configPath = join(directory, 'config.json');
         setConfigValue('source', 'stock', configPath);
-        const renderHtml = vi.fn();
+        const renderHtml = mockRender();
         const stderr = captureOutput();
 
         const exitCode = await runCli(['node', 'beastcover', 'gen', 'A subject'], {
             cwd: directory,
             configPath,
-            renderHtml,
+            openRenderer: renderHtml.open,
             stdout: captureOutput(),
             stderr,
         });
@@ -301,7 +315,13 @@ describe('BeastCover CLI', () => {
         const renderErr = captureOutput();
         const renderExit = await runCli(
             ['node', 'beastcover', 'gen', 'A', '--source', 'render', '--photo', 'x.jpg'],
-            { cwd: directory, configPath, renderHtml, stdout: captureOutput(), stderr: renderErr },
+            {
+                cwd: directory,
+                configPath,
+                openRenderer: renderHtml.open,
+                stdout: captureOutput(),
+                stderr: renderErr,
+            },
         );
         expect(renderExit).toBe(1);
         expect(renderErr.chunks.join('')).toBe(
@@ -326,7 +346,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                renderHtml,
+                openRenderer: renderHtml.open,
                 stdout,
                 now: () => now,
             },
@@ -396,7 +416,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                renderHtml,
+                openRenderer: renderHtml.open,
                 stdout,
                 now: () => now,
                 stock,
@@ -525,7 +545,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd: directory,
                 configPath: join(directory, 'unused-config.json'),
-                renderHtml,
+                openRenderer: renderHtml.open,
                 runLocalModel,
                 lookupCommand,
                 stdout: flagged,
@@ -545,7 +565,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd: directory,
                 configPath: join(directory, 'unused-config.json'),
-                renderHtml,
+                openRenderer: renderHtml.open,
                 runLocalModel,
                 lookupCommand,
                 stdout: implicit,
@@ -610,7 +630,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                renderHtml,
+                openRenderer: renderHtml.open,
                 runLocalModel,
                 lookupCommand: (name) => (name === 'codex' ? '/fake/codex' : undefined),
                 stdout,
@@ -667,6 +687,7 @@ describe('BeastCover CLI', () => {
             text: 'A figure on a shore',
             source: 'local-model',
             via: 'codex',
+            preset: 'wechat',
             output: join('out', 'beastcover-2026-08-23T00-00-00.000Z.png'),
         });
         expect(historyText).not.toContain(cwd);
@@ -747,6 +768,126 @@ describe('BeastCover CLI', () => {
         expect(runLocalModel.mock.calls[0]?.[0]).toMatchObject({ verbose: true });
     });
 
+    it('writes one cover per platform from one master per family', async () => {
+        const cwd = tempDir('beastcover-cli-multi-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        const renderHtml = mockRender();
+        const stdout = captureOutput();
+        const now = new Date('2026-09-25T00:00:00.000Z');
+
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Beast',
+                '--source',
+                'render',
+                '--preset',
+                'x,wechat,douyin',
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                stdout,
+                now: () => now,
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(renderHtml.mock.calls.map(([page]) => [page.width, page.height])).toEqual([
+            [1920, 368],
+            [1080, 1920],
+        ]);
+        const stem = join(cwd, '.beastcover', 'out', 'beastcover-2026-09-25T00-00-00.000Z');
+        const printed = stdout.chunks.join('');
+        for (const [platform, size] of [
+            ['wechat', [900, 383]],
+            ['x', [1920, 368]],
+            ['douyin', [1080, 1920]],
+        ] as const) {
+            const path = `${stem}-${platform}.png`;
+            const meta = await sharp(path).metadata();
+            expect([meta.width, meta.height], platform).toEqual([...size]);
+            expect(printed).toContain(`Created ${path}\nCanvas: ${size[0]}x${size[1]} at 1x`);
+        }
+        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
+            .trimEnd()
+            .split('\n')
+            .map((line) => JSON.parse(line) as { preset: string; output: string });
+        expect(history.map((record) => [record.preset, record.output])).toEqual([
+            ['wechat', join('out', 'beastcover-2026-09-25T00-00-00.000Z-wechat.png')],
+            ['x', join('out', 'beastcover-2026-09-25T00-00-00.000Z-x.png')],
+            ['douyin', join('out', 'beastcover-2026-09-25T00-00-00.000Z-douyin.png')],
+        ]);
+        expect(renderHtml.open).toHaveBeenCalledOnce();
+    });
+
+    it('prints a thumbnail warning when the headline shrinks too far in a feed', async () => {
+        const directory = tempDir('beastcover-cli-thumb-');
+        const renderHtml = mockRender();
+        const renderer = await renderHtml.open();
+        vi.mocked(renderer.fitText).mockResolvedValue(40);
+        const stdout = captureOutput();
+
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'A long headline',
+                '--source',
+                'render',
+                '--preset',
+                'instagram',
+                '--output',
+                join(directory, 'ig.png'),
+            ],
+            {
+                cwd: directory,
+                configPath: join(directory, 'config.json'),
+                openRenderer: renderHtml.open,
+                stdout,
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(stdout.chunks.join('')).toContain(
+            'Thumbnail: the headline is 4.6px at instagram feed size (125px wide). A shorter headline reads bigger.',
+        );
+    });
+
+    it('refuses a custom size with several presets or with guides', async () => {
+        const directory = tempDir('beastcover-cli-custom-');
+        for (const [args, message] of [
+            [
+                ['--preset', 'x,wechat', '--width', '800'],
+                'Error: A custom --width or --height makes one cover. Pick a single --preset or drop the size override.\n',
+            ],
+            [
+                ['--width', '800', '--guides'],
+                'Error: --guides draws platform safe areas. Drop --width and --height to use it.\n',
+            ],
+        ] as const) {
+            const renderHtml = mockRender();
+            const stderr = captureOutput();
+            const exitCode = await runCli(
+                ['node', 'beastcover', 'gen', 'A', '--source', 'render', ...args],
+                {
+                    cwd: directory,
+                    configPath: join(directory, 'config.json'),
+                    openRenderer: renderHtml.open,
+                    stdout: captureOutput(),
+                    stderr,
+                },
+            );
+            expect(exitCode).toBe(1);
+            expect(stderr.chunks.join('')).toBe(message);
+            expect(renderHtml).not.toHaveBeenCalled();
+        }
+    });
+
     it('names the platform preset when an old ratio preset is passed', async () => {
         const renderHtml = mockRender();
         const stderr = captureOutput();
@@ -755,7 +896,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd: tempDir('beastcover-old-preset-'),
                 configPath: join(tempDir('beastcover-old-preset-config-'), 'config.json'),
-                renderHtml,
+                openRenderer: renderHtml.open,
                 stdout: captureOutput(),
                 stderr,
             },
@@ -859,7 +1000,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath,
-                renderHtml,
+                openRenderer: renderHtml.open,
                 runLocalModel,
                 lookupCommand: (name) => (name === 'grok' ? '/fake/grok' : undefined),
                 stdout,

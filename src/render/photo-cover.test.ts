@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
-import { listPlatforms } from '../platforms/index.ts';
+import { FAMILY_NAMES } from '../platforms/index.ts';
+import { customLayout, familyLayout } from './layout.ts';
 import { createPhotoCoverTemplate, preparePhotoLayer } from './photo-cover.ts';
 
 const tempDirectories: string[] = [];
+const BASE = { layout: customLayout(640, 360), headline: { fontPx: 48, keepClauses: false } };
 
 afterEach(() => {
     for (const directory of tempDirectories.splice(0)) {
@@ -44,6 +46,7 @@ describe('photo cover', () => {
 
     it('escapes text, inlines the photo, and applies palette colors', () => {
         const html = createPhotoCoverTemplate('<Dawn> & "sea"', {
+            ...BASE,
             photo: { dataUri: 'data:image/jpeg;base64,AAAA', sourceWidth: 1, sourceHeight: 1 },
             palette: {
                 paper: { prompt: '暖白', css: '#f4efe6' },
@@ -55,12 +58,13 @@ describe('photo cover', () => {
         expect(html).toContain('src="data:image/jpeg;base64,AAAA"');
         expect(html).toContain('--cover-paper: #f4efe6');
         expect(html).toContain('--cover-accent: #c9895a');
-        expect(html).toContain('data-density="short"');
+        expect(html).toContain('font-size: 48px;');
         expect(html).not.toContain('<script');
     });
 
     it('puts only the headline on the cover, with no tool name or explanatory labels', () => {
         const html = createPhotoCoverTemplate('Dawn', {
+            ...BASE,
             photo: { dataUri: 'data:image/jpeg;base64,AAAA', sourceWidth: 1, sourceHeight: 1 },
         });
         const body = html.slice(html.indexOf('<body>'));
@@ -71,7 +75,7 @@ describe('photo cover', () => {
         }
     });
 
-    it('breaks Chinese headlines at punctuation instead of inside a word', async () => {
+    it('breaks kept clauses at punctuation and wraps long unpunctuated Chinese inside the area', async () => {
         const dataUri = `data:image/jpeg;base64,${(
             await sharp({
                 create: { width: 16, height: 9, channels: 3, background: { r: 30, g: 30, b: 30 } },
@@ -84,22 +88,25 @@ describe('photo cover', () => {
 
         // 这段在浏览器里跑，按每个字的纵坐标把正文切成行。写成字符串，免得把 DOM 类型拉进 Node 工程。
         const LINES_SCRIPT = `(() => {
-            const node = document.querySelector('.copy')?.firstChild;
-            if (!node || node.nodeType !== Node.TEXT_NODE) {
-                throw new Error('copy text node missing');
+            const copy = document.querySelector('.copy');
+            if (!copy) {
+                throw new Error('copy missing');
             }
-            const text = node.textContent ?? '';
+            const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
             const rows = [];
             const range = document.createRange();
-            for (let i = 0; i < text.length; i += 1) {
-                range.setStart(node, i);
-                range.setEnd(node, i + 1);
-                const top = Math.round(range.getBoundingClientRect().top);
-                const last = rows.at(-1);
-                if (last && Math.abs(last.top - top) < 4) {
-                    last.text += text[i];
-                } else {
-                    rows.push({ top, text: text[i] });
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+                const text = node.textContent ?? '';
+                for (let i = 0; i < text.length; i += 1) {
+                    range.setStart(node, i);
+                    range.setEnd(node, i + 1);
+                    const top = Math.round(range.getBoundingClientRect().top);
+                    const last = rows.at(-1);
+                    if (last && Math.abs(last.top - top) < 4) {
+                        last.text += text[i];
+                    } else {
+                        rows.push({ top, text: text[i] });
+                    }
                 }
             }
             return rows.map((row) => row.text.trim()).filter((row) => row !== '');
@@ -110,18 +117,22 @@ describe('photo cover', () => {
         }
 
         try {
-            for (const viewport of listPlatforms().map(({ width, height }) => ({
-                width,
-                height,
-            }))) {
-                const page = await browser.newPage({ viewport });
+            for (const familyName of FAMILY_NAMES) {
+                const layout = familyLayout(familyName);
+                const page = await browser.newPage({
+                    viewport: { width: layout.width, height: layout.height },
+                });
+                // 字号取到刚好让每个短句放进一行，句与句之间换行。
+                const fontPx = Math.floor(layout.textArea.width / 13);
                 await page.setContent(
                     createPhotoCoverTemplate('人接不住认知以外的流量，也赚不到认知以外的钱', {
+                        layout,
+                        headline: { fontPx, keepClauses: true },
                         photo,
                     }),
                     { waitUntil: 'load' },
                 );
-                expect(await lines(page)).toEqual([
+                expect(await lines(page), familyName).toEqual([
                     '人接不住认知以外的流量，',
                     '也赚不到认知以外的钱',
                 ]);
@@ -129,15 +140,15 @@ describe('photo cover', () => {
                 await page.setContent(
                     createPhotoCoverTemplate(
                         '没有标点的很长中文标题也要能在画布里自己换行'.repeat(2),
-                        {
-                            photo,
-                        },
+                        { layout, headline: { fontPx, keepClauses: false }, photo },
                     ),
                     { waitUntil: 'load' },
                 );
                 const copy = await page.locator('.copy').boundingBox();
                 expect(copy).not.toBeNull();
-                expect((copy?.x ?? 0) + (copy?.width ?? 0)).toBeLessThanOrEqual(viewport.width);
+                expect((copy?.x ?? 0) + (copy?.width ?? 0)).toBeLessThanOrEqual(
+                    layout.textArea.x + layout.textArea.width,
+                );
                 expect((await lines(page)).length).toBeGreaterThan(1);
                 await page.close();
             }

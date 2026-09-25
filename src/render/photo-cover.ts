@@ -3,18 +3,10 @@
 // 封面是用户要发出去的成品，画面上只有照片、配色和标题，不印工具名和说明字样。
 import sharp from 'sharp';
 import type { PaletteSlotValue } from '../styles/schema.ts';
-import { resolveRenderColors } from './template.ts';
+import { type CoverLayout, type Headline, headlineMarkup, probeMarkup } from './layout.ts';
+import { headlineCss, resolveRenderColors } from './template.ts';
 
 const PHOTO_JPEG_QUALITY = 82;
-
-function escapeHtml(value: string): string {
-    return value
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-}
 
 export interface PhotoLayer {
     dataUri: string;
@@ -44,22 +36,28 @@ export async function preparePhotoLayer(
     };
 }
 
-export interface PhotoCoverOptions {
+interface PhotoCoverBase {
+    layout: CoverLayout;
+    /** 标题字号和断行方式，由渲染器在标题区域里量出来 */
+    headline: Headline;
     palette?: Record<string, PaletteSlotValue>;
-    photo: PhotoLayer;
 }
 
+/** 量字号时不需要照片，只排标题和探针 */
+export type PhotoCoverOptions =
+    | (PhotoCoverBase & { photo: PhotoLayer; measure?: false })
+    | (PhotoCoverBase & { measure: true });
+
 export function createPhotoCoverTemplate(text: string, options: PhotoCoverOptions): string {
-    const safeText = escapeHtml(text);
-    const characterCount = Array.from(text.trim()).length;
-    const density = characterCount <= 40 ? 'short' : characterCount <= 100 ? 'medium' : 'long';
     const colors = resolveRenderColors(options.palette ?? {});
+    const { layout } = options;
+    const photo =
+        options.measure === true ? '' : `<img class="photo" src="${options.photo.dataUri}" alt="">`;
 
     return `<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BeastCover</title>
     <style>
         :root {
@@ -78,19 +76,16 @@ export function createPhotoCoverTemplate(text: string, options: PhotoCoverOption
 
         html,
         body {
-            width: 100%;
-            height: 100%;
+            width: ${layout.width}px;
+            height: ${layout.height}px;
             margin: 0;
             overflow: hidden;
         }
 
         #canvas {
             position: relative;
-            display: flex;
-            align-items: flex-end;
-            width: 100vw;
-            height: 100vh;
-            padding: 6vh 5.6vw 7.2vh;
+            width: ${layout.width}px;
+            height: ${layout.height}px;
             isolation: isolate;
         }
 
@@ -124,54 +119,26 @@ export function createPhotoCoverTemplate(text: string, options: PhotoCoverOption
                 color-mix(in srgb, var(--cover-ink) 86%, transparent) 100%
             );
         }
+${headlineCss(layout, options.headline, text)}
 
-        #canvas::before {
-            position: absolute;
-            inset: 0 auto 0 0;
-            width: 1.25vw;
-            min-width: 10px;
-            content: "";
-            background: var(--cover-accent);
+        .text-box {
+            align-items: flex-end;
         }
 
         .copy {
-            margin: 0;
-            font-weight: 600;
-            letter-spacing: -0.05em;
-            line-height: 0.98;
-            text-wrap: balance;
-            white-space: pre-wrap;
-            /* 中文只在标点和空格处换行，整句没有标点时才退回逐字断开。 */
-            word-break: keep-all;
-            overflow-wrap: anywhere;
             text-shadow: 0 2px 12px color-mix(in srgb, var(--cover-ink) 55%, transparent);
-        }
-
-        .copy[data-density="short"] {
-            max-width: 12em;
-            font-size: clamp(44px, min(6.8vw, 15vh), 120px);
-        }
-
-        .copy[data-density="medium"] {
-            max-width: 18em;
-            font-size: clamp(32px, min(4vw, 10vh), 72px);
-            line-height: 1;
-        }
-
-        .copy[data-density="long"] {
-            max-width: 28em;
-            font-size: clamp(22px, min(2.4vw, 6vh), 44px);
-            line-height: 1.08;
-            text-wrap: pretty;
         }
     </style>
 </head>
 <body>
     <main id="canvas">
-        <img class="photo" src="${options.photo.dataUri}" alt="">
+        ${photo}
         <div class="wash" aria-hidden="true"></div>
         <div class="scrim" aria-hidden="true"></div>
-        <p class="copy" data-density="${density}">${safeText}</p>
+        <div class="accent-bar" aria-hidden="true"></div>
+        <section class="text-box" aria-label="Headline">
+            <p class="copy">${headlineMarkup(text, options.headline)}</p>${options.measure === true ? probeMarkup(text, options.headline) : ''}
+        </section>
     </main>
 </body>
 </html>`;

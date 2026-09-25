@@ -1,10 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import sharp from 'sharp';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createWorkspace, loadStylePack, mergedPalette } from '../workspace/index.ts';
-import { renderHtml } from './index.ts';
+import { type CoverRenderer, openRenderer, TextDoesNotFitError } from './index.ts';
+import { customLayout, type Headline } from './layout.ts';
 import { createRenderTemplate } from './template.ts';
 
 const tempDirectories: string[] = [];
@@ -36,35 +38,35 @@ afterEach(() => {
     }
 });
 
-describe('HTML renderer', () => {
-    it('writes a PNG whose pixel dimensions include the requested scale', async () => {
-        const directory = mkdtempSync(join(tmpdir(), 'beastcover-render-'));
-        tempDirectories.push(directory);
-        const outputPath = join(directory, 'nested', 'card.png');
+let renderer: CoverRenderer;
 
-        const result = await renderHtml({
-            html: createRenderTemplate('A headline that gets the click'),
-            outputPath,
+beforeAll(async () => {
+    renderer = await openRenderer();
+});
+
+afterAll(async () => {
+    await renderer.close();
+});
+
+function headline(fontPx: number): Headline {
+    return { fontPx, keepClauses: false };
+}
+
+describe('cover renderer', () => {
+    it('returns a PNG whose pixel size includes the requested scale', async () => {
+        const png = await renderer.screenshot({
+            html: createRenderTemplate('A headline that gets the click', {
+                layout: customLayout(320, 180),
+                headline: headline(24),
+            }),
             width: 320,
             height: 180,
             scale: 2,
         });
 
-        expect(existsSync(outputPath)).toBe(true);
-        const png = readFileSync(outputPath);
         expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
-        expect(png.readUInt32BE(16)).toBe(640);
-        expect(png.readUInt32BE(20)).toBe(360);
-        expect(result).toMatchObject({
-            pngPath: outputPath,
-            meta: {
-                width: 320,
-                height: 180,
-                scale: 2,
-                pixelWidth: 640,
-                pixelHeight: 360,
-            },
-        });
+        const meta = await sharp(png).metadata();
+        expect([meta.width, meta.height]).toEqual([640, 360]);
     }, 30_000);
 
     it('blocks HTTP requests so render content stays local', async () => {
@@ -74,16 +76,22 @@ describe('HTML renderer', () => {
             response.writeHead(204).end();
         });
         const port = await listen(server);
-        const directory = mkdtempSync(join(tmpdir(), 'beastcover-local-render-'));
-        tempDirectories.push(directory);
 
         try {
-            await renderHtml({
+            await renderer.screenshot({
                 html: `<html><body><img src="http://127.0.0.1:${port}/remote.png"></body></html>`,
-                outputPath: join(directory, 'local.png'),
                 width: 160,
                 height: 90,
                 scale: 1,
+            });
+            await renderer.fitText({
+                html: (fontPx) =>
+                    `<html><body><img src="http://127.0.0.1:${port}/fit.png"><p class="copy" style="margin:0;font-size:${fontPx}px">A</p></body></html>`,
+                width: 160,
+                height: 90,
+                box: { x: 0, y: 0, width: 160, height: 90 },
+                minPx: 8,
+                maxPx: 12,
             });
         } finally {
             await close(server);
@@ -92,42 +100,85 @@ describe('HTML renderer', () => {
         expect(requests).toBe(0);
     }, 30_000);
 
+    it('finds the largest font size whose headline stays inside the box', async () => {
+        const layout = customLayout(800, 400);
+        const fontPx = await renderer.fitText({
+            html: (px) =>
+                createRenderTemplate('Every platform', {
+                    layout,
+                    headline: headline(px),
+                    measure: true,
+                }),
+            width: layout.width,
+            height: layout.height,
+            box: layout.textArea,
+            minPx: 16,
+            maxPx: 400,
+        });
+
+        expect(fontPx).toBeGreaterThan(16);
+        expect(fontPx).toBeLessThan(400);
+        const bigger = await renderer
+            .fitText({
+                html: (px) =>
+                    createRenderTemplate('Every platform', {
+                        layout,
+                        headline: headline(px),
+                        measure: true,
+                    }),
+                width: layout.width,
+                height: layout.height,
+                box: layout.textArea,
+                minPx: fontPx + 1,
+                maxPx: 400,
+            })
+            .catch((error: unknown) => error);
+        expect(bigger).toBeInstanceOf(TextDoesNotFitError);
+    }, 30_000);
+
+    it('keeps the longest word unbroken when it measures the font size', async () => {
+        const layout = customLayout(800, 800);
+        const measure = (text: string) =>
+            renderer.fitText({
+                html: (px) =>
+                    createRenderTemplate(text, { layout, headline: headline(px), measure: true }),
+                width: layout.width,
+                height: layout.height,
+                box: layout.textArea,
+                minPx: 16,
+                maxPx: 400,
+            });
+
+        // 同样的高度，长单词要整词放得进一行，字号只能更小。
+        expect(await measure('Understanding it')).toBeLessThan(await measure('Get it'));
+    }, 30_000);
+
     it('changes the rendered PNG when project palette css changes', async () => {
         const cwd = mkdtempSync(join(tmpdir(), 'beastcover-palette-render-'));
         tempDirectories.push(cwd);
         const created = createWorkspace(cwd, { name: 'demo', styleName: 'risograph_editorial' });
-        const text = 'Palette css probe';
-        const canvas = { width: 320, height: 180, scale: 1 as const };
+        const layout = customLayout(320, 180);
+        const shot = () =>
+            renderer.screenshot({
+                html: createRenderTemplate('Palette css probe', {
+                    layout,
+                    headline: headline(24),
+                    palette: mergedPalette(loadStylePack(created.path)),
+                }),
+                width: 320,
+                height: 180,
+                scale: 1,
+            });
 
-        const beforePath = join(created.path, 'out', 'before.png');
-        await renderHtml({
-            html: createRenderTemplate(text, {
-                palette: mergedPalette(loadStylePack(created.path)),
-            }),
-            outputPath: beforePath,
-            ...canvas,
-        });
-
+        const before = await shot();
         const packPath = join(created.path, 'project.json');
         const pack = JSON.parse(readFileSync(packPath, 'utf8')) as {
             palette: { paper: { prompt: string; css: string } };
         };
         pack.palette.paper.css = '#ff0000';
         writeFileSync(packPath, `${JSON.stringify(pack, null, 2)}\n`, 'utf8');
+        const after = await shot();
 
-        const afterPath = join(created.path, 'out', 'after.png');
-        await renderHtml({
-            html: createRenderTemplate(text, {
-                palette: mergedPalette(loadStylePack(created.path)),
-            }),
-            outputPath: afterPath,
-            ...canvas,
-        });
-
-        const before = readFileSync(beforePath);
-        const after = readFileSync(afterPath);
-        expect(before.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
-        expect(after.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
         expect(after.equals(before)).toBe(false);
     }, 30_000);
 });

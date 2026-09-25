@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { getPlatform, type PlatformName } from './platforms/index.ts';
+import { getPlatform, type PlatformName, parsePlatformList } from './platforms/index.ts';
 
 export const CONFIG_PATH = join(homedir(), '.beastcover', 'config.json');
 
@@ -25,7 +25,8 @@ export interface BeastCoverConfigFile {
     source?: ImageSource;
     output?: string;
     render?: {
-        preset?: PlatformName;
+        /** 一个平台名、逗号分隔的平台列表，或 all */
+        preset?: string;
         width?: number;
         height?: number;
         scale?: number;
@@ -39,7 +40,7 @@ export interface BeastCoverConfigFile {
 export interface ConfigFlags {
     source?: ImageSource;
     output?: string;
-    preset?: PlatformName;
+    presets?: PlatformName[];
     width?: number;
     height?: number;
     scale?: number;
@@ -50,9 +51,9 @@ export interface EffectiveConfig {
     source: ImageSource;
     output: string;
     render: {
-        preset: PlatformName;
-        width: number;
-        height: number;
+        presets: PlatformName[];
+        /** 给了 width 或 height 时才有：不按平台出图，直接用这个画布 */
+        canvas?: { width: number; height: number };
         scale: number;
     };
     stock?: BeastCoverConfigFile['stock'];
@@ -174,10 +175,10 @@ function validateConfig(parsed: Record<string, unknown>, configPath: string): Be
         }
         if (parsed.render.preset !== undefined) {
             if (typeof parsed.render.preset !== 'string') {
-                invalidConfig(configPath, 'render.preset', 'a platform preset name');
+                invalidConfig(configPath, 'render.preset', 'a platform preset name or list');
             }
             try {
-                getPlatform(parsed.render.preset);
+                parsePlatformList(parsed.render.preset);
             } catch (error) {
                 throw new Error(
                     `${configPath} has invalid "render.preset". ${(error as Error).message}`,
@@ -293,9 +294,8 @@ export function setConfigValue(
             break;
         }
         case 'render.preset': {
-            getPlatform(value);
             config.render ??= {};
-            config.render.preset = value as PlatformName;
+            config.render.preset = parsePlatformList(value).join(',');
             break;
         }
         case 'render.width':
@@ -345,16 +345,28 @@ export function resolveEffectiveConfig(
     fileConfig: BeastCoverConfigFile,
     flags: ConfigFlags,
 ): EffectiveConfig {
-    const preset = flags.preset ?? fileConfig.render?.preset ?? BUILT_IN_CONFIG.render.preset;
-    const platform = getPlatform(preset);
+    const presets =
+        flags.presets ??
+        parsePlatformList(fileConfig.render?.preset ?? BUILT_IN_CONFIG.render.preset);
+    const width = flags.width ?? fileConfig.render?.width;
+    const height = flags.height ?? fileConfig.render?.height;
+    let canvas: { width: number; height: number } | undefined;
+    if (width !== undefined || height !== undefined) {
+        if (presets.length > 1) {
+            throw new Error(
+                'A custom --width or --height makes one cover. Pick a single --preset or drop the size override.',
+            );
+        }
+        const platform = getPlatform(presets[0] as PlatformName);
+        canvas = { width: width ?? platform.width, height: height ?? platform.height };
+    }
 
     return {
         source: flags.source ?? fileConfig.source ?? BUILT_IN_CONFIG.source,
         output: flags.output ?? fileConfig.output ?? BUILT_IN_CONFIG.output,
         render: {
-            preset,
-            width: flags.width ?? fileConfig.render?.width ?? platform.width,
-            height: flags.height ?? fileConfig.render?.height ?? platform.height,
+            presets,
+            ...(canvas ? { canvas } : {}),
             scale: flags.scale ?? fileConfig.render?.scale ?? BUILT_IN_CONFIG.render.scale,
         },
         ...(fileConfig.stock ? { stock: structuredClone(fileConfig.stock) } : {}),

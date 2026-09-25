@@ -13,6 +13,7 @@ import {
     LOCAL_MODEL_PROVIDERS,
     type LocalModelProvider,
 } from '../config.ts';
+import { PLATFORM_NAMES, type PlatformName } from '../platforms/index.ts';
 import { STOCK_PROVIDERS, type StockProvider } from '../stock/types.ts';
 import { loadFallbackStyle, loadStyle } from '../styles/loader.ts';
 import {
@@ -52,6 +53,8 @@ export interface HistoryRecord {
     output: string;
     source?: ImageSource;
     via?: LocalModelProvider;
+    /** 出图的平台，自定义画布时没有 */
+    preset?: PlatformName;
     catalogPalette?: Record<string, PaletteSlotValue>;
     photo?: HistoryPhoto;
 }
@@ -380,6 +383,17 @@ function parseHistoryRecord(filePath: string, lineNumber: number, raw: string): 
             );
         }
         record.via = parsed.via as LocalModelProvider;
+    }
+    if (parsed.preset !== undefined) {
+        if (
+            typeof parsed.preset !== 'string' ||
+            !PLATFORM_NAMES.includes(parsed.preset as PlatformName)
+        ) {
+            throw new Error(
+                `${filePath}:${lineNumber} has invalid "preset". Expected one of ${PLATFORM_NAMES.join(', ')}.`,
+            );
+        }
+        record.preset = parsed.preset as PlatformName;
     }
     if (parsed.photo !== undefined) {
         record.photo = parseHistoryPhoto(filePath, lineNumber, parsed.photo);

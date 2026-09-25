@@ -1,30 +1,94 @@
 import { describe, expect, it } from 'vitest';
-import { getPlatform, listPlatforms } from './index.ts';
+import {
+    FAMILY_NAMES,
+    getFamily,
+    getPlatform,
+    listPlatforms,
+    PLATFORM_NAMES,
+    parsePlatformList,
+    type Rect,
+} from './index.ts';
+
+function inside(inner: Rect, outer: Rect): boolean {
+    return (
+        inner.x >= outer.x &&
+        inner.y >= outer.y &&
+        inner.x + inner.width <= outer.x + outer.width &&
+        inner.y + inner.height <= outer.y + outer.height
+    );
+}
+
+function overlaps(a: Rect, b: Rect): boolean {
+    return (
+        a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+    );
+}
 
 describe('platform presets', () => {
     it('exposes one preset per platform at its production pixel size', () => {
-        expect(listPlatforms()).toEqual([
-            { name: 'youtube', width: 1280, height: 720, use: 'YouTube thumbnail' },
-            { name: 'bilibili', width: 1146, height: 717, use: 'Bilibili video cover' },
-            { name: 'wechat', width: 900, height: 383, use: 'WeChat article cover' },
-            { name: 'x', width: 1920, height: 368, use: 'X article cover' },
-            { name: 'xiaohongshu', width: 1080, height: 1440, use: 'Xiaohongshu note cover' },
-            { name: 'instagram', width: 1080, height: 1440, use: 'Instagram post' },
-            {
-                name: 'instagram-reels',
-                width: 1080,
-                height: 1920,
-                use: 'Instagram Reels cover',
-            },
-            { name: 'douyin', width: 1080, height: 1920, use: 'Douyin video cover' },
-            { name: 'tiktok', width: 1080, height: 1920, use: 'TikTok video cover' },
+        expect(
+            listPlatforms().map(({ name, width, height, family }) => [name, width, height, family]),
+        ).toEqual([
+            ['youtube', 1280, 720, 'landscape'],
+            ['bilibili', 1146, 717, 'landscape'],
+            ['wechat', 900, 383, 'ultrawide'],
+            ['x', 1920, 368, 'ultrawide'],
+            ['xiaohongshu', 1080, 1440, 'portrait'],
+            ['instagram', 1080, 1440, 'portrait'],
+            ['instagram-reels', 1080, 1920, 'portrait'],
+            ['douyin', 1080, 1920, 'portrait'],
+            ['tiktok', 1080, 1920, 'portrait'],
         ]);
-        expect(getPlatform('wechat')).toEqual({
-            name: 'wechat',
-            width: 900,
-            height: 383,
-            use: 'WeChat article cover',
-        });
+        expect(getPlatform('wechat').use).toBe('WeChat article cover');
+    });
+
+    it('crops every platform from its family master at the platform ratio', () => {
+        for (const platform of listPlatforms()) {
+            const family = getFamily(platform.family);
+            const master = { x: 0, y: 0, width: family.masterWidth, height: family.masterHeight };
+            expect(inside(platform.crop, master), platform.name).toBe(true);
+            const drift =
+                platform.crop.width / platform.crop.height / (platform.width / platform.height) - 1;
+            expect(Math.abs(drift), platform.name).toBeLessThan(0.002);
+            expect(
+                Math.abs(platform.crop.x + platform.crop.width / 2 - family.masterWidth / 2),
+                `${platform.name} is centred horizontally`,
+            ).toBeLessThanOrEqual(1);
+        }
+    });
+
+    it('keeps the family text and focus areas visible and uncovered on every member', () => {
+        for (const familyName of FAMILY_NAMES) {
+            const family = getFamily(familyName);
+            const members = listPlatforms().filter((platform) => platform.family === familyName);
+            expect(members.length, familyName).toBeGreaterThan(1);
+            for (const platform of members) {
+                for (const [label, area] of [
+                    ['text', family.textArea],
+                    ['focus', family.focusArea],
+                ] as const) {
+                    expect(inside(area, platform.crop), `${platform.name} ${label}`).toBe(true);
+                    for (const covered of platform.covered) {
+                        expect(overlaps(area, covered), `${platform.name} ${label}`).toBe(false);
+                    }
+                }
+            }
+        }
+    });
+
+    it('keeps the wechat share square and the title band inside the wechat crop', () => {
+        const ultrawide = getFamily('ultrawide');
+        expect(ultrawide.focusArea).toEqual({ x: 776, y: 0, width: 368, height: 368 });
+        expect(inside(ultrawide.textArea, getPlatform('wechat').crop)).toBe(true);
+    });
+
+    it('returns copies so callers cannot mutate the tables', () => {
+        const platform = getPlatform('youtube');
+        platform.crop.y = 0;
+        const family = getFamily('landscape');
+        family.textArea.x = 0;
+        expect(getPlatform('youtube').crop.y).toBe(60);
+        expect(getFamily('landscape').textArea.x).toBe(192);
     });
 
     it('names the replacement when a retired ratio preset is used', () => {
@@ -49,5 +113,28 @@ describe('platform presets', () => {
         expect(() => getPlatform('toString')).toThrowError(
             `Unknown platform preset "toString". ${message}`,
         );
+    });
+});
+
+describe('platform lists', () => {
+    it('parses comma lists into catalog order without duplicates', () => {
+        expect(parsePlatformList('douyin, wechat,youtube,wechat')).toEqual([
+            'youtube',
+            'wechat',
+            'douyin',
+        ]);
+        expect(parsePlatformList('x')).toEqual(['x']);
+    });
+
+    it('expands all to every platform', () => {
+        expect(parsePlatformList('all')).toEqual([...PLATFORM_NAMES]);
+    });
+
+    it('rejects empty lists, all mixed with names, and unknown names', () => {
+        expect(() => parsePlatformList(' , ')).toThrowError(/Preset list is empty/);
+        expect(() => parsePlatformList('all,x')).toThrowError(
+            'Preset "all" cannot be combined with other presets.',
+        );
+        expect(() => parsePlatformList('x,16:9')).toThrowError('Preset "16:9" is now "youtube".');
     });
 });

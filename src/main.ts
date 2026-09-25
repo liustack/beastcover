@@ -8,8 +8,17 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Command, CommanderError } from 'commander';
 import {
+    type ComposedCover,
+    type CoverTemplate,
+    composeCovers,
+    composeCustomCover,
+    coverOutputPaths,
+    thumbnailWarnings,
+} from './compose/index.ts';
+import {
     CONFIG_PATH,
     type ConfigFlags,
+    type EffectiveConfig,
     IMAGE_SOURCES,
     type ImageSource,
     initConfigFile,
@@ -28,8 +37,13 @@ import {
     resolveNamedRefFiles,
     selectLocalModelProvider,
 } from './local-model/index.ts';
-import { getPlatform, PLATFORM_NAMES, type PlatformName } from './platforms/index.ts';
-import { type RenderHtmlOptions, type RenderHtmlResult, renderHtml } from './render/index.ts';
+import {
+    getPlatform,
+    PLATFORM_NAMES,
+    type PlatformName,
+    parsePlatformList,
+} from './platforms/index.ts';
+import { type CoverRenderer, openRenderer } from './render/index.ts';
 import { createPhotoCoverTemplate, preparePhotoLayer } from './render/photo-cover.ts';
 import { createRenderTemplate } from './render/template.ts';
 import {
@@ -68,7 +82,7 @@ export interface CliRuntime {
     stderr: OutputWriter;
     cwd: string;
     configPath: string;
-    renderHtml: (options: RenderHtmlOptions) => Promise<RenderHtmlResult>;
+    openRenderer: () => Promise<CoverRenderer>;
     doctor: () => DoctorReport;
     now: () => Date;
     setExitCode: (code: number) => void;
@@ -86,7 +100,7 @@ function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
         stderr: overrides.stderr ?? process.stderr,
         cwd: overrides.cwd ?? process.cwd(),
         configPath,
-        renderHtml: overrides.renderHtml ?? renderHtml,
+        openRenderer: overrides.openRenderer ?? openRenderer,
         doctor:
             overrides.doctor ??
             (() =>
@@ -162,11 +176,6 @@ function collectRefs(value: string, previous: string[]): string[] {
     return [...previous, value];
 }
 
-function parsePreset(value: string): PlatformName {
-    getPlatform(value);
-    return value as PlatformName;
-}
-
 function parseIntegerOption(name: string, value: string): number {
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 10_000) {
@@ -195,7 +204,7 @@ function flagsFromOptions(options: {
     return {
         ...(options.source ? { source: parseImageSource(options.source) } : {}),
         ...(options.output ? { output: options.output } : {}),
-        ...(options.preset ? { preset: parsePreset(options.preset) } : {}),
+        ...(options.preset ? { presets: parsePlatformList(options.preset) } : {}),
         ...(options.width ? { width: parseIntegerOption('--width', options.width) } : {}),
         ...(options.height ? { height: parseIntegerOption('--height', options.height) } : {}),
         ...(options.scale ? { scale: parseScaleOption(options.scale) } : {}),
@@ -231,6 +240,72 @@ function formatStyleDetail(style: StyleDefinition): string {
     ].join('\n');
 }
 
+type EffectiveRender = EffectiveConfig['render'];
+
+interface WrittenCover {
+    platform?: PlatformName;
+    outputPath: string;
+    width: number;
+    height: number;
+}
+
+/** 按平台出一组封面，或给了 --width/--height 时出一张自定义画布 */
+async function writeCovers(
+    runtime: CliRuntime,
+    text: string,
+    template: CoverTemplate,
+    render: EffectiveRender,
+    outputPath: string,
+    guides: boolean,
+): Promise<{ covers: WrittenCover[]; warnings: string[] }> {
+    if (render.canvas && guides) {
+        throw new Error('--guides draws platform safe areas. Drop --width and --height to use it.');
+    }
+    const renderer = await runtime.openRenderer();
+    try {
+        if (render.canvas) {
+            const cover = await composeCustomCover({
+                renderer,
+                template,
+                text,
+                ...render.canvas,
+                scale: render.scale,
+                outputPath,
+            });
+            return { covers: [{ outputPath: cover.outputPath, ...render.canvas }], warnings: [] };
+        }
+        const composed: ComposedCover[] = await composeCovers({
+            renderer,
+            template,
+            text,
+            targets: coverOutputPaths(outputPath, render.presets),
+            scale: render.scale,
+            guides,
+        });
+        return {
+            covers: composed.map((cover) => {
+                const platform = getPlatform(cover.platform);
+                return {
+                    platform: cover.platform,
+                    outputPath: cover.outputPath,
+                    width: platform.width,
+                    height: platform.height,
+                };
+            }),
+            warnings: thumbnailWarnings(composed),
+        };
+    } finally {
+        await renderer.close();
+    }
+}
+
+function coverLines(covers: readonly WrittenCover[], scale: number): string[] {
+    return covers.flatMap((cover) => [
+        `Created ${cover.outputPath}`,
+        `Canvas: ${cover.width}x${cover.height} at ${scale}x`,
+    ]);
+}
+
 export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
     const runtime = createRuntime(overrides);
     const program = new Command();
@@ -248,18 +323,25 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
 
     program
         .command('gen')
-        .description('Generate a cover from a headline')
+        .description('Generate covers from a headline')
         .argument(
             '[text]',
             'Headline for the cover, or the subject for local-model',
             DEFAULT_RENDER_TEXT,
         )
         .option('--source <source>', 'Image source: render, stock, or local-model')
-        .option('-o, --output <path>', 'Output PNG path')
-        .option('--preset <platform>', `Platform preset: ${PLATFORM_NAMES.join(', ')}`)
-        .option('--width <pixels>', 'Override canvas width')
-        .option('--height <pixels>', 'Override canvas height')
+        .option(
+            '-o, --output <path>',
+            'Output PNG path. With several presets, each file gets the platform name',
+        )
+        .option(
+            '--preset <platforms>',
+            `Platform, comma list, or all: ${PLATFORM_NAMES.join(', ')}`,
+        )
+        .option('--width <pixels>', 'Custom canvas width instead of a platform preset')
+        .option('--height <pixels>', 'Custom canvas height instead of a platform preset')
         .option('--scale <factor>', 'Device scale factor from 1 to 4')
+        .option('--guides', 'Draw the safe areas on each cover for checking the layout')
         .option('--via <provider>', 'Local model CLI: codex, grok, or claude')
         .option('--ref <path>', 'Named reference image (repeatable)', collectRefs, [])
         .option(
@@ -277,6 +359,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     width?: string;
                     height?: string;
                     scale?: string;
+                    guides?: boolean;
                     via?: string;
                     ref?: string[];
                     photo?: string;
@@ -286,6 +369,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const flags = flagsFromOptions(options);
                 const fileConfig = loadConfigFile(runtime.configPath);
                 const effective = resolveEffectiveConfig(fileConfig, flags);
+                const guides = Boolean(options.guides);
 
                 if (flags.via !== undefined && effective.source !== 'local-model') {
                     throw new Error('--via is only valid with --source local-model.');
@@ -352,45 +436,58 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         : workspaceDir
                           ? defaultWorkspaceOutputPath(workspaceDir, now)
                           : effective.output;
-                    let photo: Awaited<ReturnType<typeof preparePhotoLayer>>;
+                    const paletteOption = palette ? { palette } : {};
+                    const template: CoverTemplate = {
+                        measureHtml: (layout, headline) =>
+                            createPhotoCoverTemplate(text, {
+                                layout,
+                                headline,
+                                measure: true,
+                                ...paletteOption,
+                            }),
+                        renderHtml: async (layout, headline, pixelWidth, pixelHeight) =>
+                            createPhotoCoverTemplate(text, {
+                                layout,
+                                headline,
+                                photo: await preparePhotoLayer(photoPath, pixelWidth, pixelHeight),
+                                ...paletteOption,
+                            }),
+                    };
+                    let written: Awaited<ReturnType<typeof writeCovers>>;
                     try {
-                        photo = await preparePhotoLayer(
-                            photoPath,
-                            Math.round(effective.render.width * effective.render.scale),
-                            Math.round(effective.render.height * effective.render.scale),
+                        written = await writeCovers(
+                            runtime,
+                            text,
+                            template,
+                            effective.render,
+                            outputPath,
+                            guides,
                         );
                     } finally {
                         if (tempDir !== undefined) {
                             rmSync(tempDir, { recursive: true, force: true });
                         }
                     }
-                    const result = await runtime.renderHtml({
-                        html: createPhotoCoverTemplate(text, {
-                            photo,
-                            ...(palette ? { palette } : {}),
-                        }),
-                        outputPath,
-                        width: effective.render.width,
-                        height: effective.render.height,
-                        scale: effective.render.scale,
-                    });
 
                     if (workspaceDir && pack) {
-                        appendHistory(workspaceDir, {
-                            createdAt: now.toISOString(),
-                            style: pack.style,
-                            palette: palette ?? {},
-                            text,
-                            source: 'stock',
-                            output: result.pngPath,
-                            photo: { path: photoPath, ...photoMeta },
-                        });
+                        for (const cover of written.covers) {
+                            appendHistory(workspaceDir, {
+                                createdAt: now.toISOString(),
+                                style: pack.style,
+                                palette: palette ?? {},
+                                text,
+                                source: 'stock',
+                                ...(cover.platform ? { preset: cover.platform } : {}),
+                                output: cover.outputPath,
+                                photo: { path: photoPath, ...photoMeta },
+                            });
+                        }
                     }
 
                     runtime.stdout.write(
                         [
-                            `Created ${result.pngPath}`,
-                            `Canvas: ${result.meta.width}x${result.meta.height} at ${result.meta.scale}x`,
+                            ...coverLines(written.covers, effective.render.scale),
+                            ...written.warnings,
                             `Photo: ${photoMeta.ref ?? photoPath}`,
                             ...creditLines(photoMeta),
                             photoMeta.provider
@@ -409,16 +506,21 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             'No BeastCover workspace found. Run beastcover new <name> first.',
                         );
                     }
-
-                    const plan = getLocalModelCanvasPlan(effective.render.preset);
-                    if (
-                        effective.render.width !== plan.outputWidth ||
-                        effective.render.height !== plan.outputHeight
-                    ) {
+                    if (effective.render.canvas) {
                         throw new Error(
                             'local-model uses preset sizes. Omit --width and --height.',
                         );
                     }
+                    if (guides) {
+                        throw new Error('--guides works with --source render or stock.');
+                    }
+                    if (effective.render.presets.length !== 1) {
+                        throw new Error(
+                            'local-model makes one platform at a time. Pick one --preset.',
+                        );
+                    }
+                    const preset = effective.render.presets[0] as PlatformName;
+                    const plan = getLocalModelCanvasPlan(preset);
 
                     const pack = loadStylePack(workspaceDir);
                     const style = loadStyle(pack.style);
@@ -453,7 +555,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         subject: text,
                         mergedPalette: palette,
                         outputPath,
-                        preset: effective.render.preset,
+                        preset,
                         provider: selected.provider,
                         referencePaths: refs,
                     });
@@ -463,7 +565,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         prompt,
                         referencePaths: refs,
                         outputPath,
-                        preset: effective.render.preset,
+                        preset,
                         verbose: Boolean(options.verbose),
                         backendOutput: runtime.stderr,
                     });
@@ -476,6 +578,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         text,
                         source: 'local-model',
                         via: selected.provider,
+                        preset,
                         output: result.outputPath,
                     });
 
@@ -500,29 +603,44 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     : workspaceDir
                       ? defaultWorkspaceOutputPath(workspaceDir, now)
                       : effective.output;
-
-                const result = await runtime.renderHtml({
-                    html: createRenderTemplate(text, palette ? { palette } : {}),
+                const paletteOption = palette ? { palette } : {};
+                const template: CoverTemplate = {
+                    measureHtml: (layout, headline) =>
+                        createRenderTemplate(text, {
+                            layout,
+                            headline,
+                            measure: true,
+                            ...paletteOption,
+                        }),
+                    renderHtml: async (layout, headline) =>
+                        createRenderTemplate(text, { layout, headline, ...paletteOption }),
+                };
+                const written = await writeCovers(
+                    runtime,
+                    text,
+                    template,
+                    effective.render,
                     outputPath,
-                    width: effective.render.width,
-                    height: effective.render.height,
-                    scale: effective.render.scale,
-                });
+                    guides,
+                );
 
                 if (workspaceDir && pack) {
-                    appendHistory(workspaceDir, {
-                        createdAt: now.toISOString(),
-                        style: pack.style,
-                        palette: palette ?? {},
-                        text,
-                        output: result.pngPath,
-                    });
+                    for (const cover of written.covers) {
+                        appendHistory(workspaceDir, {
+                            createdAt: now.toISOString(),
+                            style: pack.style,
+                            palette: palette ?? {},
+                            text,
+                            ...(cover.platform ? { preset: cover.platform } : {}),
+                            output: cover.outputPath,
+                        });
+                    }
                 }
 
                 runtime.stdout.write(
                     [
-                        `Created ${result.pngPath}`,
-                        `Canvas: ${result.meta.width}x${result.meta.height} at ${result.meta.scale}x`,
+                        ...coverLines(written.covers, effective.render.scale),
+                        ...written.warnings,
                         'Privacy: render stayed on this machine.',
                         '',
                     ].join('\n'),

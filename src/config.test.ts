@@ -38,13 +38,13 @@ describe('layered config', () => {
         ).toMatchObject({
             source: 'render',
             output: 'from-file.png',
-            render: { preset: 'x', width: 800, height: 368, scale: 2 },
+            render: { presets: ['x'], canvas: { width: 800, height: 368 }, scale: 2 },
         });
 
         expect(resolveEffectiveConfig({}, {})).toMatchObject({
             source: 'render',
             output: 'beastcover.png',
-            render: { preset: 'youtube', width: 1280, height: 720, scale: 1 },
+            render: { presets: ['youtube'], scale: 1 },
         });
     });
 
@@ -128,6 +128,12 @@ describe('layered config', () => {
             localModel: { via: 'codex' },
         });
         expect(statSync(configPath).mode & 0o777).toBe(0o600);
+        setConfigValue('render.preset', 'douyin, wechat', configPath);
+        expect(loadConfigFile(configPath).render?.preset).toBe('wechat,douyin');
+        expect(resolveEffectiveConfig(loadConfigFile(configPath), {}).render.presets).toEqual([
+            'wechat',
+            'douyin',
+        ]);
         expect(() => setConfigValue('render.preset', '3:2', configPath)).toThrowError(
             'Preset "3:2" is gone. Use "youtube" or "bilibili" for a landscape cover.',
         );
@@ -151,7 +157,7 @@ describe('layered config', () => {
         expect(JSON.parse(shown)).toMatchObject({
             source: 'render',
             output: 'beastcover.png',
-            render: { preset: 'youtube', width: 1280, height: 720, scale: 1 },
+            render: { presets: ['youtube'], scale: 1 },
         });
     });
 });

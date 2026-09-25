@@ -1,4 +1,13 @@
 import { type PaletteSlotValue, parseCssColorValue } from '../styles/schema.ts';
+import {
+    type CoverLayout,
+    escapeHtml,
+    type Headline,
+    headlineMarkup,
+    lineHeightFor,
+    probeMarkup,
+    textAreaCss,
+} from './layout.ts';
 
 export const DEFAULT_RENDER_COLORS = {
     paper: '#f1eee6',
@@ -7,16 +16,60 @@ export const DEFAULT_RENDER_COLORS = {
 } as const;
 
 export interface RenderTemplateOptions {
+    layout: CoverLayout;
+    /** 标题字号和断行方式，由渲染器在标题区域里量出来 */
+    headline: Headline;
     palette?: Record<string, PaletteSlotValue>;
+    /** 量字号时加上探针 */
+    measure?: boolean;
 }
 
-function escapeHtml(value: string): string {
-    return value
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
+// 色条贴在标题区域左边 24px 处，公众号从超宽母版裁切时也还在画面里。
+const ACCENT_BAR_OFFSET = 36;
+
+/** 两个模板共用的标题排版：区域定位、字号、断行规则和探针 */
+export function headlineCss(layout: CoverLayout, headline: Headline, text: string): string {
+    return `
+        .text-box {
+            position: absolute;
+            ${textAreaCss(layout)}
+            display: flex;
+        }
+
+        .copy {
+            margin: 0;
+            font-size: ${headline.fontPx}px;
+            font-weight: 600;
+            letter-spacing: -0.04em;
+            line-height: ${lineHeightFor(text)};
+            text-wrap: balance;
+            white-space: pre-wrap;
+            /* 中文按字正常断行，balance 才能把几行排匀，不会只剩一个字挂在最后一行。
+               西文单词不拆开，量字号时的探针保证最长的单词放得下。 */
+            word-break: normal;
+            overflow-wrap: anywhere;
+        }
+
+        .clause {
+            display: inline-block;
+        }
+
+        .probe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            visibility: hidden;
+            white-space: nowrap;
+        }
+
+        .accent-bar {
+            position: absolute;
+            left: ${Math.max(0, layout.textArea.x - ACCENT_BAR_OFFSET)}px;
+            top: ${layout.textArea.y}px;
+            width: 12px;
+            height: ${layout.textArea.height}px;
+            background: var(--cover-accent);
+        }`;
 }
 
 function slotCss(palette: Record<string, PaletteSlotValue>, name: string): string | undefined {
@@ -48,10 +101,7 @@ export function resolveRenderColors(palette: Record<string, PaletteSlotValue> = 
     };
 }
 
-export function createRenderTemplate(text: string, options: RenderTemplateOptions = {}): string {
-    const safeText = escapeHtml(text);
-    const characterCount = Array.from(text.trim()).length;
-    const density = characterCount <= 48 ? 'short' : characterCount <= 120 ? 'medium' : 'long';
+export function createRenderTemplate(text: string, options: RenderTemplateOptions): string {
     const palette = options.palette ?? {};
     for (const [name, slot] of Object.entries(palette)) {
         if (typeof slot.css !== 'string') {
@@ -61,12 +111,12 @@ export function createRenderTemplate(text: string, options: RenderTemplateOption
     }
     const colors = resolveRenderColors(palette);
     const paletteJson = escapeHtml(JSON.stringify(palette));
+    const { layout } = options;
 
     return `<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BeastCover</title>
     <style>
         :root {
@@ -85,97 +135,30 @@ export function createRenderTemplate(text: string, options: RenderTemplateOption
 
         html,
         body {
-            width: 100%;
-            height: 100%;
+            width: ${layout.width}px;
+            height: ${layout.height}px;
             margin: 0;
             overflow: hidden;
-        }
-
-        body {
             background: var(--cover-paper);
         }
 
         #canvas {
             position: relative;
-            display: grid;
-            grid-template-rows: minmax(0, 1fr);
-            width: 100vw;
-            height: 100vh;
-            padding: 6.2vh 5.6vw 5.4vh;
-            isolation: isolate;
+            width: ${layout.width}px;
+            height: ${layout.height}px;
         }
+${headlineCss(layout, options.headline, text)}
 
-        #canvas::before {
-            position: absolute;
-            inset: 0 auto 0 0;
-            width: 1.25vw;
-            min-width: 10px;
-            content: "";
-            background: var(--cover-accent);
-        }
-
-        .copy-wrap {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(70px, 11vw);
-            gap: 5vw;
+        .text-box {
             align-items: center;
-            min-height: 0;
         }
-
-        .copy {
-            margin: 0;
-            font-weight: 600;
-            letter-spacing: -0.055em;
-            line-height: 0.98;
-            text-wrap: balance;
-            white-space: pre-wrap;
-        }
-
-        .copy[data-density="short"] {
-            max-width: 14em;
-            font-size: clamp(40px, min(6.2vw, 14vh), 112px);
-        }
-
-        .copy[data-density="medium"] {
-            max-width: 20em;
-            font-size: clamp(30px, min(3.6vw, 9vh), 68px);
-            line-height: 1;
-        }
-
-        .copy[data-density="long"] {
-            max-width: 32em;
-            font-size: clamp(20px, min(2.2vw, 5.6vh), 42px);
-            line-height: 1.08;
-            text-wrap: pretty;
-        }
-
-        .system-mark {
-            display: grid;
-            grid-template-rows: 1fr 1fr 1fr;
-            height: min(46vh, 430px);
-            border: 1px solid rgba(22, 23, 17, 0.45);
-        }
-
-        .system-mark span {
-            display: block;
-            border-bottom: 1px solid rgba(22, 23, 17, 0.45);
-        }
-
-        .system-mark span:nth-child(2) {
-            background: var(--cover-accent);
-        }
-
-        .system-mark span:last-child {
-            border-bottom: 0;
-        }
-
     </style>
 </head>
 <body>
     <main id="canvas">
-        <section class="copy-wrap" aria-label="Rendered text">
-            <p class="copy" data-density="${density}">${safeText}</p>
-            <div class="system-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="accent-bar" aria-hidden="true"></div>
+        <section class="text-box" aria-label="Headline">
+            <p class="copy">${headlineMarkup(text, options.headline)}</p>${options.measure ? probeMarkup(text, options.headline) : ''}
         </section>
     </main>
     <script type="application/json" id="beastcover-palette">${paletteJson}</script>
