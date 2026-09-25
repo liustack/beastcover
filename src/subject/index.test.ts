@@ -110,6 +110,39 @@ describe('subject layer', () => {
         expect(cutout).toHaveBeenCalledOnce();
     });
 
+    it('lets two runs cut out the same photo at the same time', async () => {
+        const directory = tempDir();
+        const photo = await writeImage(join(directory, 'photo.png'), {
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: 1,
+        });
+        const cacheDir = join(directory, 'cache');
+        // 两次调用都在缓存未命中后停下，等对方也开始写，再各自写出结果。
+        let arrived = 0;
+        let release: () => void = () => undefined;
+        const bothStarted = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const cutout = async (input: string, output: string) => {
+            arrived += 1;
+            if (arrived === 2) {
+                release();
+            }
+            await bothStarted;
+            await writeCutout(input, output);
+        };
+
+        const results = await Promise.allSettled([
+            prepareSubject(photo, { cacheDir, cutout }),
+            prepareSubject(photo, { cacheDir, cutout }),
+        ]);
+
+        expect(results.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
+        expect(readdirSync(cacheDir).filter((name) => name.includes('partial'))).toEqual([]);
+    });
+
     it('leaves no cache file behind when the cutout fails', async () => {
         const directory = tempDir();
         const jpeg = join(directory, 'photo.jpg');

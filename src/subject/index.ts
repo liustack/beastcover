@@ -1,6 +1,6 @@
 // 人物或物体主体层：透明 PNG 直接用，普通照片在 macOS 上用系统抠图，结果按图片内容缓存。
 // 不内置抠图模型，也不交给会重画人脸的生图模型。
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -52,7 +52,9 @@ async function cutoutCached(imagePath: string, runtime: SubjectRuntime): Promise
         return cached;
     }
     mkdirSync(runtime.cacheDir, { recursive: true });
-    const partial = `${cached}.partial.png`;
+    // 每次调用写自己的临时文件，写完原子替换到缓存位置。同时抠同一张图时互不干扰，
+    // 谁后写完谁覆盖，内容一样。
+    const partial = `${cached}.${randomUUID()}.partial.png`;
     try {
         await runtime.cutout(imagePath, partial);
         renameSync(partial, cached);

@@ -1,7 +1,7 @@
 // macOS 自带的 Vision：主体抠图（前景实例遮罩，macOS 14 起可用）和照片主体定位（人脸，其次显著区域）。
 // 不打包模型、不联网：第一次用时把下面这段 Swift 编译成小程序放进 ~/.beastcover/bin/，之后直接调用。
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
     chmodSync,
     existsSync,
@@ -168,8 +168,10 @@ async function ensureTool(runtime: VisionCutoutRuntime): Promise<string> {
         throw new Error('Automatic cutout needs the Swift compiler. Run xcode-select --install.');
     }
     mkdirSync(runtime.binDir, { recursive: true, mode: 0o700 });
-    const source = `${path}.swift`;
-    const building = `${path}.building`;
+    // 源码和编译中的文件名带上随机后缀，几个进程同时首次编译也不会互相踩文件。
+    const attempt = randomUUID();
+    const source = `${path}.${attempt}.swift`;
+    const building = `${path}.${attempt}.building`;
     writeFileSync(source, VISION_TOOL_SWIFT, 'utf8');
     try {
         await execFileAsync(swiftc, ['-O', '-o', building, source], {
