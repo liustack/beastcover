@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getPlatform, PLATFORM_NAMES } from '../platforms/index.ts';
-import { getLocalModelCanvasPlan } from './index.ts';
+import { getLocalModelCanvasPlan, getLocalModelGeneratePlan } from './index.ts';
 
 describe('local-model canvas plans', () => {
     it('freezes the generate, crop, and output sizes per platform', () => {
@@ -49,17 +49,36 @@ describe('local-model canvas plans', () => {
         }
     });
 
-    it('asks the model to keep the subject inside the narrow wechat and x crops', () => {
-        expect(getLocalModelCanvasPlan('wechat').subjectSuffix).toBe(
-            '主体集中在画面正中，四周只放背景',
-        );
-        expect(getLocalModelCanvasPlan('x').subjectSuffix).toBe(
-            '主体集中在画面中间的窄横带内，上下只放背景',
-        );
-        const withSuffix = PLATFORM_NAMES.filter(
-            (preset) => getLocalModelCanvasPlan(preset).subjectSuffix !== undefined,
-        );
-        expect(withSuffix).toEqual(['wechat', 'x']);
+    it('generates once per family at the native size, with a composition hint for narrow crops', () => {
+        expect(getLocalModelGeneratePlan('landscape')).toEqual({
+            family: 'landscape',
+            generateWidth: 1536,
+            generateHeight: 1024,
+        });
+        expect(getLocalModelGeneratePlan('ultrawide')).toEqual({
+            family: 'ultrawide',
+            generateWidth: 1536,
+            generateHeight: 1024,
+            subjectSuffix: '主体集中在画面正中的窄横带内，四周只放背景',
+        });
+        expect(getLocalModelGeneratePlan('portrait')).toEqual({
+            family: 'portrait',
+            generateWidth: 1024,
+            generateHeight: 1536,
+            subjectSuffix: '主体集中在画面中部，顶部和底部只放背景',
+        });
+    });
+
+    it('crops each platform from the generate size of its own family', () => {
+        for (const preset of PLATFORM_NAMES) {
+            const plan = getLocalModelCanvasPlan(preset);
+            const generate = getLocalModelGeneratePlan(plan.family);
+            expect(plan.family, preset).toBe(getPlatform(preset).family);
+            expect([plan.generateWidth, plan.generateHeight], preset).toEqual([
+                generate.generateWidth,
+                generate.generateHeight,
+            ]);
+        }
     });
 
     it('reuses the preset error from getPlatform', () => {

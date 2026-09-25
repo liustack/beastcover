@@ -153,8 +153,8 @@ describe('local-model prompt assembly', () => {
             style,
             subject,
             mergedPalette: paletteFromStyle(style),
-            outputPath,
-            preset: 'youtube',
+            generatedPath: outputPath,
+            family: 'landscape',
             provider: 'codex',
         });
 
@@ -166,38 +166,23 @@ describe('local-model prompt assembly', () => {
         expect(envelope).not.toContain('1280x720');
     });
 
-    it('appends the narrow-crop composition suffix to 主体 for wechat and x', () => {
+    it('appends the family composition hint to 主体 and keeps the native generate size', () => {
         const style = loadStyle('risograph_editorial');
         const subject = '一只背对的人';
-        for (const [preset, suffix] of [
-            ['wechat', '主体集中在画面正中，四周只放背景'],
-            ['x', '主体集中在画面中间的窄横带内，上下只放背景'],
+        for (const [family, suffix, size] of [
+            ['ultrawide', '主体集中在画面正中的窄横带内，四周只放背景', 'Landscape 1536x1024'],
+            ['portrait', '主体集中在画面中部，顶部和底部只放背景', '竖版 1024x1536'],
         ] as const) {
             const envelope = buildEnvelopePrompt({
                 style,
                 subject,
                 mergedPalette: paletteFromStyle(style),
-                outputPath: '/tmp/beastcover-out.png',
-                preset,
+                generatedPath: '/tmp/beastcover-out.png',
+                family,
                 provider: 'codex',
             });
-            expect(envelope, preset).toContain(`主体：${subject}。${suffix}. Landscape 1536x1024`);
-        }
-    });
-
-    it('puts the portrait generate size in the envelope, not production pixels', () => {
-        const style = loadStyle('risograph_editorial');
-        for (const preset of ['xiaohongshu', 'douyin'] as const) {
-            const envelope = buildEnvelopePrompt({
-                style,
-                subject: '一只背对的人',
-                mergedPalette: paletteFromStyle(style),
-                outputPath: '/tmp/beastcover-out.png',
-                preset,
-                provider: 'codex',
-            });
-            expect(envelope, preset).toContain('竖版 1024x1536');
-            expect(envelope, preset).not.toContain('1080x');
+            expect(envelope, family).toContain(`主体：${subject}。${suffix}. ${size}`);
+            expect(envelope, family).not.toContain('1080x');
         }
     });
 
@@ -213,8 +198,8 @@ describe('local-model prompt assembly', () => {
                 style,
                 subject: '一只背对的人',
                 mergedPalette: merged,
-                outputPath,
-                preset: 'youtube',
+                generatedPath: outputPath,
+                family: 'landscape',
                 provider,
                 referencePaths: refs,
             });
@@ -236,8 +221,8 @@ describe('local-model prompt assembly', () => {
             style,
             subject: '一只背对的人',
             mergedPalette: paletteFromStyle(style),
-            outputPath: '/tmp/beastcover-out.png',
-            preset: 'youtube',
+            generatedPath: '/tmp/beastcover-out.png',
+            family: 'landscape',
             provider: 'codex',
             referencePaths: refs,
         });

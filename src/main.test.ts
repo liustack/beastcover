@@ -73,7 +73,7 @@ async function testPngBytes(width: number, height: number): Promise<Buffer> {
 
 function mockRunLocalModel() {
     return vi.fn(async (input: LocalModelRunInput) => ({
-        outputPath: input.outputPath,
+        outputPaths: input.targets.map((target) => target.outputPath),
     }));
 }
 
@@ -657,21 +657,26 @@ describe('BeastCover CLI', () => {
         );
         expect(renderHtml).not.toHaveBeenCalled();
         expect(runLocalModel).toHaveBeenCalledOnce();
-        const localInput = runLocalModel.mock.calls[0]?.[0] as
-            | { prompt?: string; preset?: string; verbose?: boolean }
-            | undefined;
+        const localInput = runLocalModel.mock.calls[0]?.[0];
         if (localInput === undefined) {
             throw new Error('runLocalModel was not called.');
         }
+        const generatedPath = join(
+            cwd,
+            '.beastcover',
+            'cache',
+            'beastcover-2026-08-23T00-00-00.000Z-ultrawide.png',
+        );
         expect(localInput).toMatchObject({
             provider: 'codex',
             commandPath: '/fake/codex',
-            outputPath,
-            preset: 'wechat',
+            generatedPath,
+            targets: [{ preset: 'wechat', outputPath }],
             verbose: false,
         });
+        expect(localInput.prompt).toContain(`save it to ${generatedPath}. `);
         expect(localInput.prompt).toContain(
-            '主体集中在画面正中，四周只放背景. Landscape 1536x1024',
+            '主体集中在画面正中的窄横带内，四周只放背景. Landscape 1536x1024',
         );
 
         const historyPath = join(cwd, '.beastcover', 'history.jsonl');
@@ -731,7 +736,7 @@ describe('BeastCover CLI', () => {
         if (input === undefined) {
             throw new Error('runLocalModel was not called.');
         }
-        expect(input.preset).toBe('douyin');
+        expect(input.targets.map((target) => target.preset)).toEqual(['douyin']);
         expect(input.prompt).toContain('竖版 1024x1536');
         expect(input.prompt).not.toContain('1080x1920');
     });
@@ -888,6 +893,57 @@ describe('BeastCover CLI', () => {
         }
     });
 
+    it('calls the model once per family and crops every platform from that image', async () => {
+        const cwd = tempDir('beastcover-local-families-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        const runLocalModel = mockRunLocalModel();
+        const stdout = captureOutput();
+
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'A figure on a shore',
+                '--source',
+                'local-model',
+                '--via',
+                'codex',
+                '--preset',
+                'x,douyin,wechat,xiaohongshu',
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                runLocalModel,
+                lookupCommand: () => '/fake/codex',
+                stdout,
+                now: () => new Date('2026-09-25T00:00:00.000Z'),
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        const stem = 'beastcover-2026-09-25T00-00-00.000Z';
+        expect(
+            runLocalModel.mock.calls.map(([input]) => [
+                input.generatedPath,
+                input.targets.map((target) => target.preset),
+            ]),
+        ).toEqual([
+            [join(cwd, '.beastcover', 'cache', `${stem}-ultrawide.png`), ['wechat', 'x']],
+            [join(cwd, '.beastcover', 'cache', `${stem}-portrait.png`), ['xiaohongshu', 'douyin']],
+        ]);
+        const printed = stdout.chunks.join('');
+        expect(printed).toContain(
+            `Created ${join(cwd, '.beastcover', 'out', `${stem}-douyin.png`)}\nCanvas: 1080x1920`,
+        );
+        expect(printed.match(/Backend: codex/g)).toHaveLength(1);
+        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
+            .trimEnd()
+            .split('\n');
+        expect(history).toHaveLength(4);
+    });
+
     it('names the platform preset when an old ratio preset is passed', async () => {
         const renderHtml = mockRender();
         const stderr = captureOutput();
@@ -949,11 +1005,11 @@ describe('BeastCover CLI', () => {
         writeFileSync(abs2, 'jpg', 'utf8');
 
         const stdout = captureOutput();
-        const runLocalModel = vi.fn(async (input: { outputPath: string }) => {
+        const runLocalModel = vi.fn(async (input: LocalModelRunInput) => {
             expect(stdout.chunks.join('')).toContain(
                 ['References sent to codex:', `  ${abs1}`, `  ${abs2}`].join('\n'),
             );
-            return { outputPath: input.outputPath };
+            return { outputPaths: input.targets.map((target) => target.outputPath) };
         });
 
         const exitCode = await runCli(

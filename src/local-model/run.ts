@@ -29,8 +29,10 @@ export interface LocalModelRunInput {
     commandPath: string;
     prompt: string;
     referencePaths: string[];
-    outputPath: string;
-    preset: PlatformName;
+    /** 模型写原图的路径，一族一张 */
+    generatedPath: string;
+    /** 同一族里要裁出的平台和成品路径 */
+    targets: readonly { preset: PlatformName; outputPath: string }[];
     timeoutMs?: number;
     spawn?: (request: LocalModelSpawnRequest) => Promise<void>;
     verbose?: boolean;
@@ -202,10 +204,19 @@ function verifyOutput(outputPath: string, provider: LocalModelProvider): void {
     }
 }
 
-export async function runLocalModel(input: LocalModelRunInput): Promise<{ outputPath: string }> {
+export async function runLocalModel(input: LocalModelRunInput): Promise<{ outputPaths: string[] }> {
+    const plans = input.targets.map((target) => ({
+        ...target,
+        plan: getLocalModelCanvasPlan(target.preset),
+    }));
+    const families = new Set(plans.map(({ plan }) => plan.family));
+    if (families.size !== 1) {
+        throw new Error('runLocalModel crops one family per generation.');
+    }
+
     const timeoutMs = input.timeoutMs ?? LOCAL_MODEL_TIMEOUT_MS;
-    mkdirSync(dirname(input.outputPath), { recursive: true });
-    removeTarget(input.outputPath);
+    mkdirSync(dirname(input.generatedPath), { recursive: true });
+    removeTarget(input.generatedPath);
 
     const argv = buildLocalModelArgv({
         provider: input.provider,
@@ -232,12 +243,10 @@ export async function runLocalModel(input: LocalModelRunInput): Promise<{ output
         });
     }
 
-    verifyOutput(input.outputPath, input.provider);
-    const plan = getLocalModelCanvasPlan(input.preset);
-    await finishLocalModelImage({
-        sourcePath: input.outputPath,
-        outputPath: input.outputPath,
-        plan,
-    });
-    return { outputPath: input.outputPath };
+    verifyOutput(input.generatedPath, input.provider);
+    for (const { outputPath, plan } of plans) {
+        mkdirSync(dirname(outputPath), { recursive: true });
+        await finishLocalModelImage({ sourcePath: input.generatedPath, outputPath, plan });
+    }
+    return { outputPaths: plans.map(({ outputPath }) => outputPath) };
 }

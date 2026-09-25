@@ -4,11 +4,12 @@ declare const __APP_VERSION__: string;
 
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Command, CommanderError } from 'commander';
 import {
     type ComposedCover,
+    type CoverTarget,
     type CoverTemplate,
     composeCovers,
     composeCustomCover,
@@ -38,6 +39,7 @@ import {
     selectLocalModelProvider,
 } from './local-model/index.ts';
 import {
+    type FamilyName,
     getPlatform,
     PLATFORM_NAMES,
     type PlatformName,
@@ -514,14 +516,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     if (guides) {
                         throw new Error('--guides works with --source render or stock.');
                     }
-                    if (effective.render.presets.length !== 1) {
-                        throw new Error(
-                            'local-model makes one platform at a time. Pick one --preset.',
-                        );
-                    }
-                    const preset = effective.render.presets[0] as PlatformName;
-                    const plan = getLocalModelCanvasPlan(preset);
-
                     const pack = loadStylePack(workspaceDir);
                     const style = loadStyle(pack.style);
                     const palette = mergedPalette(pack);
@@ -550,43 +544,62 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         runtime.cwd,
                         flags.output ?? defaultWorkspaceOutputPath(workspaceDir, now),
                     );
-                    const prompt = buildEnvelopePrompt({
-                        style,
-                        subject: text,
-                        mergedPalette: palette,
-                        outputPath,
-                        preset,
-                        provider: selected.provider,
-                        referencePaths: refs,
-                    });
-                    const result = await runtime.runLocalModel({
-                        provider: selected.provider,
-                        commandPath: selected.commandPath,
-                        prompt,
-                        referencePaths: refs,
-                        outputPath,
-                        preset,
-                        verbose: Boolean(options.verbose),
-                        backendOutput: runtime.stderr,
-                    });
-
-                    appendHistory(workspaceDir, {
-                        createdAt: now.toISOString(),
-                        style: pack.style,
-                        palette,
-                        catalogPalette,
-                        text,
-                        source: 'local-model',
-                        via: selected.provider,
-                        preset,
-                        output: result.outputPath,
-                    });
+                    // 一族只调一次模型：原图存进 cache/，族内各平台从同一张图裁。
+                    const byFamily = new Map<FamilyName, CoverTarget[]>();
+                    for (const target of coverOutputPaths(outputPath, effective.render.presets)) {
+                        const family = getPlatform(target.platform).family;
+                        byFamily.set(family, [...(byFamily.get(family) ?? []), target]);
+                    }
+                    const stem = basename(outputPath, extname(outputPath));
+                    const lines: string[] = [];
+                    for (const [family, targets] of byFamily) {
+                        const generatedPath = join(workspaceDir, 'cache', `${stem}-${family}.png`);
+                        const prompt = buildEnvelopePrompt({
+                            style,
+                            subject: text,
+                            mergedPalette: palette,
+                            generatedPath,
+                            family,
+                            provider: selected.provider,
+                            referencePaths: refs,
+                        });
+                        await runtime.runLocalModel({
+                            provider: selected.provider,
+                            commandPath: selected.commandPath,
+                            prompt,
+                            referencePaths: refs,
+                            generatedPath,
+                            targets: targets.map((target) => ({
+                                preset: target.platform,
+                                outputPath: target.outputPath,
+                            })),
+                            verbose: Boolean(options.verbose),
+                            backendOutput: runtime.stderr,
+                        });
+                        for (const target of targets) {
+                            appendHistory(workspaceDir, {
+                                createdAt: now.toISOString(),
+                                style: pack.style,
+                                palette,
+                                catalogPalette,
+                                text,
+                                source: 'local-model',
+                                via: selected.provider,
+                                preset: target.platform,
+                                output: target.outputPath,
+                            });
+                            const plan = getLocalModelCanvasPlan(target.platform);
+                            lines.push(
+                                `Created ${target.outputPath}`,
+                                `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
+                            );
+                        }
+                    }
 
                     runtime.stdout.write(
                         [
-                            `Created ${result.outputPath}`,
+                            ...lines,
                             `Backend: ${selected.provider}`,
-                            `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
                             'Privacy: local-model used your own CLI. We did not handle the data.',
                             '',
                         ].join('\n'),

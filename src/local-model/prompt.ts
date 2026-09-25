@@ -1,7 +1,7 @@
 import type { LocalModelProvider } from '../config.ts';
-import type { PlatformName } from '../platforms/index.ts';
+import type { FamilyName } from '../platforms/index.ts';
 import type { PaletteSlotValue, StyleDefinition } from '../styles/schema.ts';
-import { getLocalModelCanvasPlan } from './canvas.ts';
+import { getLocalModelGeneratePlan } from './canvas.ts';
 
 const ENVELOPE_CLOSER = 'Generate the image file only, do not do anything else.';
 
@@ -75,12 +75,13 @@ export function buildEnvelopePrompt(input: {
     style: StyleDefinition;
     subject: string;
     mergedPalette: Record<string, PaletteSlotValue>;
-    outputPath: string;
-    preset: PlatformName;
+    /** 模型把原图存到这里，之后再按族内各平台裁切 */
+    generatedPath: string;
+    family: FamilyName;
     provider: LocalModelProvider;
     referencePaths?: string[];
 }): string {
-    const plan = getLocalModelCanvasPlan(input.preset);
+    const plan = getLocalModelGeneratePlan(input.family);
     const body = stylePromptWithPalette(input.style, input.mergedPalette);
     const size = formatSizePhrase(plan.generateWidth, plan.generateHeight);
     const subjectLine =
@@ -88,7 +89,7 @@ export function buildEnvelopePrompt(input: {
             ? `主体：${input.subject}`
             : `主体：${input.subject}。${plan.subjectSuffix}`;
     const envelope =
-        `Use your image generation capability to create one image and save it to ${input.outputPath}. ` +
+        `Use your image generation capability to create one image and save it to ${input.generatedPath}. ` +
         `${body}. ${subjectLine}. ${size}. ${ENVELOPE_CLOSER}`;
 
     if (

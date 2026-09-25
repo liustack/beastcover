@@ -31,8 +31,8 @@ function baseInput(outputPath: string) {
         commandPath: '/fake/codex',
         prompt: 'Use your image generation capability. 主体：海岸.',
         referencePaths: [] as string[],
-        outputPath,
-        preset: 'youtube' as const,
+        generatedPath: outputPath,
+        targets: [{ preset: 'youtube' as const, outputPath }],
     };
 }
 
@@ -206,14 +206,14 @@ describe('local-model finish after verify', () => {
         await (jpeg ? image.jpeg() : image.png()).toFile(outputPath);
     }
 
-    it('crops and resizes a verified PNG to youtube production pixels', async () => {
+    it('crops and resizes a verified PNG in place to youtube production pixels', async () => {
         const outputPath = join(tempDir('beastcover-run-finish-png-'), 'out.png');
         const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
             await generate(outputPath, 1536, 1024);
         });
 
         await expect(runLocalModel({ ...baseInput(outputPath), spawn })).resolves.toEqual({
-            outputPath,
+            outputPaths: [outputPath],
         });
         const meta = await sharp(outputPath).metadata();
         expect([meta.width, meta.height]).toEqual([1280, 720]);
@@ -225,23 +225,52 @@ describe('local-model finish after verify', () => {
             await generate(outputPath, 1536, 1024, true);
         });
 
-        await expect(runLocalModel({ ...baseInput(outputPath), spawn })).resolves.toEqual({
-            outputPath,
-        });
+        await runLocalModel({ ...baseInput(outputPath), spawn });
         const meta = await sharp(outputPath).metadata();
         expect([meta.format, meta.width, meta.height]).toEqual(['png', 1280, 720]);
     });
 
-    it('crops a portrait generate PNG to douyin production pixels', async () => {
-        const outputPath = join(tempDir('beastcover-run-douyin-'), 'ok.png');
+    it('crops every platform of one family from a single generation', async () => {
+        const directory = tempDir('beastcover-run-family-');
+        const generatedPath = join(directory, 'cache', 'raw.png');
         const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
-            await generate(outputPath, 1024, 1536);
+            await generate(generatedPath, 1024, 1536);
         });
+        const targets = [
+            { preset: 'xiaohongshu' as const, outputPath: join(directory, 'out', 'a.png') },
+            { preset: 'douyin' as const, outputPath: join(directory, 'out', 'b.png') },
+        ];
 
         await expect(
-            runLocalModel({ ...baseInput(outputPath), preset: 'douyin', spawn }),
-        ).resolves.toEqual({ outputPath });
-        const meta = await sharp(outputPath).metadata();
-        expect([meta.width, meta.height]).toEqual([1080, 1920]);
+            runLocalModel({ ...baseInput(generatedPath), generatedPath, targets, spawn }),
+        ).resolves.toEqual({ outputPaths: targets.map((target) => target.outputPath) });
+        expect(spawn).toHaveBeenCalledOnce();
+        const sizes = await Promise.all(
+            targets.map(async (target) => {
+                const meta = await sharp(target.outputPath).metadata();
+                return [meta.width, meta.height];
+            }),
+        );
+        expect(sizes).toEqual([
+            [1080, 1440],
+            [1080, 1920],
+        ]);
+        expect(existsSync(generatedPath)).toBe(true);
+    });
+
+    it('refuses to crop platforms of different families from one generation', async () => {
+        const directory = tempDir('beastcover-run-mixed-');
+        const spawn = vi.fn(async () => undefined);
+        await expect(
+            runLocalModel({
+                ...baseInput(join(directory, 'raw.png')),
+                targets: [
+                    { preset: 'youtube', outputPath: join(directory, 'a.png') },
+                    { preset: 'douyin', outputPath: join(directory, 'b.png') },
+                ],
+                spawn,
+            }),
+        ).rejects.toThrowError('runLocalModel crops one family per generation.');
+        expect(spawn).not.toHaveBeenCalled();
     });
 });

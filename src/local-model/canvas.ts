@@ -1,7 +1,17 @@
-import { getPlatform, type PlatformName } from '../platforms/index.ts';
+import { type FamilyName, getPlatform, type PlatformName } from '../platforms/index.ts';
+
+/** 一族只让模型生成一次：原生尺寸和构图提示按族定，族内各平台再各自裁切 */
+export interface LocalModelGeneratePlan {
+    family: FamilyName;
+    generateWidth: number;
+    generateHeight: number;
+    /** 族内最窄的裁切只留中间一块时才有，提醒模型把主体放进那块 */
+    subjectSuffix?: string;
+}
 
 export interface LocalModelCanvasPlan {
     preset: PlatformName;
+    family: FamilyName;
     generateWidth: number;
     generateHeight: number;
     cropWidth: number;
@@ -10,13 +20,30 @@ export interface LocalModelCanvasPlan {
     cropTop: number;
     outputWidth: number;
     outputHeight: number;
-    /** 裁切只留中间一小块的预设才有，提醒模型把主体放进那块 */
-    subjectSuffix?: string;
 }
 
-// 生成尺寸只用模型原生的 1536x1024 与 1024x1536，再从正中裁出目标比例。
-const LANDSCAPE = { generateWidth: 1536, generateHeight: 1024 } as const;
-const PORTRAIT = { generateWidth: 1024, generateHeight: 1536 } as const;
+// 生成尺寸只用模型原生的 1536x1024 与 1024x1536，再从正中裁出各平台的比例。
+const LOCAL_MODEL_GENERATE_PLANS: Record<FamilyName, LocalModelGeneratePlan> = {
+    landscape: { family: 'landscape', generateWidth: 1536, generateHeight: 1024 },
+    // X 只留中间 294px 高的横带，公众号转发卡片只留正中方块。
+    ultrawide: {
+        family: 'ultrawide',
+        generateWidth: 1536,
+        generateHeight: 1024,
+        subjectSuffix: '主体集中在画面正中的窄横带内，四周只放背景',
+    },
+    // 小红书裁掉上下各一截，抖音顶部和底部被界面挡住。
+    portrait: {
+        family: 'portrait',
+        generateWidth: 1024,
+        generateHeight: 1536,
+        subjectSuffix: '主体集中在画面中部，顶部和底部只放背景',
+    },
+};
+
+const LANDSCAPE = { family: 'landscape', generateWidth: 1536, generateHeight: 1024 } as const;
+const ULTRAWIDE = { family: 'ultrawide', generateWidth: 1536, generateHeight: 1024 } as const;
+const PORTRAIT = { family: 'portrait', generateWidth: 1024, generateHeight: 1536 } as const;
 
 const PORTRAIT_3X4 = {
     ...PORTRAIT,
@@ -61,25 +88,23 @@ const LOCAL_MODEL_CANVAS_PLANS: Record<PlatformName, LocalModelCanvasPlan> = {
     },
     wechat: {
         preset: 'wechat',
-        ...LANDSCAPE,
+        ...ULTRAWIDE,
         cropWidth: 1536,
         cropHeight: 654,
         cropLeft: 0,
         cropTop: 185,
         outputWidth: 900,
         outputHeight: 383,
-        subjectSuffix: '主体集中在画面正中，四周只放背景',
     },
     x: {
         preset: 'x',
-        ...LANDSCAPE,
+        ...ULTRAWIDE,
         cropWidth: 1536,
         cropHeight: 294,
         cropLeft: 0,
         cropTop: 365,
         outputWidth: 1920,
         outputHeight: 368,
-        subjectSuffix: '主体集中在画面中间的窄横带内，上下只放背景',
     },
     xiaohongshu: { preset: 'xiaohongshu', ...PORTRAIT_3X4 },
     instagram: { preset: 'instagram', ...PORTRAIT_3X4 },
@@ -91,4 +116,8 @@ const LOCAL_MODEL_CANVAS_PLANS: Record<PlatformName, LocalModelCanvasPlan> = {
 export function getLocalModelCanvasPlan(preset: PlatformName): LocalModelCanvasPlan {
     getPlatform(preset);
     return { ...LOCAL_MODEL_CANVAS_PLANS[preset] };
+}
+
+export function getLocalModelGeneratePlan(family: FamilyName): LocalModelGeneratePlan {
+    return { ...LOCAL_MODEL_GENERATE_PLANS[family] };
 }

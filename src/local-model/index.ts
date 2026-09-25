@@ -1,6 +1,6 @@
 export { buildLocalModelArgv, resolveNamedRefFiles } from './argv.ts';
-export type { LocalModelCanvasPlan } from './canvas.ts';
-export { getLocalModelCanvasPlan } from './canvas.ts';
+export type { LocalModelCanvasPlan, LocalModelGeneratePlan } from './canvas.ts';
+export { getLocalModelCanvasPlan, getLocalModelGeneratePlan } from './canvas.ts';
 export {
     cropLocalModelImage,
     finishLocalModelImage,
