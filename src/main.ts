@@ -20,11 +20,6 @@ import {
     resolveEffectiveConfig,
     setConfigValue,
 } from './config.ts';
-import {
-    DIMENSION_PRESET_NAMES,
-    type DimensionPresetName,
-    getDimensionPreset,
-} from './dimensions.ts';
 import { type DoctorReport, lookupCommandOnPath, renderDoctorReport, runDoctor } from './doctor.ts';
 import {
     buildEnvelopePrompt,
@@ -33,6 +28,7 @@ import {
     resolveNamedRefFiles,
     selectLocalModelProvider,
 } from './local-model/index.ts';
+import { getPlatform, PLATFORM_NAMES, type PlatformName } from './platforms/index.ts';
 import { type RenderHtmlOptions, type RenderHtmlResult, renderHtml } from './render/index.ts';
 import { createPhotoCoverTemplate, preparePhotoLayer } from './render/photo-cover.ts';
 import { createRenderTemplate } from './render/template.ts';
@@ -166,9 +162,9 @@ function collectRefs(value: string, previous: string[]): string[] {
     return [...previous, value];
 }
 
-function parsePreset(value: string): DimensionPresetName {
-    getDimensionPreset(value);
-    return value as DimensionPresetName;
+function parsePreset(value: string): PlatformName {
+    getPlatform(value);
+    return value as PlatformName;
 }
 
 function parseIntegerOption(name: string, value: string): number {
@@ -260,7 +256,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         )
         .option('--source <source>', 'Image source: render, stock, or local-model')
         .option('-o, --output <path>', 'Output PNG path')
-        .option('--preset <platform>', `Platform preset: ${DIMENSION_PRESET_NAMES.join(', ')}`)
+        .option('--preset <platform>', `Platform preset: ${PLATFORM_NAMES.join(', ')}`)
         .option('--width <pixels>', 'Override canvas width')
         .option('--height <pixels>', 'Override canvas height')
         .option('--scale <factor>', 'Device scale factor from 1 to 4')

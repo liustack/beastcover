@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { type DimensionPresetName, getDimensionPreset } from './dimensions.ts';
+import { getPlatform, type PlatformName } from './platforms/index.ts';
 
 export const CONFIG_PATH = join(homedir(), '.beastcover', 'config.json');
 
@@ -25,7 +25,7 @@ export interface BeastCoverConfigFile {
     source?: ImageSource;
     output?: string;
     render?: {
-        preset?: DimensionPresetName;
+        preset?: PlatformName;
         width?: number;
         height?: number;
         scale?: number;
@@ -39,7 +39,7 @@ export interface BeastCoverConfigFile {
 export interface ConfigFlags {
     source?: ImageSource;
     output?: string;
-    preset?: DimensionPresetName;
+    preset?: PlatformName;
     width?: number;
     height?: number;
     scale?: number;
@@ -50,7 +50,7 @@ export interface EffectiveConfig {
     source: ImageSource;
     output: string;
     render: {
-        preset: DimensionPresetName;
+        preset: PlatformName;
         width: number;
         height: number;
         scale: number;
@@ -174,10 +174,10 @@ function validateConfig(parsed: Record<string, unknown>, configPath: string): Be
         }
         if (parsed.render.preset !== undefined) {
             if (typeof parsed.render.preset !== 'string') {
-                invalidConfig(configPath, 'render.preset', 'a dimension preset name');
+                invalidConfig(configPath, 'render.preset', 'a platform preset name');
             }
             try {
-                getDimensionPreset(parsed.render.preset);
+                getPlatform(parsed.render.preset);
             } catch (error) {
                 throw new Error(
                     `${configPath} has invalid "render.preset". ${(error as Error).message}`,
@@ -293,9 +293,9 @@ export function setConfigValue(
             break;
         }
         case 'render.preset': {
-            getDimensionPreset(value);
+            getPlatform(value);
             config.render ??= {};
-            config.render.preset = value as DimensionPresetName;
+            config.render.preset = value as PlatformName;
             break;
         }
         case 'render.width':
@@ -346,15 +346,15 @@ export function resolveEffectiveConfig(
     flags: ConfigFlags,
 ): EffectiveConfig {
     const preset = flags.preset ?? fileConfig.render?.preset ?? BUILT_IN_CONFIG.render.preset;
-    const dimensions = getDimensionPreset(preset);
+    const platform = getPlatform(preset);
 
     return {
         source: flags.source ?? fileConfig.source ?? BUILT_IN_CONFIG.source,
         output: flags.output ?? fileConfig.output ?? BUILT_IN_CONFIG.output,
         render: {
             preset,
-            width: flags.width ?? fileConfig.render?.width ?? dimensions.width,
-            height: flags.height ?? fileConfig.render?.height ?? dimensions.height,
+            width: flags.width ?? fileConfig.render?.width ?? platform.width,
+            height: flags.height ?? fileConfig.render?.height ?? platform.height,
             scale: flags.scale ?? fileConfig.render?.scale ?? BUILT_IN_CONFIG.render.scale,
         },
         ...(fileConfig.stock ? { stock: structuredClone(fileConfig.stock) } : {}),

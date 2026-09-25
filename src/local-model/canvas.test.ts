@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { DIMENSION_PRESET_NAMES, getDimensionPreset } from '../dimensions.ts';
+import { getPlatform, PLATFORM_NAMES } from '../platforms/index.ts';
 import { getLocalModelCanvasPlan } from './index.ts';
 
 describe('local-model canvas plans', () => {
     it('freezes the generate, crop, and output sizes per platform', () => {
-        const rows = DIMENSION_PRESET_NAMES.map((preset) => {
+        const rows = PLATFORM_NAMES.map((preset) => {
             const plan = getLocalModelCanvasPlan(preset);
             return [
                 preset,
@@ -27,9 +27,9 @@ describe('local-model canvas plans', () => {
     });
 
     it('centres every crop and matches the production preset size and ratio', () => {
-        for (const preset of DIMENSION_PRESET_NAMES) {
+        for (const preset of PLATFORM_NAMES) {
             const plan = getLocalModelCanvasPlan(preset);
-            const production = getDimensionPreset(preset);
+            const production = getPlatform(preset);
             expect(plan.preset, preset).toBe(preset);
             expect([plan.outputWidth, plan.outputHeight], preset).toEqual([
                 production.width,
@@ -56,14 +56,14 @@ describe('local-model canvas plans', () => {
         expect(getLocalModelCanvasPlan('x').subjectSuffix).toBe(
             '主体集中在画面中间的窄横带内，上下只放背景',
         );
-        const withSuffix = DIMENSION_PRESET_NAMES.filter(
+        const withSuffix = PLATFORM_NAMES.filter(
             (preset) => getLocalModelCanvasPlan(preset).subjectSuffix !== undefined,
         );
         expect(withSuffix).toEqual(['wechat', 'x']);
     });
 
-    it('reuses the preset error from getDimensionPreset', () => {
-        expect(() => getLocalModelCanvasPlan('nope' as never)).toThrow(/Unknown dimension preset/);
+    it('reuses the preset error from getPlatform', () => {
+        expect(() => getLocalModelCanvasPlan('nope' as never)).toThrow(/Unknown platform preset/);
         expect(() => getLocalModelCanvasPlan('16:9' as never)).toThrowError(
             'Preset "16:9" is now "youtube".',
         );

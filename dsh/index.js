@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const CLI_PATH = fileURLToPath(new URL('../dist/main.js', import.meta.url))
 const CLI_TIMEOUT_MS = 120_000
-// 与 src/dimensions.ts 的 DIMENSION_PRESET_NAMES 保持一致，dsh/index.test.js 会比对。
+// 与 src/platforms/index.ts 的 PLATFORM_NAMES 保持一致，dsh/index.test.js 会比对。
 const PRESETS = [
   'youtube',
   'bilibili',

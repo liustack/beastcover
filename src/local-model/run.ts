@@ -10,7 +10,7 @@ import {
 } from 'node:fs';
 import { dirname } from 'node:path';
 import type { LocalModelProvider } from '../config.ts';
-import type { DimensionPresetName } from '../dimensions.ts';
+import type { PlatformName } from '../platforms/index.ts';
 import { buildLocalModelArgv } from './argv.ts';
 import { getLocalModelCanvasPlan } from './canvas.ts';
 import { finishLocalModelImage } from './finish.ts';
@@ -30,7 +30,7 @@ export interface LocalModelRunInput {
     prompt: string;
     referencePaths: string[];
     outputPath: string;
-    preset: DimensionPresetName;
+    preset: PlatformName;
     timeoutMs?: number;
     spawn?: (request: LocalModelSpawnRequest) => Promise<void>;
     verbose?: boolean;

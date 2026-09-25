@@ -1,7 +1,7 @@
-import { type DimensionPresetName, getDimensionPreset } from '../dimensions.ts';
+import { getPlatform, type PlatformName } from '../platforms/index.ts';
 
 export interface LocalModelCanvasPlan {
-    preset: DimensionPresetName;
+    preset: PlatformName;
     generateWidth: number;
     generateHeight: number;
     cropWidth: number;
@@ -38,7 +38,7 @@ const PORTRAIT_9X16 = {
     outputHeight: 1920,
 } as const;
 
-const LOCAL_MODEL_CANVAS_PLANS: Record<DimensionPresetName, LocalModelCanvasPlan> = {
+const LOCAL_MODEL_CANVAS_PLANS: Record<PlatformName, LocalModelCanvasPlan> = {
     youtube: {
         preset: 'youtube',
         ...LANDSCAPE,
@@ -88,7 +88,7 @@ const LOCAL_MODEL_CANVAS_PLANS: Record<DimensionPresetName, LocalModelCanvasPlan
     tiktok: { preset: 'tiktok', ...PORTRAIT_9X16 },
 };
 
-export function getLocalModelCanvasPlan(preset: DimensionPresetName): LocalModelCanvasPlan {
-    getDimensionPreset(preset);
+export function getLocalModelCanvasPlan(preset: PlatformName): LocalModelCanvasPlan {
+    getPlatform(preset);
     return { ...LOCAL_MODEL_CANVAS_PLANS[preset] };
 }

@@ -1,4 +1,4 @@
-export const DIMENSION_PRESET_NAMES = [
+export const PLATFORM_NAMES = [
     'youtube',
     'bilibili',
     'wechat',
@@ -10,16 +10,16 @@ export const DIMENSION_PRESET_NAMES = [
     'tiktok',
 ] as const;
 
-export type DimensionPresetName = (typeof DIMENSION_PRESET_NAMES)[number];
+export type PlatformName = (typeof PLATFORM_NAMES)[number];
 
-export interface DimensionPreset {
-    name: DimensionPresetName;
+export interface Platform {
+    name: PlatformName;
     width: number;
     height: number;
     use: string;
 }
 
-const DIMENSION_PRESETS: Readonly<Record<DimensionPresetName, DimensionPreset>> = {
+const PLATFORMS: Readonly<Record<PlatformName, Platform>> = {
     youtube: { name: 'youtube', width: 1280, height: 720, use: 'YouTube thumbnail' },
     bilibili: { name: 'bilibili', width: 1146, height: 717, use: 'Bilibili video cover' },
     wechat: { name: 'wechat', width: 900, height: 383, use: 'WeChat article cover' },
@@ -44,17 +44,17 @@ const RETIRED_PRESET_HINTS: ReadonlyMap<string, string> = new Map([
     ['3:4', 'Preset "3:4" is now "xiaohongshu" or "instagram".'],
 ]);
 
-export function listDimensionPresets(): DimensionPreset[] {
-    return DIMENSION_PRESET_NAMES.map((name) => ({ ...DIMENSION_PRESETS[name] }));
+export function listPlatforms(): Platform[] {
+    return PLATFORM_NAMES.map((name) => ({ ...PLATFORMS[name] }));
 }
 
-export function getDimensionPreset(name: string): DimensionPreset {
-    if (!DIMENSION_PRESET_NAMES.includes(name as DimensionPresetName)) {
+export function getPlatform(name: string): Platform {
+    if (!PLATFORM_NAMES.includes(name as PlatformName)) {
         const hint = RETIRED_PRESET_HINTS.get(name);
         throw new Error(
-            hint ?? `Unknown dimension preset "${name}". Use ${DIMENSION_PRESET_NAMES.join(', ')}.`,
+            hint ?? `Unknown platform preset "${name}". Use ${PLATFORM_NAMES.join(', ')}.`,
         );
     }
 
-    return { ...DIMENSION_PRESETS[name as DimensionPresetName] };
+    return { ...PLATFORMS[name as PlatformName] };
 }

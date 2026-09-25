@@ -1,5 +1,5 @@
 import type { LocalModelProvider } from '../config.ts';
-import type { DimensionPresetName } from '../dimensions.ts';
+import type { PlatformName } from '../platforms/index.ts';
 import type { PaletteSlotValue, StyleDefinition } from '../styles/schema.ts';
 import { getLocalModelCanvasPlan } from './canvas.ts';
 
@@ -76,7 +76,7 @@ export function buildEnvelopePrompt(input: {
     subject: string;
     mergedPalette: Record<string, PaletteSlotValue>;
     outputPath: string;
-    preset: DimensionPresetName;
+    preset: PlatformName;
     provider: LocalModelProvider;
     referencePaths?: string[];
 }): string {

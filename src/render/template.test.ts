@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { describe, expect, it } from 'vitest';
-import { listDimensionPresets } from '../dimensions.ts';
+import { listPlatforms } from '../platforms/index.ts';
 import { createRenderTemplate, DEFAULT_RENDER_COLORS } from './template.ts';
 
 describe('built-in render template', () => {
@@ -76,7 +76,7 @@ describe('built-in render template', () => {
         const browser = await chromium.launch({ headless: true });
 
         try {
-            for (const preset of listDimensionPresets()) {
+            for (const preset of listPlatforms()) {
                 const page = await browser.newPage({
                     viewport: { width: preset.width, height: preset.height },
                 });

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
-import { DIMENSION_PRESET_NAMES } from '../dimensions.ts';
+import { PLATFORM_NAMES } from '../platforms/index.ts';
 import {
     cropLocalModelImage,
     finishLocalModelImage,
@@ -86,7 +86,7 @@ async function assertSolidGreen(source: string | Buffer): Promise<void> {
 }
 
 describe('local-model finish', () => {
-    for (const preset of DIMENSION_PRESET_NAMES) {
+    for (const preset of PLATFORM_NAMES) {
         it(`crops ${preset} to the centre box then resizes to production pixels`, async () => {
             const plan = getLocalModelCanvasPlan(preset);
             const sourcePath = join(tempDir('beastcover-finish-crop-'), 'source.png');

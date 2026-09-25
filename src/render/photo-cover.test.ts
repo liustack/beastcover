@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
-import { listDimensionPresets } from '../dimensions.ts';
+import { listPlatforms } from '../platforms/index.ts';
 import { createPhotoCoverTemplate, preparePhotoLayer } from './photo-cover.ts';
 
 const tempDirectories: string[] = [];
@@ -110,7 +110,7 @@ describe('photo cover', () => {
         }
 
         try {
-            for (const viewport of listDimensionPresets().map(({ width, height }) => ({
+            for (const viewport of listPlatforms().map(({ width, height }) => ({
                 width,
                 height,
             }))) {

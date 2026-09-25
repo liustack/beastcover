@@ -53,8 +53,9 @@ src/
 ├── config.test.ts
 ├── doctor.ts               # Offline Node, Chromium, config permission, and local CLI checks
 ├── doctor.test.ts
-├── dimensions.ts           # Platform size presets and retired ratio names
-├── dimensions.test.ts
+├── platforms/
+│   ├── index.ts            # Platform presets and retired ratio names
+│   └── index.test.ts
 ├── local-model/
 │   ├── index.ts            # Prompt envelope, argv, provider selection, spawn
 │   ├── prompt.ts           # Style prompt plus 主体, conditional palette replace

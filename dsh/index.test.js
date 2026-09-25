@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DIMENSION_PRESET_NAMES } from '../src/dimensions.ts'
+import { PLATFORM_NAMES } from '../src/platforms/index.ts'
 import { apply, inject, name } from './index.js'
 
 describe('dsh plugin', () => {
@@ -23,6 +23,6 @@ describe('dsh plugin', () => {
     const register = vi.fn()
     apply({ tools: { register } })
 
-    expect(register.mock.calls[0]?.[0].parameters.properties.preset.enum).toEqual([...DIMENSION_PRESET_NAMES])
+    expect(register.mock.calls[0]?.[0].parameters.properties.preset.enum).toEqual([...PLATFORM_NAMES])
   })
 })
