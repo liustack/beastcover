@@ -7,6 +7,7 @@ import {
     headlineMarkup,
     lineHeightFor,
     probeMarkup,
+    subjectRect,
     textAreaCss,
 } from './layout.ts';
 
@@ -27,7 +28,7 @@ export interface RenderTemplateOptions {
     subject?: SubjectLayer;
 }
 
-/** 人物层：贴着人物区底边居中，白描边加一层投影，压在标题上面 */
+/** 人物层：按 subjectRect 摆放（高的贴底站，扁的放进无遮挡区），白描边加一层投影，压在标题上面 */
 export function subjectMarkup(
     layout: CoverLayout,
     subject: SubjectLayer | undefined,
@@ -42,32 +43,22 @@ export function subjectMarkup(
     if (area === undefined) {
         throw new Error('A subject needs a layout with a subject area.');
     }
+    const rect = subjectRect(area, layout.clearArea, subject.width, subject.height);
     const stroke = Math.max(3, Math.round(Math.min(layout.width, layout.height) * 0.007));
     return {
         css: `
         .subject {
             position: absolute;
-            left: ${area.x}px;
-            top: ${area.y}px;
-            width: ${area.width}px;
-            height: ${area.height}px;
+            left: ${rect.x}px;
+            top: ${rect.y}px;
+            width: ${rect.width}px;
+            height: ${rect.height}px;
             z-index: 2;
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-        }
-
-        .subject img {
-            /* 撑满人物区再按比例收回，小图也会放大到版位尺寸，贴着底边居中。 */
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            object-position: 50% 100%;
             filter: drop-shadow(${stroke}px 0 0 #fff) drop-shadow(-${stroke}px 0 0 #fff)
                 drop-shadow(0 ${stroke}px 0 #fff) drop-shadow(0 -${stroke}px 0 #fff)
                 drop-shadow(0 ${stroke * 2}px ${stroke * 4}px rgba(0, 0, 0, 0.35));
         }`,
-        html: `<div class="subject" aria-hidden="true"><img src="${subject.dataUri}" alt=""></div>`,
+        html: `<img class="subject" src="${subject.dataUri}" alt="" aria-hidden="true">`,
     };
 }
 

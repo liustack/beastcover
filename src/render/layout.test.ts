@@ -10,6 +10,7 @@ import {
     customLayout,
     familyLayout,
     headlineClauses,
+    subjectRect,
     unbreakableRuns,
     withSubjectArea,
 } from './layout.ts';
@@ -73,6 +74,32 @@ describe('subject layouts', () => {
             expect(subject.y + subject.height).toBe(height);
             expect(subject.x + subject.width).toBeLessThanOrEqual(width);
         }
+    });
+});
+
+describe('subject placement', () => {
+    const area = { x: 86, y: 864, width: 842, height: 1056 };
+    // 小红书看得到 y 240 到 1680，抖音底部 380px 被界面挡住：无遮挡区到 1540 为止。
+    const clear = { x: 0, y: 240, width: 1080, height: 1300 };
+
+    it('stands a tall subject on the bottom edge of its area', () => {
+        const rect = subjectRect(area, clear, 500, 1000);
+        expect(rect.y + rect.height).toBe(area.y + area.height);
+        expect(rect.height).toBe(area.height);
+    });
+
+    it('centres a wide subject in the part of its area nothing covers', () => {
+        // 600x120 的扁物体：按宽度放满 842，高 168，放在 864 到 1540 之间的正中。
+        const rect = subjectRect(area, clear, 600, 120);
+        expect(rect.width).toBe(842);
+        expect(rect.height).toBe(168);
+        expect(rect.y).toBe(Math.round(864 + (1540 - 864 - 168) / 2));
+        expect(rect.y + rect.height).toBeLessThanOrEqual(1540);
+    });
+
+    it('falls back to the bottom edge when nothing is known about covered areas', () => {
+        const rect = subjectRect(area, undefined, 600, 120);
+        expect(rect.y + rect.height).toBe(area.y + area.height);
     });
 });
 

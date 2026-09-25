@@ -14,6 +14,8 @@ export interface CoverLayout {
     accentArea?: Rect;
     /** 本次要出的同族平台都看得见的区域（它们裁切框的交集），合成时填上 */
     visibleArea?: Rect;
+    /** 可见区域再去掉顶部和底部的平台界面栏，合成时填上 */
+    clearArea?: Rect;
 }
 
 // 人物版式：人物占一侧（竖版占下半），标题让到另一侧。人物压在最上层，所以两块不重叠，
@@ -95,6 +97,32 @@ export function customLayout(width: number, height: number): CoverLayout {
             height: height - marginY * 2,
         },
     };
+}
+
+/**
+ * 人物在人物区里的实际位置。高的主体（人）按高度放满、贴着底边站，身子被裁掉也没关系。
+ * 扁的主体（物件、横放的东西）按宽度放满，在人物区和无遮挡区的交集里垂直居中，
+ * 免得贴底以后整个掉出平台裁切框，或者被底部界面挡住。
+ */
+export function subjectRect(
+    area: Rect,
+    clear: Rect | undefined,
+    subjectWidth: number,
+    subjectHeight: number,
+): Rect {
+    const scale = Math.min(area.width / subjectWidth, area.height / subjectHeight);
+    const width = Math.round(subjectWidth * scale);
+    const height = Math.round(subjectHeight * scale);
+    const x = Math.round(area.x + (area.width - width) / 2);
+    const bottom = area.y + area.height;
+    const tall = height >= area.height - 1;
+    if (tall || clear === undefined) {
+        return { x, y: bottom - height, width, height };
+    }
+    const top = Math.max(area.y, clear.y);
+    const end = Math.min(bottom, clear.y + clear.height);
+    const y = end - top >= height ? top + (end - top - height) / 2 : bottom - height;
+    return { x, y: Math.round(y), width, height };
 }
 
 export function escapeHtml(value: string): string {

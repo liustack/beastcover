@@ -189,6 +189,34 @@ export function familyVisibleArea(family: FamilyName, platforms: readonly Platfo
     return crops.slice(1).reduce(intersect, { ...first });
 }
 
+// 横跨可见区域这么宽的遮挡才算顶栏或底栏（抖音右侧那一列按钮不算）。
+const BAR_WIDTH_SHARE = 0.8;
+
+/** 可见区域去掉请求平台顶部和底部的界面栏：抖音的顶栏和底栏、B 站底部的数据栏 */
+export function familyClearArea(family: FamilyName, platforms: readonly PlatformName[]): Rect {
+    const visible = familyVisibleArea(family, platforms);
+    let top = visible.y;
+    let bottom = visible.y + visible.height;
+    for (const name of platforms) {
+        const platform = getPlatform(name);
+        if (platform.family !== family) {
+            continue;
+        }
+        for (const covered of platform.covered) {
+            if (covered.width < visible.width * BAR_WIDTH_SHARE) {
+                continue;
+            }
+            const middle = covered.y + covered.height / 2;
+            if (middle < visible.y + visible.height / 2) {
+                top = Math.max(top, covered.y + covered.height);
+            } else {
+                bottom = Math.min(bottom, covered.y);
+            }
+        }
+    }
+    return { x: visible.x, y: top, width: visible.width, height: bottom - top };
+}
+
 /** 多个平台时每个文件名后面加平台名，只有一个平台时原样返回 */
 export function coverOutputPaths(
     outputPath: string,
@@ -226,12 +254,11 @@ export async function composeCovers(input: {
     for (const [familyName, members] of byFamily) {
         const family = getFamily(familyName);
         const base = familyLayout(familyName);
+        const names = members.map((member) => member.platform.name);
         const layout = {
             ...(input.template.layoutFor?.(base) ?? base),
-            visibleArea: familyVisibleArea(
-                familyName,
-                members.map((member) => member.platform.name),
-            ),
+            visibleArea: familyVisibleArea(familyName, names),
+            clearArea: familyClearArea(familyName, names),
         };
         const headline = await fitHeadline(
             input.renderer,
@@ -303,9 +330,11 @@ export async function composeCustomCover(input: {
     outputPath: string;
 }): Promise<{ outputPath: string; pixelWidth: number; pixelHeight: number }> {
     const base = customLayout(input.width, input.height);
+    const canvas = { x: 0, y: 0, width: input.width, height: input.height };
     const layout = {
         ...(input.template.layoutFor?.(base) ?? base),
-        visibleArea: { x: 0, y: 0, width: input.width, height: input.height },
+        visibleArea: canvas,
+        clearArea: canvas,
     };
     const headline = await fitHeadline(
         input.renderer,

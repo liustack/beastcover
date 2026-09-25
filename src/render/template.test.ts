@@ -172,11 +172,13 @@ describe('built-in render template', () => {
         };
         const html = createRenderTemplate('人物大字', { ...BASE, layout, subject });
 
-        expect(html).toContain('left: 1056px;');
+        // 10x20 的主体按高度放满 1140，宽 570，在人物区（x 1056 起，672 宽）里水平居中。
+        expect(html).toContain('left: 1107px;');
         expect(html).toContain('top: 60px;');
+        expect(html).toContain('width: 570px;');
         expect(html).toContain('z-index: 2;');
         expect(html).toContain('drop-shadow(8px 0 0 #fff)');
-        expect(html).toContain('<img src="data:image/png;base64,AAAA" alt="">');
+        expect(html).toContain('<img class="subject" src="data:image/png;base64,AAAA"');
         expect(html.indexOf('class="subject"')).toBeGreaterThan(html.indexOf('class="text-box"'));
 
         const photo = createPhotoCoverTemplate('人物大字', {

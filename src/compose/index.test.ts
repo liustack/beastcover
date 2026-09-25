@@ -16,6 +16,7 @@ import {
     composeCovers,
     composeCustomCover,
     coverOutputPaths,
+    familyClearArea,
     familyVisibleArea,
     focusCropWarnings,
     photoStretchWarnings,
@@ -423,6 +424,27 @@ describe('visible area', () => {
         expect(familyVisibleArea('portrait', ['douyin', 'xiaohongshu'])).toEqual(
             getPlatform('xiaohongshu').crop,
         );
+    });
+});
+
+describe('clear area', () => {
+    it('drops the app bars at the top and bottom of the visible area', () => {
+        expect(familyClearArea('portrait', ['douyin', 'xiaohongshu'])).toEqual({
+            x: 0,
+            y: 240,
+            width: 1080,
+            height: 1300,
+        });
+        expect(familyClearArea('portrait', ['xiaohongshu'])).toEqual(
+            getPlatform('xiaohongshu').crop,
+        );
+        // B 站底部的数据栏也算。
+        expect(familyClearArea('landscape', ['youtube', 'bilibili'])).toEqual({
+            x: 0,
+            y: 60,
+            width: 1920,
+            height: 996,
+        });
     });
 });
 
