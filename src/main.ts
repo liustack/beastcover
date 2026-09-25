@@ -48,6 +48,7 @@ import {
     resolveNamedRefFiles,
     selectLocalModelProvider,
 } from './local-model/index.ts';
+import { assertRedrawable, remixModeFor } from './local-model/remix.ts';
 import {
     type FamilyName,
     getPlatform,
@@ -538,6 +539,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         .option('--via <provider>', 'Local model CLI: codex, grok, or claude')
         .option('--ref <path>', 'Named reference image (repeatable)', collectRefs, [])
         .option(
+            '--remix <path>',
+            'local-model: one image to redraw in the project style, or two (person, then scene) to combine',
+            collectRefs,
+            [],
+        )
+        .option(
             '--photo <ref-or-path>',
             'Stock photo ref (pexels:<id>, openverse:<id>) or a local image',
         )
@@ -570,6 +577,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     guides?: boolean;
                     via?: string;
                     ref?: string[];
+                    remix?: string[];
                     photo?: string;
                     subject?: string;
                     template?: string;
@@ -595,6 +603,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     throw new Error('--photo is only valid with --source stock.');
                 }
                 const templateName = checkTemplateOptions(options, effective.source);
+                if ((options.remix ?? []).length > 0 && effective.source !== 'local-model') {
+                    throw new Error('--remix works with --source local-model.');
+                }
                 if (
                     (options.look !== undefined || options.fit !== undefined) &&
                     effective.source !== 'stock'
@@ -773,7 +784,16 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         configVia: effective.localModel?.via,
                         lookup: runtime.lookupCommand,
                     });
-                    const refs = resolveNamedRefFiles(options.ref ?? [], runtime.cwd);
+                    // 二创的图排在最前面，提示词里的「参考图 1、2」就是它们。
+                    const remixPaths = resolveNamedRefFiles(options.remix ?? [], runtime.cwd);
+                    const remix = remixPaths.length > 0 ? remixModeFor(remixPaths) : undefined;
+                    for (const path of remixPaths) {
+                        assertRedrawable(path);
+                    }
+                    const refs = [
+                        ...remixPaths,
+                        ...resolveNamedRefFiles(options.ref ?? [], runtime.cwd),
+                    ];
                     if (refs.length > 0) {
                         runtime.stdout.write(
                             `References sent to ${selected.provider}:\n${refs
@@ -805,6 +825,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             family,
                             provider: selected.provider,
                             referencePaths: refs,
+                            ...(remix ? { remix } : {}),
                         });
                         await runtime.runLocalModel({
                             provider: selected.provider,
@@ -830,6 +851,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 via: selected.provider,
                                 preset: target.platform,
                                 output: target.outputPath,
+                                ...(remix ? { remix: { mode: remix, paths: remixPaths } } : {}),
                             });
                             const plan = getLocalModelCanvasPlan(target.platform);
                             lines.push(
@@ -843,6 +865,13 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         [
                             ...lines,
                             `Backend: ${selected.provider}`,
+                            ...(remix === 'restyle'
+                                ? [`Remix: redrew ${remixPaths[0]} in the project style`]
+                                : remix === 'place'
+                                  ? [
+                                        `Remix: put the person from ${remixPaths[0]} into ${remixPaths[1]}`,
+                                    ]
+                                  : []),
                             'Privacy: local-model used your own CLI. We did not handle the data.',
                             '',
                         ].join('\n'),

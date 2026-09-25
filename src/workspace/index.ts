@@ -61,6 +61,8 @@ export interface HistoryRecord {
     catalogPalette?: Record<string, PaletteSlotValue>;
     photo?: HistoryPhoto;
     subject?: HistorySubject;
+    /** local-model 二创：模式和交给模型的图 */
+    remix?: { mode: 'restyle' | 'place'; paths: string[] };
 }
 
 export interface HistorySubject {
@@ -422,6 +424,20 @@ function parseHistoryRecord(filePath: string, lineNumber: number, raw: string): 
     if (parsed.photo !== undefined) {
         record.photo = parseHistoryPhoto(filePath, lineNumber, parsed.photo);
     }
+    if (parsed.remix !== undefined) {
+        const remix = parsed.remix;
+        if (
+            !isPlainObject(remix) ||
+            (remix.mode !== 'restyle' && remix.mode !== 'place') ||
+            !Array.isArray(remix.paths) ||
+            remix.paths.some((path) => typeof path !== 'string')
+        ) {
+            throw new Error(
+                `${filePath}:${lineNumber} has invalid "remix". Expected a "mode" of restyle or place and a list of "paths".`,
+            );
+        }
+        record.remix = { mode: remix.mode, paths: remix.paths as string[] };
+    }
     if (parsed.subject !== undefined) {
         const subject = parsed.subject;
         if (
@@ -483,6 +499,14 @@ export function appendHistory(workspaceDir: string, record: HistoryRecord): stri
             : {}),
         ...(record.subject
             ? { subject: { ...record.subject, path: relative(workspaceDir, record.subject.path) } }
+            : {}),
+        ...(record.remix
+            ? {
+                  remix: {
+                      ...record.remix,
+                      paths: record.remix.paths.map((path) => relative(workspaceDir, path)),
+                  },
+              }
             : {}),
     };
     appendFileSync(filePath, `${JSON.stringify(stored)}\n`, { encoding: 'utf8' });

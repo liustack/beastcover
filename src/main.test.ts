@@ -1277,6 +1277,77 @@ describe('BeastCover CLI', () => {
         }
     });
 
+    it('sends remix images first and records the remix', async () => {
+        const cwd = tempDir('beastcover-cli-remix-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        writeFileSync(join(cwd, 'me.jpg'), 'jpg');
+        writeFileSync(join(cwd, 'beach.jpg'), 'jpg');
+        writeFileSync(join(cwd, 'extra.png'), 'png');
+        const runLocalModel = mockRunLocalModel();
+        const stdout = captureOutput();
+
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                '我在海边',
+                '--source',
+                'local-model',
+                '--via',
+                'codex',
+                '--remix',
+                'me.jpg',
+                '--remix',
+                'beach.jpg',
+                '--ref',
+                'extra.png',
+                '--preset',
+                'youtube',
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                runLocalModel,
+                lookupCommand: () => '/fake/codex',
+                stdout,
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        const input = runLocalModel.mock.calls[0]?.[0];
+        expect(input?.referencePaths).toEqual([
+            join(cwd, 'me.jpg'),
+            join(cwd, 'beach.jpg'),
+            join(cwd, 'extra.png'),
+        ]);
+        expect(input?.prompt).toContain('把参考图 1 里的人放进参考图 2 的场景');
+        expect(stdout.chunks.join('')).toContain(
+            `Remix: put the person from ${join(cwd, 'me.jpg')} into ${join(cwd, 'beach.jpg')}`,
+        );
+        const history = JSON.parse(
+            readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8').trim(),
+        );
+        expect(history.remix).toEqual({
+            mode: 'place',
+            paths: [join('..', 'me.jpg'), join('..', 'beach.jpg')],
+        });
+
+        const stderr = captureOutput();
+        const renderCode = await runCli(
+            ['node', 'beastcover', 'gen', 'A', '--source', 'render', '--remix', 'me.jpg'],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: mockRender().open,
+                stdout: captureOutput(),
+                stderr,
+            },
+        );
+        expect(renderCode).toBe(1);
+        expect(stderr.chunks.join('')).toBe('Error: --remix works with --source local-model.\n');
+    });
+
     it('names the platform preset when an old ratio preset is passed', async () => {
         const renderHtml = mockRender();
         const stderr = captureOutput();

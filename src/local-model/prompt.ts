@@ -71,6 +71,14 @@ export function buildStyleAndSubjectPrompt(input: {
     return `${stylePromptWithPalette(input.style, input.mergedPalette)}\n\n主体：${input.subject}`;
 }
 
+export type RemixMode = 'restyle' | 'place';
+
+// 二创的要求并进主体那一句，画风原文照旧一字不改。
+const REMIX_INSTRUCTIONS: Readonly<Record<RemixMode, string>> = {
+    restyle: '以参考图 1 为底稿重绘：保留构图、人物姿态和脸部特征，只换成上面的画风',
+    place: '把参考图 1 里的人放进参考图 2 的场景：这个人的脸、发型和衣着保持不变，光线和色调跟着场景走',
+};
+
 export function buildEnvelopePrompt(input: {
     style: StyleDefinition;
     subject: string;
@@ -80,14 +88,17 @@ export function buildEnvelopePrompt(input: {
     family: FamilyName;
     provider: LocalModelProvider;
     referencePaths?: string[];
+    /** 二创：restyle 按画风重绘参考图 1，place 把参考图 1 的人放进参考图 2 的场景 */
+    remix?: RemixMode;
 }): string {
     const plan = getLocalModelGeneratePlan(input.family);
     const body = stylePromptWithPalette(input.style, input.mergedPalette);
     const size = formatSizePhrase(plan.generateWidth, plan.generateHeight);
+    const remix = input.remix === undefined ? '' : `。${REMIX_INSTRUCTIONS[input.remix]}`;
     const subjectLine =
         plan.subjectSuffix === undefined
-            ? `主体：${input.subject}`
-            : `主体：${input.subject}。${plan.subjectSuffix}`;
+            ? `主体：${input.subject}${remix}`
+            : `主体：${input.subject}${remix}。${plan.subjectSuffix}`;
     const envelope =
         `Use your image generation capability to create one image and save it to ${input.generatedPath}. ` +
         `${body}. ${subjectLine}. ${size}. ${ENVELOPE_CLOSER}`;

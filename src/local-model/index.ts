@@ -6,6 +6,7 @@ export {
     finishLocalModelImage,
     resizeLocalModelImage,
 } from './finish.ts';
+export type { RemixMode } from './prompt.ts';
 export {
     buildEnvelopePrompt,
     buildStyleAndSubjectPrompt,
