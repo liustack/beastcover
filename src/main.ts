@@ -363,12 +363,15 @@ function coverLines(covers: readonly WrittenCover[], scale: number): string[] {
     ]);
 }
 
+/** 转正后的尺寸：EXIF 方向 5 到 8 表示要转 90 度，宽高互换 */
 async function imageSize(path: string): Promise<{ width: number; height: number }> {
     const meta = await sharp(path, { failOn: 'error' }).metadata();
     if (meta.width === undefined || meta.height === undefined) {
         throw new Error(`Cannot read the image size of ${path}.`);
     }
-    return { width: meta.width, height: meta.height };
+    return (meta.orientation ?? 1) >= 5
+        ? { width: meta.height, height: meta.width }
+        : { width: meta.width, height: meta.height };
 }
 
 function stretchLines(photo: { width: number; height: number }, render: EffectiveRender): string[] {

@@ -214,6 +214,21 @@ describe('macOS Vision cutout', () => {
                 readdirSync(binDir).filter((name) => name.startsWith('vision-tool-')),
             ).toHaveLength(1);
 
+            // 存成横图、EXIF 标 6（顺时针转 90 度显示）：摆正后椭圆是横的，抠出来也应该是横的。
+            const oriented = join(directory, 'oriented.jpg');
+            await sharp(
+                Buffer.from(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><rect width="600" height="400" fill="#fff"/><ellipse cx="300" cy="200" rx="90" ry="160" fill="#c82828"/></svg>',
+                ),
+            )
+                .jpeg()
+                .withMetadata({ orientation: 6 })
+                .toFile(oriented);
+            const orientedOut = join(directory, 'oriented-cutout.png');
+            await cutout(oriented, orientedOut);
+            const orientedMeta = await sharp(orientedOut).metadata();
+            expect((orientedMeta.width ?? 0) > (orientedMeta.height ?? 0)).toBe(true);
+
             const blank = join(directory, 'blank.png');
             await sharp({
                 create: { width: 200, height: 200, channels: 3, background: '#ffffff' },

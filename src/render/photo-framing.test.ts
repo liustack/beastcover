@@ -171,6 +171,27 @@ describe('photo framing', () => {
     });
 
     it.runIf(process.platform === 'darwin' && lookupCommandOnPath('swiftc') !== undefined)(
+        'reports Vision focus in the upright frame of an EXIF-rotated photo',
+        async () => {
+            // 横图的左边有红块，EXIF 标 6 摆正后红块跑到上方，主体中心的 y 应该偏小、x 居中。
+            const path = join(tempDir(), 'rotated.jpg');
+            await sharp(await photoWithRedBlock())
+                .jpeg()
+                .withMetadata({ orientation: 6 })
+                .toFile(path);
+            const focus = await visionFocus(path, {
+                platform: 'darwin',
+                binDir: join(tempDir(), 'bin'),
+                lookupCommand: lookupCommandOnPath,
+            });
+            expect(focus?.y ?? 1).toBeLessThan(0.4);
+            expect(focus?.x ?? 0).toBeGreaterThan(0.3);
+            expect(focus?.x ?? 1).toBeLessThan(0.7);
+        },
+        240_000,
+    );
+
+    it.runIf(process.platform === 'darwin' && lookupCommandOnPath('swiftc') !== undefined)(
         'finds the salient block with macOS Vision',
         async () => {
             const focus = await visionFocus(await photoWithRedBlock(), {

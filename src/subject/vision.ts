@@ -6,14 +6,16 @@ import {
     chmodSync,
     existsSync,
     mkdirSync,
+    mkdtempSync,
     readdirSync,
     renameSync,
     rmSync,
     writeFileSync,
 } from 'node:fs';
-import { release } from 'node:os';
+import { release, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import sharp from 'sharp';
 
 const execFileAsync = promisify(execFile);
 
@@ -192,7 +194,29 @@ async function ensureTool(runtime: VisionCutoutRuntime): Promise<string> {
     return path;
 }
 
-/** 把 inputPath 里的主体抠成透明 PNG 写到 outputPath */
+/**
+ * Vision 读的是原始像素，不看 EXIF 方向，而合成时 sharp 会按方向把照片转正。
+ * 带方向标记的图先转正成一份临时 PNG 再交给 Vision，两边就在同一个坐标系里。
+ */
+async function withUprightImage<T>(
+    inputPath: string,
+    run: (uprightPath: string) => Promise<T>,
+): Promise<T> {
+    const meta = await sharp(inputPath, { failOn: 'error' }).metadata();
+    if (meta.orientation === undefined || meta.orientation === 1) {
+        return run(inputPath);
+    }
+    const directory = mkdtempSync(join(tmpdir(), 'beastcover-upright-'));
+    try {
+        const upright = join(directory, 'upright.png');
+        await sharp(inputPath, { failOn: 'error' }).rotate().png().toFile(upright);
+        return await run(upright);
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+}
+
+/** 把 inputPath 里的主体抠成透明 PNG 写到 outputPath，方向按 EXIF 转正 */
 export async function visionCutout(
     inputPath: string,
     outputPath: string,
@@ -204,9 +228,11 @@ export async function visionCutout(
     }
     const tool = await ensureTool(runtime);
     try {
-        await execFileAsync(tool, ['cutout', inputPath, outputPath], {
-            timeout: CUTOUT_TIMEOUT_MS,
-        });
+        await withUprightImage(inputPath, (upright) =>
+            execFileAsync(tool, ['cutout', upright, outputPath], {
+                timeout: CUTOUT_TIMEOUT_MS,
+            }),
+        );
     } catch (error) {
         const failure = error as { code?: number; stderr?: string };
         if (failure.code === NO_SUBJECT_EXIT) {
@@ -228,7 +254,7 @@ export interface PhotoFocus {
     source: 'faces' | 'saliency' | 'attention';
 }
 
-/** 用 Vision 找照片主体：有人脸按人脸，没有按显著区域。什么都没找到返回 undefined */
+/** 用 Vision 找照片主体：有人脸按人脸，没有按显著区域，坐标按转正后的照片算。什么都没找到返回 undefined */
 export async function visionFocus(
     inputPath: string,
     runtime: VisionCutoutRuntime,
@@ -239,9 +265,9 @@ export async function visionFocus(
     }
     const tool = await ensureTool(runtime);
     try {
-        const { stdout } = await execFileAsync(tool, ['focus', inputPath], {
-            timeout: CUTOUT_TIMEOUT_MS,
-        });
+        const { stdout } = await withUprightImage(inputPath, (upright) =>
+            execFileAsync(tool, ['focus', upright], { timeout: CUTOUT_TIMEOUT_MS }),
+        );
         const parsed = JSON.parse(stdout) as Record<string, unknown>;
         const numbers = ['x', 'y', 'width', 'height'].map((key) => parsed[key]);
         if (
