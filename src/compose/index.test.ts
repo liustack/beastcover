@@ -285,6 +285,26 @@ describe('cover composition', () => {
         expect(g).toBeLessThan(170);
     });
 
+    it('lets a one-line headline fill a shallow band but keeps four characters across', async () => {
+        const { renderer } = fakeRenderer(() => 120);
+        const band = { x: 192, y: 792, width: 1392, height: 216 };
+        const tall = { x: 86, y: 384, width: 842, height: 1152 };
+        for (const [area, expected] of [
+            [band, 194],
+            [tall, 211],
+        ] as const) {
+            vi.mocked(renderer.fitText).mockClear();
+            await composeCovers({
+                renderer,
+                template: { ...template, layoutFor: (layout) => ({ ...layout, textArea: area }) },
+                text: 'Band',
+                targets: [{ platform: 'youtube', outputPath: join(tempDir(), 'band.png') }],
+                scale: 1,
+            });
+            expect(vi.mocked(renderer.fitText).mock.calls[0]?.[0].maxPx).toBe(expected);
+        }
+    });
+
     it('renders a custom canvas directly without a family master', async () => {
         const directory = tempDir();
         const { renderer, screenshots } = fakeRenderer(() => 40);

@@ -57,8 +57,10 @@ export const MIN_FEED_HEADLINE_PX = 10;
 // 母版至少按 2 倍渲染，裁切后缩到平台像素，公众号这类小幅放大也不会发虚。
 const MIN_MASTER_SCALE = 2;
 
+// 字号上限：一行字最多占区域高度的九成，宽度上最少放得下四个字。
+// 高的区域由宽度那条限住，两三个字不会大得离谱。扁长的标题带由高度那条限住，一行字可以撑满。
 function maxHeadlinePx(area: Rect): number {
-    return Math.max(MIN_HEADLINE_PX, Math.round(Math.min(area.height * 0.45, area.width * 0.25)));
+    return Math.max(MIN_HEADLINE_PX, Math.round(Math.min(area.height * 0.9, area.width * 0.25)));
 }
 
 // 整句不拆时字号不小于自由换行的 70%，就按标点换行，否则优先保证字大。
