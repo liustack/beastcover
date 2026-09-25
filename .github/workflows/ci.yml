@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS also runs the Vision cutout tests, which compile the Swift tool.
+        # Windows is left out until the suite has been checked there.
+        os: [ubuntu-latest, macos-latest]
+        # 22.19 is the floor in package.json engines. Pin it exactly: a bare
+        # "22" resolves to the latest 22.x and would hide a newer-than-floor API.
+        node-version: ['22.19', 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The render tests screenshot real pages, so they need the Chromium this
+      # Playwright version expects, plus its system libraries and fonts on Linux.
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
