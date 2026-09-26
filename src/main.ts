@@ -123,7 +123,7 @@ export interface CliRuntime {
     cwd: string;
     configPath: string;
     openRenderer: () => Promise<CoverRenderer>;
-    doctor: () => DoctorReport;
+    doctor: () => Promise<DoctorReport>;
     now: () => Date;
     setExitCode: (code: number) => void;
     lookupCommand: (name: string) => string | undefined;
@@ -1202,8 +1202,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
     program
         .command('doctor')
         .description('Run offline checks for Node.js, Chromium, and config permissions')
-        .action(() => {
-            const report = runtime.doctor();
+        .action(async () => {
+            const report = await runtime.doctor();
             runtime.stdout.write(`${renderDoctorReport(report)}\n`);
             if (!report.healthy) {
                 runtime.setExitCode(1);

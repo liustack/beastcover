@@ -6,6 +6,8 @@ import { renderDoctorReport, runDoctor } from './doctor.ts';
 
 const tempDirectories: string[] = [];
 
+const startsChromium = async () => ({ close: async () => undefined });
+
 afterEach(() => {
     for (const directory of tempDirectories.splice(0)) {
         rmSync(directory, { recursive: true, force: true });
@@ -13,17 +15,41 @@ afterEach(() => {
 });
 
 describe('offline doctor', () => {
-    it('checks Node, the Chromium executable, private config permissions, and local-model CLIs', () => {
+    it('checks Chromium by starting it the way render does', async () => {
+        const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-chromium-'));
+        tempDirectories.push(directory);
+        const configPath = join(directory, 'config.json');
+        writeFileSync(configPath, '{}\n', { mode: 0o600 });
+        const missing = await runDoctor({
+            nodeVersion: '22.19.0',
+            configPath,
+            platform: 'darwin',
+            lookupCommand: () => undefined,
+            launchChromium: async () => {
+                throw new Error(
+                    "browserType.launch: Executable doesn't exist at /x/chrome-headless-shell\nmore lines",
+                );
+            },
+        });
+        expect(missing.healthy).toBe(false);
+        expect(missing.checks.find((check) => check.id === 'chromium')).toEqual({
+            id: 'chromium',
+            label: 'Chromium',
+            status: 'error',
+            message:
+                "Headless Chromium does not start: browserType.launch: Executable doesn't exist at /x/chrome-headless-shell Run npx --yes --package @liustack/beastcover playwright install chromium.",
+        });
+    });
+
+    it('checks Node, the Chromium executable, private config permissions, and local-model CLIs', async () => {
         const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-'));
         tempDirectories.push(directory);
-        const chromiumPath = join(directory, 'chromium');
         const configPath = join(directory, 'config.json');
-        writeFileSync(chromiumPath, '#!/bin/sh\n', { mode: 0o700 });
         writeFileSync(configPath, '{}\n', { mode: 0o600 });
 
-        const healthy = runDoctor({
+        const healthy = await runDoctor({
             nodeVersion: '22.19.0',
-            chromiumPath,
+            launchChromium: startsChromium,
             configPath,
             platform: 'darwin',
             osRelease: '24.3.0',
@@ -62,9 +88,9 @@ describe('offline doctor', () => {
         expect(renderDoctorReport(healthy)).toContain('BeastCover doctor: healthy');
 
         chmodSync(configPath, 0o644);
-        const unsafe = runDoctor({
+        const unsafe = await runDoctor({
             nodeVersion: '22.19.0',
-            chromiumPath,
+            launchChromium: startsChromium,
             configPath,
             platform: 'darwin',
             lookupCommand: () => undefined,
@@ -79,14 +105,14 @@ describe('offline doctor', () => {
         });
     });
 
-    it('reports the macOS cutout as ok when swiftc is on PATH and as a warning elsewhere', () => {
+    it('reports the macOS cutout as ok when swiftc is on PATH and as a warning elsewhere', async () => {
         const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-cutout-'));
         tempDirectories.push(directory);
         const configPath = join(directory, 'config.json');
         writeFileSync(configPath, '{}\n', { mode: 0o600 });
-        const base = { nodeVersion: '22.19.0', chromiumPath: configPath, configPath };
+        const base = { nodeVersion: '22.19.0', launchChromium: startsChromium, configPath };
 
-        const mac = runDoctor({
+        const mac = await runDoctor({
             ...base,
             platform: 'darwin',
             osRelease: '24.3.0',
@@ -97,7 +123,11 @@ describe('offline doctor', () => {
             message: '--subject photos are cut out on this machine with macOS Vision.',
         });
 
-        const linux = runDoctor({ ...base, platform: 'linux', lookupCommand: () => '/usr/bin/x' });
+        const linux = await runDoctor({
+            ...base,
+            platform: 'linux',
+            lookupCommand: () => '/usr/bin/x',
+        });
         expect(linux.checks.find((check) => check.id === 'cutout')).toMatchObject({
             status: 'warn',
             message:
@@ -105,17 +135,15 @@ describe('offline doctor', () => {
         });
     });
 
-    it('reports installed local-model CLIs as ok without changing health', () => {
+    it('reports installed local-model CLIs as ok without changing health', async () => {
         const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-cli-'));
         tempDirectories.push(directory);
-        const chromiumPath = join(directory, 'chromium');
         const configPath = join(directory, 'config.json');
-        writeFileSync(chromiumPath, '#!/bin/sh\n', { mode: 0o700 });
         writeFileSync(configPath, '{}\n', { mode: 0o600 });
 
-        const report = runDoctor({
+        const report = await runDoctor({
             nodeVersion: '22.19.0',
-            chromiumPath,
+            launchChromium: startsChromium,
             configPath,
             platform: 'darwin',
             lookupCommand: (name) => `/usr/bin/${name}`,

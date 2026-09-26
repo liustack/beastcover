@@ -1,4 +1,4 @@
-import { accessSync, constants, type Stats, statSync } from 'node:fs';
+import { type Stats, statSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { chromium } from 'playwright';
 import { CONFIG_PATH, LOCAL_MODEL_PROVIDERS, type LocalModelProvider } from './config.ts';
@@ -22,7 +22,8 @@ export interface DoctorReport {
 
 export interface DoctorOptions {
     nodeVersion?: string;
-    chromiumPath?: string;
+    /** 按 render 的方式启动一次 Chromium 再关掉。测试里注入，不开真浏览器 */
+    launchChromium?: () => Promise<{ close(): Promise<void> }>;
     configPath?: string;
     platform?: NodeJS.Platform;
     osRelease?: string;
@@ -57,25 +58,29 @@ function nodeVersionCheck(version: string): DoctorCheck {
     };
 }
 
-function chromiumCheck(executablePath: string, platform: NodeJS.Platform): DoctorCheck {
+/**
+ * render 以 headless 启动 Chromium，Playwright 这时用的是 chromium_headless_shell，不是
+ * chromium.executablePath() 指的完整版。所以不查某个路径，照 render 的方式真启动一次。
+ */
+async function chromiumCheck(
+    launch: () => Promise<{ close(): Promise<void> }>,
+): Promise<DoctorCheck> {
     try {
-        const info = statSync(executablePath);
-        if (!info.isFile()) {
-            throw new Error('the resolved path is not a file');
-        }
-        accessSync(executablePath, platform === 'win32' ? constants.F_OK : constants.X_OK);
+        const browser = await launch();
+        await browser.close();
         return {
             id: 'chromium',
             label: 'Chromium',
             status: 'ok',
-            message: `Installed at ${executablePath}.`,
+            message: 'Headless Chromium starts the way render starts it.',
         };
-    } catch {
+    } catch (error) {
+        const reason = (error instanceof Error ? error.message : String(error)).split('\n')[0];
         return {
             id: 'chromium',
             label: 'Chromium',
             status: 'error',
-            message: `Not available at ${executablePath}. Run npx --yes --package @liustack/beastcover playwright install chromium.`,
+            message: `Headless Chromium does not start: ${reason} Run npx --yes --package @liustack/beastcover playwright install chromium.`,
         };
     }
 }
@@ -212,12 +217,12 @@ function cutoutCheck(
     };
 }
 
-export function runDoctor(options: DoctorOptions = {}): DoctorReport {
+export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorReport> {
     const platform = options.platform ?? process.platform;
     const lookup = options.lookupCommand ?? lookupCommandOnPath;
     const checks = [
         nodeVersionCheck(options.nodeVersion ?? process.versions.node),
-        chromiumCheck(options.chromiumPath ?? chromium.executablePath(), platform),
+        await chromiumCheck(options.launchChromium ?? (() => chromium.launch({ headless: true }))),
         configPermissionsCheck(options.configPath ?? CONFIG_PATH, platform),
         cutoutCheck(platform, options.osRelease, options.configPath ?? CONFIG_PATH, lookup),
         ...LOCAL_MODEL_PROVIDERS.map((name) => localModelCliCheck(name, lookup)),
