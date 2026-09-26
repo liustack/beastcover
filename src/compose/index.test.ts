@@ -508,10 +508,11 @@ describe('headline length check', () => {
         ).toContain(long);
         // 中英混排按两种上限折算：6 个汉字加 2 个词已经超了。
         expect(headlineLengthWarnings('用 GPT 和 Claude 写完周报', ['youtube'])).toHaveLength(1);
-        // B 站、小红书等没有证据支持同样的上限，不提醒。
+        // B 站上限是 10 个字：9 个字不提醒，14 个字提醒。小红书没有数据，不提醒。
+        expect(headlineLengthWarnings('三个月后墙变成这样', ['bilibili'])).toEqual([]);
         expect(
             headlineLengthWarnings('月薪三千到三万，我只做对了一件事', ['bilibili', 'xiaohongshu']),
-        ).toEqual([]);
+        ).toEqual([expect.stringContaining('Headline: this is long for a Bilibili cover.')]);
     });
 });
 

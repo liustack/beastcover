@@ -56,7 +56,7 @@ Platforms with close ratios share one master and are cropped from it: WeChat fro
 
 Add `--guides` to draw the headline area (green), the focus area (orange), and app UI (red) on each cover when the user wants to check a layout. Do not hand guided covers over as finished files.
 
-When the output has a `Thumbnail:` line, the headline will be hard to read in that platform's feed. Offer a shorter headline. A `Headline:` line means the text is long for a YouTube thumbnail: offer a hook of a few words for the cover and keep the full line for the video title. A `Cover:` line means a YouTube thumbnail has only text: offer to add the user's photo with `--subject`, a stock photo, or a product shot, because breakout thumbnails almost always show a subject.
+When the output has a `Thumbnail:` line, the headline will be hard to read in that platform's feed. Offer a shorter headline. A `Headline:` line means the text is long for a YouTube thumbnail or a Bilibili cover: offer a hook of a few words (about 10 Chinese characters at most on Bilibili) for the cover and keep the full line for the video title. On Bilibili only about one in five breakout covers repeats the title word for word; most rewrite it shorter and louder. A `Cover:` line means a YouTube thumbnail has only text: offer to add the user's photo with `--subject`, a stock photo, or a product shot, because breakout thumbnails almost always show a subject.
 
 Old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone. The CLI names the replacement if one is used.
 
