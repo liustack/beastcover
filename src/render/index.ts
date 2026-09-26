@@ -64,8 +64,13 @@ async function withPage<T>(
     }
 }
 
+/** render 启动 Chromium 的唯一方式，doctor 用同一个函数检查，两边不会各说各话 */
+export function launchChromium(): Promise<Browser> {
+    return chromium.launch({ headless: true });
+}
+
 export async function openRenderer(): Promise<CoverRenderer> {
-    const browser = await chromium.launch({ headless: true });
+    const browser = await launchChromium();
 
     return {
         async fitText(request) {

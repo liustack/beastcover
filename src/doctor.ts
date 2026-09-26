@@ -1,7 +1,7 @@
 import { type Stats, statSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
-import { chromium } from 'playwright';
 import { CONFIG_PATH, LOCAL_MODEL_PROVIDERS, type LocalModelProvider } from './config.ts';
+import { launchChromium } from './render/index.ts';
 import { visionCutoutUnavailable } from './subject/vision.ts';
 
 const MINIMUM_NODE_VERSION = { major: 22, minor: 19, patch: 0 } as const;
@@ -60,7 +60,7 @@ function nodeVersionCheck(version: string): DoctorCheck {
 
 /**
  * render 以 headless 启动 Chromium，Playwright 这时用的是 chromium_headless_shell，不是
- * chromium.executablePath() 指的完整版。所以不查某个路径，照 render 的方式真启动一次。
+ * chromium.executablePath() 指的完整版。所以不查某个路径，用 render 自己的启动函数真启动一次。
  */
 async function chromiumCheck(
     launch: () => Promise<{ close(): Promise<void> }>,
@@ -222,7 +222,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
     const lookup = options.lookupCommand ?? lookupCommandOnPath;
     const checks = [
         nodeVersionCheck(options.nodeVersion ?? process.versions.node),
-        await chromiumCheck(options.launchChromium ?? (() => chromium.launch({ headless: true }))),
+        await chromiumCheck(options.launchChromium ?? launchChromium),
         configPermissionsCheck(options.configPath ?? CONFIG_PATH, platform),
         cutoutCheck(platform, options.osRelease, options.configPath ?? CONFIG_PATH, lookup),
         ...LOCAL_MODEL_PROVIDERS.map((name) => localModelCliCheck(name, lookup)),
