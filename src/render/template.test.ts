@@ -1,10 +1,16 @@
 import { chromium } from 'playwright';
 import { describe, expect, it } from 'vitest';
 import { FAMILY_NAMES } from '../platforms/index.ts';
+import { coverPalette } from '../workspace/index.ts';
 import { openRenderer } from './index.ts';
 import { customLayout, familyLayout, withSubjectArea } from './layout.ts';
 import { createPhotoCoverTemplate } from './photo-cover.ts';
-import { createRenderTemplate, DEFAULT_RENDER_COLORS } from './template.ts';
+import { createRenderTemplate, DEFAULT_RENDER_COLORS, resolveRenderColors } from './template.ts';
+
+/** 一个没改过配色的项目会拿到的调色板 */
+function paletteOf(style: string) {
+    return coverPalette({ name: 'demo', style, palette: {}, composition: '' });
+}
 
 const BASE = { layout: customLayout(640, 360), headline: { fontPx: 48, keepClauses: false } };
 
@@ -29,8 +35,8 @@ describe('built-in render template', () => {
         const withHex = createRenderTemplate('Accent override', {
             ...BASE,
             palette: {
-                paper: { prompt: '暖白', css: '#f4efe6' },
-                accent: { prompt: '低饱和暖黄', css: '#ff4d00' },
+                paper: { prompt: '暖白', css: '#f4efe6', cover: 'paper' },
+                accent: { prompt: '低饱和暖黄', css: '#ff4d00', cover: 'accent' },
             },
         });
         expect(withHex).toContain('--cover-accent: #ff4d00');
@@ -44,7 +50,7 @@ describe('built-in render template', () => {
         const descriptive = createRenderTemplate('Descriptive palette', {
             ...BASE,
             palette: {
-                paper: { prompt: '纯白', css: '#ffffff' },
+                paper: { prompt: '纯白', css: '#ffffff', cover: 'paper' },
                 fill: { prompt: '雾蓝加陶土色', css: '#8a9aaa' },
             },
         });
@@ -53,6 +59,25 @@ describe('built-in render template', () => {
         expect(descriptive).toContain('纯白');
         expect(descriptive).toContain('雾蓝加陶土色');
         expect(descriptive).not.toMatch(/--cover-(paper|ink|accent):\s*纯白/);
+    });
+
+    it('takes cover colors from the slot marked for each use, whatever the slot is called', () => {
+        // 孔版的强调色槽叫 spot，油彩的叫 colors，按槽名猜会退回默认蓝。
+        for (const [style, accent] of [
+            ['risograph_editorial', '#ff48a5'],
+            ['luminous_impasto', '#3a8fd4'],
+            ['conceptual_colorfield', '#d4a574'],
+            ['torn_paper_editorial_collage', '#c46a38'],
+        ] as const) {
+            const palette = paletteOf(style);
+            expect(resolveRenderColors(palette).accent, style).toBe(accent);
+        }
+        expect(() =>
+            resolveRenderColors({
+                a: { prompt: '粉', css: '#ff48a5', cover: 'accent' },
+                b: { prompt: '蓝', css: '#1746d1', cover: 'accent' },
+            }),
+        ).toThrowError('Palette slots "a", "b" are all marked as the cover accent.');
     });
 
     it('throws when a provided css value is not a CSS color', () => {

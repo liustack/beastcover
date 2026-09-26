@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { createWorkspace, loadStylePack, mergedPalette } from '../workspace/index.ts';
+import { coverPalette, createWorkspace, loadStylePack } from '../workspace/index.ts';
 import { type CoverRenderer, openRenderer, TextDoesNotFitError } from './index.ts';
 import { customLayout, type Headline } from './layout.ts';
 import { createRenderTemplate } from './template.ts';
@@ -165,7 +165,7 @@ describe('cover renderer', () => {
                 html: createRenderTemplate('Palette css probe', {
                     layout,
                     headline: headline(24),
-                    palette: mergedPalette(loadStylePack(created.path)),
+                    palette: coverPalette(loadStylePack(created.path)),
                 }),
                 width: 320,
                 height: 180,

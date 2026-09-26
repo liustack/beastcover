@@ -19,14 +19,14 @@ export const tornPaperEditorialCollage = {
 配色（本式推荐，可按当篇文章或产品主题替换）：米白、暖灰、深蓝灰、墨绿、浅卡其、灰黑，一处橙色或赭色作强调。`,
     avoid: ['文字', '手账风', '儿童手工课拼贴', '卡通', '立体投影和厚重阴影', '把画面塞满'],
     paletteSlots: [
-        { name: 'paper', role: '纸底', prompt: '米白', css: '#f2eadc' },
+        { name: 'paper', role: '纸底', prompt: '米白', css: '#f2eadc', cover: 'paper' },
         {
             name: 'neutrals',
             role: '中性色',
             prompt: '暖灰、深蓝灰、墨绿、浅卡其、灰黑',
             css: '#8a8580',
         },
-        { name: 'accent', role: '强调色', prompt: '橙色或赭色', css: '#c46a38' },
+        { name: 'accent', role: '强调色', prompt: '橙色或赭色', css: '#c46a38', cover: 'accent' },
     ],
     composition:
         '2026-08-23 实测定案：拼贴纸片铺满整幅，不留纸边。构图仍要简洁，靠色块本身的留白呼吸，不靠画面外的白边。',

@@ -1,13 +1,19 @@
+/** 渲染封面时这个颜色当什么用：底色、字色或强调色 */
+export type CoverColor = 'paper' | 'ink' | 'accent';
+
 export interface PaletteSlot {
     name: string;
     role: string;
     prompt: string;
     css: string;
+    /** 渲染封面时的用途。风格自己的槽名各不相同，封面按这个字段取色，不按槽名猜 */
+    cover?: CoverColor;
 }
 
 export interface PaletteSlotValue {
     prompt: string;
     css: string;
+    cover?: CoverColor;
 }
 
 export interface PaletteSlotOverride {

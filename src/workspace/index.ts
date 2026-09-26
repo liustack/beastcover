@@ -525,3 +525,15 @@ export function mergedPalette(pack: StylePack): Record<string, PaletteSlotValue>
     }
     return palette;
 }
+
+/** 交给封面模板的调色板：项目配色加上风格声明的封面用途（底色、字色、强调色） */
+export function coverPalette(pack: StylePack): Record<string, PaletteSlotValue> {
+    const palette = mergedPalette(pack);
+    for (const slot of loadStyle(pack.style).paletteSlots) {
+        const value = palette[slot.name];
+        if (slot.cover !== undefined && value !== undefined) {
+            palette[slot.name] = { ...value, cover: slot.cover };
+        }
+    }
+    return palette;
+}

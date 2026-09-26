@@ -98,6 +98,7 @@ import {
 import { type PhotoFocus, visionFocus } from './subject/vision.ts';
 import {
     appendHistory,
+    coverPalette,
     createWorkspace,
     defaultWorkspaceOutputPath,
     findWorkspace,
@@ -644,6 +645,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     const workspaceDir = findWorkspace(runtime.cwd);
                     const pack = workspaceDir ? loadStylePack(workspaceDir) : undefined;
                     const palette = pack ? mergedPalette(pack) : undefined;
+                    const renderPalette = pack ? coverPalette(pack) : undefined;
                     const now = runtime.now();
                     const stockRuntime: StockRuntime = {
                         config: fileConfig.stock,
@@ -693,7 +695,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         : workspaceDir
                           ? defaultWorkspaceOutputPath(workspaceDir, now)
                           : effective.output;
-                    const paletteOption = palette ? { palette } : {};
+                    const paletteOption = renderPalette ? { palette: renderPalette } : {};
                     const photoSize = await imageSize(photoPath);
                     const focus = await runtime.photoFocus(photoPath);
                     const subject = await loadSubject(runtime, workspaceDir, options.subject);
@@ -908,6 +910,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const workspaceDir = findWorkspace(runtime.cwd);
                 const pack = workspaceDir ? loadStylePack(workspaceDir) : undefined;
                 const palette = pack ? mergedPalette(pack) : undefined;
+                const renderPalette = pack ? coverPalette(pack) : undefined;
                 const now = runtime.now();
                 const outputPath = flags.output
                     ? flags.output
@@ -917,7 +920,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const subject = await loadSubject(runtime, workspaceDir, options.subject);
                 const template = textCoverTemplate({
                     text,
-                    ...(palette ? { palette } : {}),
+                    ...(renderPalette ? { palette: renderPalette } : {}),
                     ...templateRequest(runtime, templateName, options, subject),
                 });
                 const written = await writeCovers(

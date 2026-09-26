@@ -1,4 +1,4 @@
-import { type PaletteSlotValue, parseCssColorValue } from '../styles/schema.ts';
+import { type CoverColor, type PaletteSlotValue, parseCssColorValue } from '../styles/schema.ts';
 import type { SubjectLayer } from '../subject/index.ts';
 import {
     type CoverLayout,
@@ -114,15 +114,19 @@ export function headlineCss(layout: CoverLayout, headline: Headline, text: strin
         }`;
 }
 
-function slotCss(palette: Record<string, PaletteSlotValue>, name: string): string | undefined {
-    const slot = palette[name];
-    if (slot === undefined) {
-        return undefined;
+/** 按槽上声明的封面用途取色。没有哪个槽声明这个用途时用内置颜色 */
+function coverColor(
+    palette: Record<string, PaletteSlotValue>,
+    use: CoverColor,
+): string | undefined {
+    const slots = Object.entries(palette).filter(([, slot]) => slot.cover === use);
+    if (slots.length > 1) {
+        throw new Error(
+            `Palette slots ${slots.map(([name]) => `"${name}"`).join(', ')} are all marked as the cover ${use}.`,
+        );
     }
-    if (typeof slot.css !== 'string') {
-        throw new Error(`Palette slot "${name}" is missing a CSS color.`);
-    }
-    return parseCssColorValue(slot.css);
+    const [entry] = slots;
+    return entry === undefined ? undefined : parseCssColorValue(entry[1].css);
 }
 
 export function resolveRenderColors(palette: Record<string, PaletteSlotValue> = {}): {
@@ -130,16 +134,11 @@ export function resolveRenderColors(palette: Record<string, PaletteSlotValue> = 
     ink: string;
     accent: string;
 } {
+    validatePaletteCss(palette);
     return {
-        paper:
-            slotCss(palette, 'paper') ??
-            slotCss(palette, 'background') ??
-            DEFAULT_RENDER_COLORS.paper,
-        ink: slotCss(palette, 'dark') ?? DEFAULT_RENDER_COLORS.ink,
-        accent:
-            slotCss(palette, 'accent') ??
-            slotCss(palette, 'primary') ??
-            DEFAULT_RENDER_COLORS.accent,
+        paper: coverColor(palette, 'paper') ?? DEFAULT_RENDER_COLORS.paper,
+        ink: coverColor(palette, 'ink') ?? DEFAULT_RENDER_COLORS.ink,
+        accent: coverColor(palette, 'accent') ?? DEFAULT_RENDER_COLORS.accent,
     };
 }
 

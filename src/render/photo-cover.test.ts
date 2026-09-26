@@ -49,8 +49,8 @@ describe('photo cover', () => {
             ...BASE,
             photo: { dataUri: 'data:image/jpeg;base64,AAAA', sourceWidth: 1, sourceHeight: 1 },
             palette: {
-                paper: { prompt: '暖白', css: '#f4efe6' },
-                accent: { prompt: '暖色', css: '#c9895a' },
+                paper: { prompt: '暖白', css: '#f4efe6', cover: 'paper' },
+                accent: { prompt: '暖色', css: '#c9895a', cover: 'accent' },
             },
         });
 

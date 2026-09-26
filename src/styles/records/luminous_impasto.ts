@@ -20,6 +20,7 @@ export const luminousImpasto = {
             role: '油彩',
             prompt: '清澈蓝、青绿、翠绿、暖黄、橙、珊瑚粉、厚白',
             css: '#3a8fd4',
+            cover: 'accent',
         },
     ],
     composition: '画面要满，四角都有内容，不留空白纸面。',

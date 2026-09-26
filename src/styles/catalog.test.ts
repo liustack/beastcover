@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_STYLES } from './catalog.ts';
 import { listStyles, loadStyle } from './loader.ts';
-import { parseCssColorValue } from './schema.ts';
+import { type PaletteSlot, parseCssColorValue } from './schema.ts';
 
 const STYLE_ORDER = [
     'risograph_editorial',
@@ -49,6 +49,20 @@ describe('built-in style catalog', () => {
             for (const slot of style.paletteSlots) {
                 expect(parseCssColorValue(slot.css), `${style.name}.${slot.name}`).toBe(slot.css);
             }
+        }
+    });
+
+    it('marks exactly one accent and at most one slot per cover use in every style', () => {
+        for (const style of BUILT_IN_STYLES) {
+            const slots: readonly PaletteSlot[] = style.paletteSlots;
+            for (const use of ['paper', 'ink', 'accent'] as const) {
+                const marked = slots.filter((slot) => slot.cover === use);
+                expect(marked.length, `${style.name} ${use}`).toBeLessThanOrEqual(1);
+            }
+            expect(
+                slots.filter((slot) => slot.cover === 'accent'),
+                style.name,
+            ).toHaveLength(1);
         }
     });
 

@@ -31,12 +31,13 @@ export const risographEditorial = {
         '泛黄发暗的纸',
     ],
     paletteSlots: [
-        { name: 'paper', role: '纸底', prompt: '亮白', css: '#ffffff' },
+        { name: 'paper', role: '纸底', prompt: '亮白', css: '#ffffff', cover: 'paper' },
         {
             name: 'spot',
             role: '专色',
             prompt: '荧光粉加靛蓝、或亮蓝加荧光橙、或青加荧光粉加黄',
             css: '#ff48a5',
+            cover: 'accent',
         },
     ],
     composition: '2026-08-23 实测定案：孔版色块出血到画面边缘，不留纸边。',
