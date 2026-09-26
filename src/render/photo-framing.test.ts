@@ -244,7 +244,7 @@ describe('photo framing', () => {
     it('puts the photo focus away from the headline in each family', () => {
         expect(photoFocusTarget(familyLayout('landscape'), false)).toEqual({ x: 0.7, y: 0.3 });
         expect(photoFocusTarget(familyLayout('portrait'), false)).toEqual({ x: 0.5, y: 0.3 });
-        expect(photoFocusTarget(familyLayout('ultrawide'), false)).toEqual({ x: 0.64, y: 0.45 });
+        expect(photoFocusTarget(familyLayout('ultrawide'), false)).toEqual({ x: 0.7, y: 0.3 });
         expect(photoFocusTarget(customLayout(900, 1600), false)).toEqual({ x: 0.5, y: 0.3 });
         expect(photoFocusTarget(familyLayout('landscape'), true)).toEqual({ x: 0.5, y: 0.5 });
     });
@@ -256,16 +256,12 @@ describe('photo framing', () => {
             landscape.textArea.y + landscape.textArea.height,
         );
         expect(lowered.textArea.height).toBe(Math.round(landscape.textArea.height / 2));
-        const ultrawide = familyLayout('ultrawide');
-        const band = photoTextLayout(ultrawide).textArea;
-        expect(band.x).toBe(ultrawide.textArea.x);
-        expect(band.width).toBe(Math.round(ultrawide.textArea.width * 0.55));
-        expect(photoFocusTarget(ultrawide, false).x * ultrawide.width).toBeGreaterThan(
-            band.x + band.width,
-        );
-        // 主体目标点落在标题区上方。
-        const target = photoFocusTarget(landscape, false);
-        expect(target.y * landscape.height).toBeLessThan(lowered.textArea.y);
+        // 主体目标点落在标题区上方，超宽也一样。
+        for (const family of [landscape, familyLayout('ultrawide')]) {
+            expect(photoFocusTarget(family, false).y * family.height).toBeLessThan(
+                photoTextLayout(family).textArea.y,
+            );
+        }
         const portrait = familyLayout('portrait');
         expect(photoFocusTarget(portrait, false).y * portrait.height).toBeLessThan(
             photoTextLayout(portrait).textArea.y,

@@ -71,9 +71,10 @@ const FAMILIES: Readonly<Record<FamilyName, PlatformFamily>> = {
         name: 'ultrawide',
         masterWidth: 1920,
         masterHeight: 768,
-        // 标题放在正中方块里：公众号转发卡片只露正中的方块
-        textArea: { x: 576, y: 72, width: 768, height: 624 },
-        focusArea: { x: 576, y: 0, width: 768, height: 768 },
+        // 公众号裁切框（58 到 1863）左右各让 96px。公众号的 1:1 转发图由作者在后台自己选位置，
+        // 标题不用挤在正中方块里。
+        textArea: { x: 154, y: 72, width: 1612, height: 624 },
+        focusArea: { x: 154, y: 48, width: 1612, height: 672 },
     },
 };
 

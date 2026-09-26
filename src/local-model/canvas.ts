@@ -25,7 +25,7 @@ export interface LocalModelCanvasPlan {
 // 生成尺寸只用模型原生的 1536x1024 与 1024x1536，再从正中裁出各平台的比例。
 const LOCAL_MODEL_GENERATE_PLANS: Record<FamilyName, LocalModelGeneratePlan> = {
     landscape: { family: 'landscape', generateWidth: 1536, generateHeight: 1024 },
-    // X 裁掉上下各五分之一，公众号转发卡片只留正中方块。
+    // X 裁掉上下各五分之一，公众号再裁掉左右各一窄条。
     ultrawide: {
         family: 'ultrawide',
         generateWidth: 1536,

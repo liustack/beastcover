@@ -78,12 +78,11 @@ describe('platform presets', () => {
         }
     });
 
-    it('keeps the wechat share square and the title band inside the wechat crop', () => {
+    it('uses almost the whole width of the wechat crop for the title', () => {
         const ultrawide = getFamily('ultrawide');
-        expect(ultrawide.focusArea).toEqual({ x: 576, y: 0, width: 768, height: 768 });
-        expect(inside(ultrawide.focusArea, getPlatform('wechat').crop)).toBe(true);
-        expect(inside(ultrawide.textArea, ultrawide.focusArea)).toBe(true);
-        expect(inside(ultrawide.textArea, getPlatform('wechat').crop)).toBe(true);
+        const wechat = getPlatform('wechat').crop;
+        expect(inside(ultrawide.textArea, wechat)).toBe(true);
+        expect(ultrawide.textArea.width / wechat.width).toBeGreaterThan(0.85);
     });
 
     it('returns copies so callers cannot mutate the tables', () => {

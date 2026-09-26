@@ -238,7 +238,6 @@ export async function preparePhotoLayer(
 
 // 照片封面的标题只占标题区的下面这一截，上面留给照片主体。
 const PHOTO_TEXT_SHARE = 0.5;
-const ULTRAWIDE_TEXT_SHARE = 0.55;
 
 /**
  * 前后对比的一个面板：平台只看得到面板的一截时（公众号只露出接缝两边），清晰照片按主体
@@ -289,25 +288,17 @@ export async function preparePanelLayer(
 }
 
 /**
- * 照片封面给照片主体让位：横版、竖版和自定义画布的标题压在标题区下半。
- * 超宽的标题区本来就是一条扁带，标题改占左边一截，右边留给主体。
+ * 照片封面给照片主体让位：每一族和自定义画布的标题都压在标题区下半。
  */
 export function photoTextLayout(layout: CoverLayout): CoverLayout {
-    if (layout.family === 'ultrawide') {
-        const area = layout.textArea;
-        return {
-            ...layout,
-            textArea: { ...area, width: Math.round(area.width * ULTRAWIDE_TEXT_SHARE) },
-        };
-    }
     const area = layout.textArea;
     const height = Math.round(area.height * PHOTO_TEXT_SHARE);
     return { ...layout, textArea: { ...area, y: area.y + area.height - height, height } };
 }
 
 /**
- * 照片主体放哪才不和标题抢：标题在标题区下半的左边，横版把主体放右上，竖版放上方，
- * 超宽放在公众号裁切框的右半边。有人物时人物已经占了一侧，照片主体居中。
+ * 照片主体放哪才不和标题抢：标题在标题区下半，横版和超宽把主体放右上，竖版放上方。
+ * 有人物时人物已经占了一侧，照片主体居中。
  */
 export function photoFocusTarget(
     layout: CoverLayout,
@@ -318,12 +309,10 @@ export function photoFocusTarget(
     }
     switch (layout.family) {
         case 'landscape':
+        case 'ultrawide':
             return { x: 0.7, y: 0.3 };
         case 'portrait':
             return { x: 0.5, y: 0.3 };
-        // 标题占正中方块左边，主体放右边：正中方块是 576 到 1344。
-        case 'ultrawide':
-            return { x: 0.64, y: 0.45 };
         default:
             return layout.width >= layout.height ? { x: 0.7, y: 0.3 } : { x: 0.5, y: 0.3 };
     }

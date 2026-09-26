@@ -63,14 +63,14 @@ const COMPARE_LAYOUTS: Readonly<Record<FamilyName, { textArea: Rect; panels: Com
         },
     },
     ultrawide: {
-        textArea: { x: 576, y: 472, width: 768, height: 192 },
+        textArea: { x: 154, y: 472, width: 1612, height: 192 },
         panels: {
             split: 'columns',
             first: { x: 0, y: 0, width: 960, height: 768 },
             second: { x: 960, y: 0, width: 960, height: 768 },
             arrow: { x: 960, y: 256, size: 208 },
             labels: [
-                { x: 576, y: 72 },
+                { x: 154, y: 72 },
                 { x: 1000, y: 72 },
             ],
             labelPx: 60,

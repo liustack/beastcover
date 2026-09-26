@@ -43,7 +43,7 @@ beastcover styles risograph_editorial
 
 | Preset | Pixels | Keep in mind |
 | :-- | :-- | :-- |
-| `wechat` | 900×383 | The share card crops the centre square. Keep the subject and headline there |
+| `wechat` | 900×383 | The 1:1 share card is a crop the author picks in the WeChat editor, so point it at the subject or the headline |
 | `x` | 1600×640 | 5:2. The WeChat cover is cut from its middle, so keep key content off the far left and right edges |
 | `youtube` | 1280×720 | The duration badge covers the bottom-right corner |
 | `bilibili` | 1146×717 | Keep key content in the middle |

@@ -29,11 +29,10 @@ const SUBJECT_LAYOUTS: Readonly<Record<FamilyName, { textArea: Rect; subjectArea
         textArea: { x: 86, y: 384, width: 842, height: 480 },
         subjectArea: { x: 86, y: 864, width: 842, height: 1056 },
     },
-    // 标题占正中方块的左边，人物从方块右边伸出去，公众号转发卡片的正中方块里
-    // 能看到整句标题和半个人物。
+    // 和横版一样标题在左、人物在右，都在公众号裁切框里。
     ultrawide: {
-        textArea: { x: 576, y: 72, width: 464, height: 624 },
-        subjectArea: { x: 1040, y: 0, width: 528, height: 768 },
+        textArea: { x: 154, y: 72, width: 860, height: 624 },
+        subjectArea: { x: 1014, y: 0, width: 752, height: 768 },
     },
 };
 
