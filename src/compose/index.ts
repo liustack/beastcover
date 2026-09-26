@@ -20,7 +20,7 @@ import {
     headlineClauses,
     unbreakableRuns,
 } from '../render/layout.ts';
-import { framePhoto, photoFocusTarget, visibleFraction } from '../render/photo-cover.ts';
+import { calloutGeometry, calloutLayout, framedFocusBox } from '../render/photo-cover.ts';
 import type { PhotoFocus } from '../subject/vision.ts';
 import { guidesOverlay } from './guides.ts';
 
@@ -193,26 +193,31 @@ export function familyVisibleArea(family: FamilyName, platforms: readonly Platfo
 // 横跨可见区域这么宽的遮挡才算顶栏或底栏（抖音右侧那一列按钮不算）。
 const BAR_WIDTH_SHARE = 0.8;
 
+/** 本次要出的这一族平台的界面遮挡区（时长角标、点赞栏、按钮列），母版坐标 */
+export function familyCoveredAreas(
+    family: FamilyName,
+    platforms: readonly PlatformName[],
+): readonly Rect[] {
+    return platforms
+        .map((name) => getPlatform(name))
+        .filter((platform) => platform.family === family)
+        .flatMap((platform) => platform.covered);
+}
+
 /** 可见区域去掉请求平台顶部和底部的界面栏：抖音的顶栏和底栏、B 站底部的数据栏 */
 export function familyClearArea(family: FamilyName, platforms: readonly PlatformName[]): Rect {
     const visible = familyVisibleArea(family, platforms);
     let top = visible.y;
     let bottom = visible.y + visible.height;
-    for (const name of platforms) {
-        const platform = getPlatform(name);
-        if (platform.family !== family) {
+    for (const covered of familyCoveredAreas(family, platforms)) {
+        if (covered.width < visible.width * BAR_WIDTH_SHARE) {
             continue;
         }
-        for (const covered of platform.covered) {
-            if (covered.width < visible.width * BAR_WIDTH_SHARE) {
-                continue;
-            }
-            const middle = covered.y + covered.height / 2;
-            if (middle < visible.y + visible.height / 2) {
-                top = Math.max(top, covered.y + covered.height);
-            } else {
-                bottom = Math.min(bottom, covered.y);
-            }
+        const middle = covered.y + covered.height / 2;
+        if (middle < visible.y + visible.height / 2) {
+            top = Math.max(top, covered.y + covered.height);
+        } else {
+            bottom = Math.min(bottom, covered.y);
         }
     }
     return { x: visible.x, y: top, width: visible.width, height: bottom - top };
@@ -256,11 +261,14 @@ export async function composeCovers(input: {
         const family = getFamily(familyName);
         const base = familyLayout(familyName);
         const names = members.map((member) => member.platform.name);
-        const layout = {
-            ...(input.template.layoutFor?.(base) ?? base),
+        // 模板改版式时已经知道可见区和遮挡区（圈注要按它们算主体落点），改完再盖一遍，模板丢不掉。
+        const areas = {
             visibleArea: familyVisibleArea(familyName, names),
             clearArea: familyClearArea(familyName, names),
+            coveredAreas: familyCoveredAreas(familyName, names),
         };
+        const framed = { ...base, ...areas };
+        const layout = { ...(input.template.layoutFor?.(framed) ?? framed), ...areas };
         const headline = await fitHeadline(
             input.renderer,
             input.template,
@@ -332,11 +340,9 @@ export async function composeCustomCover(input: {
 }): Promise<{ outputPath: string; pixelWidth: number; pixelHeight: number }> {
     const base = customLayout(input.width, input.height);
     const canvas = { x: 0, y: 0, width: input.width, height: input.height };
-    const layout = {
-        ...(input.template.layoutFor?.(base) ?? base),
-        visibleArea: canvas,
-        clearArea: canvas,
-    };
+    const areas = { visibleArea: canvas, clearArea: canvas, coveredAreas: [] };
+    const framed = { ...base, ...areas };
+    const layout = { ...(input.template.layoutFor?.(framed) ?? framed), ...areas };
     const headline = await fitHeadline(
         input.renderer,
         input.template,
@@ -436,6 +442,49 @@ export function photoStretchWarnings(
 }
 
 /**
+ * --callout 在开浏览器前先算一遍：照片在每族母版（或自定义画布）里摆好以后，红圈和箭头
+ * 能不能避开标题、裁切边和平台界面。检查、出图用的是同一个 framePhoto 和 calloutGeometry，
+ * 过了检查就一定画得出来，过不了就在写任何文件之前报错，不留半套成品。
+ */
+export function checkCallout(
+    photo: { width: number; height: number },
+    focus: PhotoFocus,
+    platforms: readonly PlatformName[],
+    canvas?: { width: number; height: number },
+): void {
+    const check = (base: CoverLayout, where: string) => {
+        const layout = calloutLayout(base, photo, focus, where);
+        calloutGeometry(layout, framedFocusBox(photo, focus, layout, false), where);
+    };
+    if (canvas !== undefined) {
+        const area = { x: 0, y: 0, width: canvas.width, height: canvas.height };
+        check(
+            {
+                ...customLayout(canvas.width, canvas.height),
+                visibleArea: area,
+                clearArea: area,
+                coveredAreas: [],
+            },
+            `the ${canvas.width}x${canvas.height} canvas`,
+        );
+        return;
+    }
+    const families = [...new Set(platforms.map((name) => getPlatform(name).family))];
+    for (const familyName of families) {
+        const members = platforms.filter((name) => getPlatform(name).family === familyName);
+        check(
+            {
+                ...familyLayout(familyName),
+                visibleArea: familyVisibleArea(familyName, members),
+                clearArea: familyClearArea(familyName, members),
+                coveredAreas: familyCoveredAreas(familyName, members),
+            },
+            members.join(', '),
+        );
+    }
+}
+
+/**
  * 按实际构图算：照片在每族母版里摆好以后，主体范围落不进哪些平台的裁切框，就提示改用 --fit extend。
  * 构图和出图用的是同一个 framePhoto，提示和成品不会对不上。
  */
@@ -447,26 +496,18 @@ export function focusCropWarnings(
 ): string[] {
     const families = [...new Set(platforms.map((name) => getPlatform(name).family))];
     return families.flatMap((familyName) => {
-        const family = getFamily(familyName);
-        const canvas = { width: family.masterWidth, height: family.masterHeight };
         const members = platforms.filter((name) => getPlatform(name).family === familyName);
-        const visible = familyVisibleArea(familyName, members);
-        const layout = { ...familyLayout(familyName), visibleArea: visible };
-        const framed = framePhoto({
-            source: photo,
-            canvas,
-            focus,
-            target: photoFocusTarget(layout, hasSubject),
-            visible: visibleFraction(layout),
-        });
+        const layout = {
+            ...familyLayout(familyName),
+            visibleArea: familyVisibleArea(familyName, members),
+        };
         // 主体范围换到母版坐标。
-        const kx = canvas.width / framed.width;
-        const ky = canvas.height / framed.height;
+        const fraction = framedFocusBox(photo, focus, layout, hasSubject);
         const box: Rect = {
-            x: ((focus.x - focus.width / 2) * photo.width - framed.left) * kx,
-            y: ((focus.y - focus.height / 2) * photo.height - framed.top) * ky,
-            width: focus.width * photo.width * kx,
-            height: focus.height * photo.height * ky,
+            x: fraction.x * layout.width,
+            y: fraction.y * layout.height,
+            width: fraction.width * layout.width,
+            height: fraction.height * layout.height,
         };
         const cut = members.filter((name) => {
             const crop = getPlatform(name).crop;

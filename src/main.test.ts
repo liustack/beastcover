@@ -11,10 +11,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { familyClearArea, familyCoveredAreas, familyVisibleArea } from './compose/index.ts';
 import { setConfigValue } from './config.ts';
 import type { LocalModelRunInput } from './local-model/index.ts';
 import { createProgram, runCli } from './main.ts';
 import type { CoverRenderer, RenderPage } from './render/index.ts';
+import { familyLayout } from './render/layout.ts';
+import { calloutGeometry, calloutLayout, framedFocusBox } from './render/photo-cover.ts';
 import { loadStyle } from './styles/loader.ts';
 
 const tempDirectories: string[] = [];
@@ -986,6 +989,184 @@ describe('BeastCover CLI', () => {
             expect(exitCode).toBe(1);
             expect(stderr.chunks.join('')).toBe(message);
         }
+    });
+
+    it('checks the callout against every requested cover before opening the renderer', async () => {
+        const cwd = tempDir('beastcover-cli-callout-check-');
+        writeFileSync(join(cwd, 'wide.png'), await testPngBytes(400, 200));
+        const renderHtml = mockRender();
+        const stderr = captureOutput();
+        // 主体在照片正中，占三成：横版母版挪不动，红圈下面剩不下标题带。
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Look',
+                '--source',
+                'stock',
+                '--photo',
+                'wide.png',
+                '--callout',
+                '--preset',
+                'youtube,douyin',
+                '--output',
+                join(cwd, 'look.png'),
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                photoFocus: centreFocus,
+                stdout: captureOutput(),
+                stderr,
+            },
+        );
+        expect(exitCode).toBe(1);
+        expect(stderr.chunks.join('')).toBe(
+            'Error: --callout cannot mark the subject on youtube: the red circle would leave no room for the headline below it. Pick a photo where the subject is small and has empty space around it, or drop --callout.\n',
+        );
+        expect(renderHtml.open).not.toHaveBeenCalled();
+        expect(readdirSync(cwd).filter((name) => name.startsWith('look'))).toEqual([]);
+    });
+
+    it('draws the callout on every requested cover when the subject is small and clear', async () => {
+        const cwd = tempDir('beastcover-cli-callout-draw-');
+        writeFileSync(join(cwd, 'wide.png'), await testPngBytes(400, 200));
+        const renderHtml = mockRender();
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Look',
+                '--source',
+                'stock',
+                '--photo',
+                'wide.png',
+                '--callout',
+                '--preset',
+                'youtube,douyin',
+                '--output',
+                join(cwd, 'look.png'),
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                photoFocus: async () => ({
+                    x: 0.75,
+                    y: 0.35,
+                    width: 0.1,
+                    height: 0.1,
+                    source: 'saliency' as const,
+                }),
+                stdout: captureOutput(),
+            },
+        );
+        expect(exitCode).toBe(0);
+        expect(renderHtml).toHaveBeenCalledTimes(2);
+        for (const call of renderHtml.mock.calls) {
+            expect(call[0].html).toContain('<svg class="callout"');
+        }
+        expect(existsSync(join(cwd, 'look-youtube.png'))).toBe(true);
+        expect(existsSync(join(cwd, 'look-douyin.png'))).toBe(true);
+    });
+
+    it('stops before the browser when a later family cannot take the callout, leaving no files', async () => {
+        const cwd = tempDir('beastcover-cli-callout-family-');
+        writeFileSync(join(cwd, 'wide.png'), await testPngBytes(400, 200));
+        const renderHtml = mockRender();
+        const stderr = captureOutput();
+        // 横版放得下，竖版把 15% 宽的主体撑到一半宽，圈不了。
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Look',
+                '--source',
+                'stock',
+                '--photo',
+                'wide.png',
+                '--callout',
+                '--preset',
+                'youtube,xiaohongshu',
+                '--output',
+                join(cwd, 'look.png'),
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                photoFocus: async () => ({
+                    x: 0.75,
+                    y: 0.35,
+                    width: 0.15,
+                    height: 0.1,
+                    source: 'saliency' as const,
+                }),
+                stdout: captureOutput(),
+                stderr,
+            },
+        );
+        expect(exitCode).toBe(1);
+        expect(stderr.chunks.join('')).toMatch(
+            /^Error: --callout on xiaohongshu: the subject covers/,
+        );
+        expect(renderHtml.open).not.toHaveBeenCalled();
+        expect(readdirSync(cwd).filter((name) => name.startsWith('look'))).toEqual([]);
+    });
+
+    it('draws the ring where the pre-render check put it, even at a scale that rounds the master', async () => {
+        const cwd = tempDir('beastcover-cli-callout-scale-');
+        // 1200x641 进 16:10 母版的窗口宽度落在 1025.6 附近，2.02 倍的像素画布比例会把它推到另一边。
+        writeFileSync(join(cwd, 'wide.png'), await testPngBytes(1200, 641));
+        const focus = { x: 0.62, y: 0.41, width: 0.13, height: 0.14, source: 'saliency' as const };
+        const renderHtml = mockRender();
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Look',
+                '--source',
+                'stock',
+                '--photo',
+                'wide.png',
+                '--callout',
+                '--preset',
+                'youtube',
+                '--scale',
+                '2.02',
+                '--output',
+                join(cwd, 'look.png'),
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                photoFocus: async () => focus,
+                stdout: captureOutput(),
+            },
+        );
+        expect(exitCode).toBe(0);
+        const html = renderHtml.mock.calls[0]?.[0].html ?? '';
+        const drawn = /<ellipse cx="([\d.]+)" cy="([\d.]+)" rx="([\d.]+)" ry="([\d.]+)"/.exec(html);
+        expect(drawn).not.toBeNull();
+        const base = {
+            ...familyLayout('landscape'),
+            visibleArea: familyVisibleArea('landscape', ['youtube']),
+            clearArea: familyClearArea('landscape', ['youtube']),
+            coveredAreas: familyCoveredAreas('landscape', ['youtube']),
+        };
+        const photo = { width: 1200, height: 641 };
+        const layout = calloutLayout(base, photo, focus);
+        const expected = calloutGeometry(layout, framedFocusBox(photo, focus, layout, false));
+        expect(Number(drawn?.[1])).toBeCloseTo(expected.cx, 6);
+        expect(Number(drawn?.[2])).toBeCloseTo(expected.cy, 6);
+        expect(Number(drawn?.[3])).toBeCloseTo(expected.rx, 6);
+        expect(Number(drawn?.[4])).toBeCloseTo(expected.ry, 6);
     });
 
     it('refuses --hook where no cover would show it', async () => {

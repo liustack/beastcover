@@ -12,6 +12,7 @@ import {
     type ComposedCover,
     type CoverTarget,
     type CoverTemplate,
+    checkCallout,
     composeCovers,
     composeCustomCover,
     coverOutputPaths,
@@ -66,6 +67,7 @@ import type { CoverLayout } from './render/layout.ts';
 import { withSubjectArea } from './render/layout.ts';
 import { validateNumber } from './render/number.ts';
 import {
+    calloutLayout,
     createPhotoCoverTemplate,
     PHOTO_LOOKS,
     type PhotoFit,
@@ -782,9 +784,21 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     const paletteOption = renderPalette ? { palette: renderPalette } : {};
                     const photoSize = await imageSize(photoPath);
                     const focus = await runtime.photoFocus(photoPath);
+                    if (callout) {
+                        checkCallout(
+                            photoSize,
+                            focus,
+                            effective.render.presets,
+                            effective.render.canvas,
+                        );
+                    }
                     const subject = await loadSubject(runtime, workspaceDir, options.subject);
                     const templateFor = (line: string): CoverTemplate => ({
-                        layoutFor: subject ? withSubjectArea : photoTextLayout,
+                        layoutFor: callout
+                            ? (layout) => calloutLayout(layout, photoSize, focus)
+                            : subject
+                              ? withSubjectArea
+                              : photoTextLayout,
                         measureHtml: (layout, headline) =>
                             createPhotoCoverTemplate(line, {
                                 layout,
@@ -800,6 +814,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                     focus,
                                     target: photoFocusTarget(layout, subject !== undefined),
                                     fit,
+                                    // 按版式比例构图，和渲染前的圈注检查用同一个窗口。
+                                    canvas: { width: layout.width, height: layout.height },
                                     ...visibleOption(layout),
                                 }),
                                 look,

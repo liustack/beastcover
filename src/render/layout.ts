@@ -16,6 +16,8 @@ export interface CoverLayout {
     visibleArea?: Rect;
     /** 可见区域再去掉顶部和底部的平台界面栏，合成时填上 */
     clearArea?: Rect;
+    /** 本次要出的同族平台界面盖在封面上的区域（时长角标、点赞栏等），合成时填上 */
+    coveredAreas?: readonly Rect[];
 }
 
 // 人物版式：人物占一侧（竖版占下半），标题让到另一侧。人物压在最上层，所以两块不重叠，

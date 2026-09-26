@@ -92,7 +92,7 @@ The photo is framed around its own subject (faces first on macOS, the most strik
 
 - `--look mono|duotone|punch` grades it: black and white, the palette's dark and accent colours, or more saturation and contrast. The default `natural` keeps the palette wash.
 - `--fit extend` keeps the whole photo and fills the rest with a blurred copy. Use it when the output says `Photo: the subject does not fit the ... crop`, typically a portrait photo on the X or WeChat banner.
-- `--callout` circles the photo's subject in red and points an arrow at it from the empty side, the way science and tech channels mark the thing to look at. It needs one small, clear subject and fails with a message when the subject fills most of the frame. It does not combine with `--subject` or `--fit extend`.
+- `--callout` circles the photo's subject in red and points an arrow at it from the empty side, the way science and tech channels mark the thing to look at. The headline band shrinks to what is left below the circle, so keep the line short: a long line reads smaller in the feed and the `Thumbnail:` warning shows up sooner. It needs one small, clear subject, and it fails before rendering anything when the subject fills most of the frame, when the circle would be cut by a requested platform, would leave no room for the headline, or would sit under the app's buttons. Drop those platforms or pick another photo. It does not combine with `--subject` or `--fit extend`.
 
 ## Put a person on the cover
 

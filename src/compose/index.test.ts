@@ -13,10 +13,12 @@ import {
 import { type CoverLayout, type Headline, withSubjectArea } from '../render/layout.ts';
 import {
     type CoverTemplate,
+    checkCallout,
     composeCovers,
     composeCustomCover,
     coverOutputPaths,
     familyClearArea,
+    familyCoveredAreas,
     familyVisibleArea,
     focusCropWarnings,
     headlineLengthWarnings,
@@ -476,6 +478,75 @@ describe('focus crop check', () => {
                 ['x', 'youtube'],
             ),
         ).toEqual([]);
+    });
+});
+
+describe('callout check', () => {
+    it('passes a small subject that sits clear of the headline on every requested cover', () => {
+        expect(() =>
+            checkCallout(
+                { width: 1920, height: 1200 },
+                { x: 0.75, y: 0.25, width: 0.1, height: 0.1, source: 'saliency' },
+                ['youtube', 'bilibili', 'og', 'github'],
+            ),
+        ).not.toThrow();
+    });
+
+    it('names the covers where the ring leaves no room for the headline, before anything renders', () => {
+        // 照片和横版母版一样大，挪不动：正中偏大的主体圈起来，下面剩不下标题带。
+        expect(() =>
+            checkCallout(
+                { width: 1920, height: 1200 },
+                { x: 0.5, y: 0.5, width: 0.3, height: 0.3, source: 'saliency' },
+                ['youtube', 'bilibili', 'og', 'github'],
+            ),
+        ).toThrowError(
+            '--callout cannot mark the subject on youtube, bilibili, og, github: the red circle would leave no room for the headline below it. Pick a photo where the subject is small and has empty space around it, or drop --callout.',
+        );
+        // 小一点的正中主体：标题带缩到圈下面就放得下。
+        expect(() =>
+            checkCallout(
+                { width: 1920, height: 1200 },
+                { x: 0.5, y: 0.5, width: 0.13, height: 0.14, source: 'saliency' },
+                ['youtube', 'bilibili', 'og', 'github'],
+            ),
+        ).not.toThrow();
+    });
+
+    it('checks each family against its own crops and app UI', () => {
+        // 横版放得下，竖版的 3:4 裁切框从 y=240 起，贴着顶边的主体圈起来会被裁掉。
+        const focus = { x: 0.75, y: 0.17, width: 0.1, height: 0.06, source: 'saliency' as const };
+        expect(() => checkCallout({ width: 1920, height: 1200 }, focus, ['youtube'])).not.toThrow();
+        expect(() =>
+            checkCallout({ width: 1080, height: 1920 }, focus, [
+                'youtube',
+                'xiaohongshu',
+                'douyin',
+            ]),
+        ).toThrowError(/on xiaohongshu, douyin: the red circle would be cut off/);
+    });
+
+    it('checks a custom canvas against its own text area', () => {
+        expect(() =>
+            checkCallout(
+                { width: 800, height: 600 },
+                { x: 0.5, y: 0.5, width: 0.4, height: 0.4, source: 'saliency' },
+                [],
+                { width: 800, height: 600 },
+            ),
+        ).toThrowError(
+            /on the 800x600 canvas: the red circle would leave no room for the headline/,
+        );
+    });
+});
+
+describe('family covered areas', () => {
+    it('collects the app UI of the requested platforms in one family', () => {
+        expect(familyCoveredAreas('landscape', ['youtube', 'bilibili', 'douyin'])).toEqual([
+            { x: 1632, y: 1008, width: 288, height: 132 },
+            { x: 0, y: 1056, width: 1920, height: 144 },
+        ]);
+        expect(familyCoveredAreas('ultrawide', ['x', 'wechat'])).toEqual([]);
     });
 });
 
