@@ -438,12 +438,12 @@ ${lookCss(options.look ?? 'natural')}
             position: absolute;
             inset: 0;
             z-index: -1;
+            /* 只压暗标题所在的下半截，而且压得轻：暗缩略图的表现一贯落后（1of10 30 万条）。
+               字的可读性交给贴着字的阴影。 */
             background: linear-gradient(
                 180deg,
-                color-mix(in srgb, var(--cover-ink) 34%, transparent) 0%,
-                transparent 30%,
-                transparent 46%,
-                color-mix(in srgb, var(--cover-ink) 86%, transparent) 100%
+                transparent 55%,
+                color-mix(in srgb, var(--cover-ink) 62%, transparent) 100%
             );
         }
 ${headlineCss(layout, options.headline, text)}
@@ -453,7 +453,9 @@ ${headlineCss(layout, options.headline, text)}
         }
 
         .copy {
-            text-shadow: 0 2px 12px color-mix(in srgb, var(--cover-ink) 55%, transparent);
+            text-shadow:
+                0 0.03em 0.06em color-mix(in srgb, var(--cover-ink) 70%, transparent),
+                0 0.04em 0.4em color-mix(in srgb, var(--cover-ink) 60%, transparent);
         }
 ${subject.css}
     </style>
