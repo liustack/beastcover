@@ -58,6 +58,8 @@ export interface HistoryRecord {
     preset?: PlatformName;
     /** render 用的文字封面模板，默认的 text 不记 */
     template?: string;
+    /** 视频和笔记封面上的短句，给了 --hook 才记 */
+    hook?: string;
     catalogPalette?: Record<string, PaletteSlotValue>;
     photo?: HistoryPhoto;
     subject?: HistorySubject;
@@ -420,6 +422,12 @@ function parseHistoryRecord(filePath: string, lineNumber: number, raw: string): 
             throw new Error(`${filePath}:${lineNumber} has invalid "template". Expected a string.`);
         }
         record.template = parsed.template;
+    }
+    if (parsed.hook !== undefined) {
+        if (typeof parsed.hook !== 'string' || parsed.hook.trim() === '') {
+            throw new Error(`${filePath}:${lineNumber} has invalid "hook". Expected a string.`);
+        }
+        record.hook = parsed.hook;
     }
     if (parsed.photo !== undefined) {
         record.photo = parseHistoryPhoto(filePath, lineNumber, parsed.photo);

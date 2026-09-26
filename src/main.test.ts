@@ -882,6 +882,83 @@ describe('BeastCover CLI', () => {
         expect(renderHtml.open).toHaveBeenCalledOnce();
     });
 
+    it('puts --hook on video covers and keeps the headline on WeChat and X', async () => {
+        const cwd = tempDir('beastcover-cli-hook-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        const renderHtml = mockRender();
+        const now = new Date('2026-09-26T00:00:00.000Z');
+
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Why most productivity advice fails',
+                '--hook',
+                'It fails',
+                '--source',
+                'render',
+                '--preset',
+                'youtube,x',
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                stdout: captureOutput(),
+                now: () => now,
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        const landscape = renderHtml.mock.calls.find(([page]) => page.height === 1200)?.[0].html;
+        const wide = renderHtml.mock.calls.find(([page]) => page.height === 768)?.[0].html;
+        expect(landscape).toContain('It fails');
+        expect(landscape).not.toContain('productivity');
+        expect(wide).toContain('Why most productivity advice fails');
+        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
+            .trimEnd()
+            .split('\n')
+            .map((line) => JSON.parse(line) as { preset: string; text: string; hook?: string });
+        expect(history.map((record) => [record.preset, record.hook])).toEqual([
+            ['youtube', 'It fails'],
+            ['x', 'It fails'],
+        ]);
+        expect(renderHtml.open).toHaveBeenCalledOnce();
+    });
+
+    it('refuses --hook where no cover would show it', async () => {
+        const directory = tempDir('beastcover-cli-hook-refuse-');
+        for (const [args, message] of [
+            [
+                ['--source', 'render', '--preset', 'x,wechat'],
+                'Error: --hook is for video and note covers, and WeChat and X article covers keep the headline. Add a video or note platform, or drop --hook.\n',
+            ],
+            [
+                ['--source', 'render', '--width', '800', '--height', '600'],
+                'Error: --hook is the short line for video and note covers. Drop --width and --height to use it.\n',
+            ],
+            [
+                ['--source', 'render', '--preset', 'youtube', '--hook', ' '],
+                'Error: --hook must not be empty.\n',
+            ],
+        ] as const) {
+            const stderr = captureOutput();
+            const exitCode = await runCli(
+                ['node', 'beastcover', 'gen', 'Headline', '--hook', 'Hook', ...args],
+                {
+                    cwd: directory,
+                    configPath: join(directory, 'config.json'),
+                    openRenderer: mockRender().open,
+                    stdout: captureOutput(),
+                    stderr,
+                },
+            );
+            expect(exitCode).toBe(1);
+            expect(stderr.chunks.join('')).toBe(message);
+        }
+    });
+
     it('prints a thumbnail warning when the headline shrinks too far in a feed', async () => {
         const directory = tempDir('beastcover-cli-thumb-');
         const renderHtml = mockRender();

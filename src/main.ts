@@ -23,6 +23,7 @@ import {
     thumbnailWarnings,
 } from './compose/index.ts';
 import {
+    parseHook,
     parseTemplateName,
     TEMPLATE_NAMES,
     type TemplateName,
@@ -313,24 +314,46 @@ interface WrittenCover {
     height: number;
 }
 
+/**
+ * 超宽族（公众号、X 文章）的卡片上标题挨着封面，封面放完整一句。其余族是视频和笔记的封面，
+ * 给了 --hook 时放这句短的钩子。
+ */
+function coverLine(platform: PlatformName, text: string, hook: string | undefined): string {
+    return hook !== undefined && getPlatform(platform).family !== 'ultrawide' ? hook : text;
+}
+
 /** 按平台出一组封面，或给了 --width/--height 时出一张自定义画布 */
 async function writeCovers(
     runtime: CliRuntime,
     text: string,
-    template: CoverTemplate,
+    templateFor: (line: string) => CoverTemplate,
     render: EffectiveRender,
     outputPath: string,
     guides: boolean,
+    hook?: string,
 ): Promise<{ covers: WrittenCover[]; warnings: string[] }> {
     if (render.canvas && guides) {
         throw new Error('--guides draws platform safe areas. Drop --width and --height to use it.');
+    }
+    if (hook !== undefined && render.canvas) {
+        throw new Error(
+            '--hook is the short line for video and note covers. Drop --width and --height to use it.',
+        );
+    }
+    if (
+        hook !== undefined &&
+        render.presets.every((name) => getPlatform(name).family === 'ultrawide')
+    ) {
+        throw new Error(
+            '--hook is for video and note covers, and WeChat and X article covers keep the headline. Add a video or note platform, or drop --hook.',
+        );
     }
     const renderer = await runtime.openRenderer();
     try {
         if (render.canvas) {
             const cover = await composeCustomCover({
                 renderer,
-                template,
+                template: templateFor(text),
                 text,
                 ...render.canvas,
                 scale: render.scale,
@@ -338,13 +361,30 @@ async function writeCovers(
             });
             return { covers: [{ outputPath: cover.outputPath, ...render.canvas }], warnings: [] };
         }
-        const composed: ComposedCover[] = await composeCovers({
-            renderer,
-            template,
-            text,
-            targets: coverOutputPaths(outputPath, render.presets),
-            scale: render.scale,
-            guides,
+        const targets = coverOutputPaths(outputPath, render.presets);
+        const lines = [...new Set(targets.map((target) => coverLine(target.platform, text, hook)))];
+        const byPlatform = new Map<PlatformName, ComposedCover>();
+        for (const line of lines) {
+            const group = await composeCovers({
+                renderer,
+                template: templateFor(line),
+                text: line,
+                targets: targets.filter(
+                    (target) => coverLine(target.platform, text, hook) === line,
+                ),
+                scale: render.scale,
+                guides,
+            });
+            for (const cover of group) {
+                byPlatform.set(cover.platform, cover);
+            }
+        }
+        const composed = targets.map((target) => {
+            const cover = byPlatform.get(target.platform);
+            if (cover === undefined) {
+                throw new Error(`No cover was composed for ${target.platform}.`);
+            }
+            return cover;
         });
         return {
             covers: composed.map((cover) => {
@@ -357,7 +397,7 @@ async function writeCovers(
                 };
             }),
             warnings: [
-                ...headlineLengthWarnings(text, render.presets),
+                ...headlineLengthWarnings(coverLine('youtube', text, hook), render.presets),
                 ...thumbnailWarnings(composed),
             ],
         };
@@ -579,6 +619,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             '--fit <mode>',
             'Photo cover framing: cover (crop, default) or extend (keep the whole photo)',
         )
+        .option(
+            '--hook <text>',
+            'A short line for the video and note covers. WeChat and X article covers keep the headline',
+        )
         .option('--template <name>', `Text cover template: ${TEMPLATE_NAMES.join(', ')}`)
         .option('--tag <text>', 'Poster template: a short label above the headline')
         .option('--number <figure>', 'Number template: the big figure, like 3, 90%, or 10x')
@@ -607,6 +651,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     photo?: string;
                     subject?: string;
                     template?: string;
+                    hook?: string;
                     look?: string;
                     fit?: string;
                     tag?: string;
@@ -638,6 +683,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 ) {
                     throw new Error('--look and --fit work with --source stock.');
                 }
+                if (options.hook !== undefined && effective.source === 'local-model') {
+                    throw new Error('--hook works with --source render or stock.');
+                }
+                const hook = options.hook === undefined ? undefined : parseHook(options.hook);
                 const look = options.look === undefined ? 'natural' : parsePhotoLook(options.look);
                 const fit = options.fit === undefined ? 'cover' : parsePhotoFit(options.fit);
 
@@ -704,17 +753,17 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     const photoSize = await imageSize(photoPath);
                     const focus = await runtime.photoFocus(photoPath);
                     const subject = await loadSubject(runtime, workspaceDir, options.subject);
-                    const template: CoverTemplate = {
+                    const templateFor = (line: string): CoverTemplate => ({
                         layoutFor: subject ? withSubjectArea : photoTextLayout,
                         measureHtml: (layout, headline) =>
-                            createPhotoCoverTemplate(text, {
+                            createPhotoCoverTemplate(line, {
                                 layout,
                                 headline,
                                 measure: true,
                                 ...paletteOption,
                             }),
                         renderHtml: async (layout, headline, pixelWidth, pixelHeight) =>
-                            createPhotoCoverTemplate(text, {
+                            createPhotoCoverTemplate(line, {
                                 layout,
                                 headline,
                                 photo: await preparePhotoLayer(photoPath, pixelWidth, pixelHeight, {
@@ -727,16 +776,17 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 ...paletteOption,
                                 ...(subject ? { subject: subject.layer } : {}),
                             }),
-                    };
+                    });
                     let written: Awaited<ReturnType<typeof writeCovers>>;
                     try {
                         written = await writeCovers(
                             runtime,
                             text,
-                            template,
+                            templateFor,
                             effective.render,
                             outputPath,
                             guides,
+                            hook,
                         );
                     } finally {
                         if (tempDir !== undefined) {
@@ -751,6 +801,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 style: pack.style,
                                 palette: palette ?? {},
                                 text,
+                                ...(hook === undefined ? {} : { hook }),
                                 source: 'stock',
                                 ...(cover.platform ? { preset: cover.platform } : {}),
                                 output: cover.outputPath,
@@ -923,18 +974,21 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                       ? defaultWorkspaceOutputPath(workspaceDir, now)
                       : effective.output;
                 const subject = await loadSubject(runtime, workspaceDir, options.subject);
-                const template = textCoverTemplate({
-                    text,
-                    ...(renderPalette ? { palette: renderPalette } : {}),
-                    ...templateRequest(runtime, templateName, options, subject),
-                });
+                const request = templateRequest(runtime, templateName, options, subject);
+                const templateFor = (line: string) =>
+                    textCoverTemplate({
+                        text: line,
+                        ...(renderPalette ? { palette: renderPalette } : {}),
+                        ...request,
+                    });
                 const written = await writeCovers(
                     runtime,
                     text,
-                    template,
+                    templateFor,
                     effective.render,
                     outputPath,
                     guides,
+                    hook,
                 );
 
                 if (workspaceDir && pack) {
@@ -944,6 +998,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             style: pack.style,
                             palette: palette ?? {},
                             text,
+                            ...(hook === undefined ? {} : { hook }),
                             ...(cover.platform ? { preset: cover.platform } : {}),
                             ...(templateName === 'text' ? {} : { template: templateName }),
                             output: cover.outputPath,

@@ -175,3 +175,12 @@ export function textCoverTemplate(request: TextTemplateRequest): CoverTemplate {
         }
     }
 }
+
+/** --hook 的短句：去掉首尾空白，不能为空。长短交给 Headline: 提醒 */
+export function parseHook(value: string): string {
+    const hook = value.trim();
+    if (hook === '') {
+        throw new Error('--hook must not be empty.');
+    }
+    return hook;
+}

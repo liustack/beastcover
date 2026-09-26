@@ -169,7 +169,7 @@ After the command finishes, verify the image at the reported path. Tell the user
 
 ## Make it land
 
-- One subject, one headline. Cut the headline to the fewest words that still make someone curious. On YouTube the cover carries a hook of a few words (`DAY 6`, `How?`, a figure), not the title. WeChat and X article cards show the title next to the cover, so a full line is fine there.
+- One subject, one headline. Cut the headline to the fewest words that still make someone curious. On YouTube the cover carries a hook of a few words (`DAY 6`, `How?`, a figure), not the title. WeChat and X article cards show the title next to the cover, so a full line is fine there. When one run covers both, pass the full line as the headline and the short one as `--hook`: video and note covers get the hook, WeChat and X keep the headline.
 - Bright and colourful beats dark and grey. Pick a palette with a strong accent.
 - Covers are judged by what people watch or read after the click. Never promise on the cover what the piece does not deliver.
 - YouTube tests up to three thumbnails. When the user wants to test, make versions that differ clearly (face or no face, text or no text, another subject), not a new outline colour.
