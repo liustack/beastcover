@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 (2026-09-26)
+
+- **Styles keep their colours on render covers.** Covers looked up colours by slot name, so the risograph pink (slot `spot`) and the impasto blue (slot `colors`) fell back to the default blue. Each style now marks which slot is the cover paper, ink, and accent, and every style must mark one accent.
+- **Punctuated clauses no longer break inside.** The font size check let an unbreakable run be up to half a pixel wider than the text area, and the browser then split it. A headline such as 封面不狠，没人点开 now keeps each clause on its own line.
+- **A `Headline:` hint for YouTube.** When the headline is long for a YouTube thumbnail (more than about five words or eight Chinese characters), `gen` suggests a short hook for the cover and the full line for the video title. Breakout thumbnails in vidIQ's and 1of10's studies carry a few words or none.
+- **Skill advice based on research.** Faces help but are not required, a calm face beats a screaming one in creators' A/B tests, bright colour beats dark, and test versions should differ clearly.
+
 ## 0.3.3 (2026-09-26)
 
 - **Bigger headlines on X and WeChat covers.** The headline on the wide covers had to fit in the middle square so a forwarded WeChat card would still show it. The WeChat editor lets the author pick where that 1:1 crop goes, so the headline now uses almost the whole WeChat crop, and with a person on the cover it sits on the left with the person on the right, as on landscape covers. Compare covers get the wider headline band too.
