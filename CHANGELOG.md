@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 (2026-09-26)
+
+- **Bigger headlines on X and WeChat covers.** The headline on the wide covers had to fit in the middle square so a forwarded WeChat card would still show it. The WeChat editor lets the author pick where that 1:1 crop goes, so the headline now uses almost the whole WeChat crop, and with a person on the cover it sits on the left with the person on the right, as on landscape covers. Compare covers get the wider headline band too.
+- **Photo covers on X and WeChat put the headline on the dark lower part.** The headline used to fill the full height on the left and could land on the brightest part of the photo. It now sits in the lower half, and the subject moves up and to the right, as on landscape covers.
+
 ## 0.3.2 (2026-09-26)
 
 - **Releases come from CI.** Pushing a `v*` tag runs the checks on GitHub Actions and publishes to npm through trusted publishing, with provenance, then creates the GitHub Release from this file. `pnpm release <version>` bumps the version, updates the pinned version in the skill, and pushes the tag. It never publishes by itself.
