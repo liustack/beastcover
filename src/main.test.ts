@@ -658,6 +658,38 @@ describe('BeastCover CLI', () => {
         expect(readdirSync(cwd)).toEqual([]);
     });
 
+    it('refuses a non-PNG local-model output before calling the model', async () => {
+        const cwd = tempDir('beastcover-local-jpg-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        const runLocalModel = mockRunLocalModel();
+        const stderr = captureOutput();
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'A figure on a shore',
+                '--source',
+                'local-model',
+                '--output',
+                'cover.jpg',
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                runLocalModel,
+                lookupCommand: () => '/fake/codex',
+                stdout: captureOutput(),
+                stderr,
+            },
+        );
+        expect(exitCode).toBe(1);
+        expect(stderr.chunks.join('')).toBe(
+            `Error: Cover output must use the .png extension: ${join(cwd, 'cover.jpg')}\n`,
+        );
+        expect(runLocalModel).not.toHaveBeenCalled();
+    });
+
     it('runs gen through local-model with an injected runner', async () => {
         const cwd = tempDir('beastcover-local-happy-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });

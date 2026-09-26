@@ -902,6 +902,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         runtime.cwd,
                         flags.output ?? defaultWorkspaceOutputPath(workspaceDir, now),
                     );
+                    // 裁好的成品一律是 PNG。调模型又慢又花钱，所以在调之前就拦下别的扩展名。
+                    if (extname(outputPath).toLowerCase() !== '.png') {
+                        throw new Error(`Cover output must use the .png extension: ${outputPath}`);
+                    }
                     // 一族只调一次模型：原图存进 cache/，族内各平台从同一张图裁。
                     const byFamily = new Map<FamilyName, CoverTarget[]>();
                     for (const target of coverOutputPaths(outputPath, effective.render.presets)) {
