@@ -12,6 +12,7 @@ import {
     familyLayout,
     headlineClauses,
     headlineMarkup,
+    placeSubject,
     subjectRect,
     unbreakableRuns,
     withSubjectArea,
@@ -99,6 +100,15 @@ describe('subject placement', () => {
         expect(rect.y + rect.height).toBeLessThanOrEqual(1540);
     });
 
+    it('stands a head-and-shoulders crop on the bottom edge even when it is wide', () => {
+        // 抖音底部 380px 被界面挡住。
+        const clear = { x: 0, y: 0, width: 1080, height: 1540 };
+        const wide = subjectRect(area, clear, 600, 120);
+        const bust = subjectRect(area, clear, 600, 120, true);
+        expect(wide.y + wide.height).toBeLessThan(area.y + area.height);
+        expect(bust.y + bust.height).toBe(area.y + area.height);
+    });
+
     it('falls back to the bottom edge when nothing is known about covered areas', () => {
         const rect = subjectRect(area, undefined, 600, 120);
         expect(rect.y + rect.height).toBe(area.y + area.height);
@@ -140,5 +150,36 @@ describe('headline runs', () => {
         expect(headlineMarkup('标题<封面>，再说', { fontPx: 10, keepClauses: true })).toBe(
             '<span class="clause"><span class="word">标题</span>&lt;<span class="word">封面</span>&gt;，</span><span class="clause"><span class="word">再说</span></span>',
         );
+    });
+});
+
+describe('subject sized by the face', () => {
+    it('grows a wide person until the face is about a third of the clear height', () => {
+        const layout = {
+            ...withSubjectArea(familyLayout('landscape')),
+            visibleArea: { x: 0, y: 60, width: 1920, height: 1080 },
+            clearArea: { x: 0, y: 60, width: 1920, height: 996 },
+        };
+        const area = layout.subjectArea as Rect;
+        // 张开双臂的半身照：比人物区宽，脸在上面偏中。
+        const subject = {
+            width: 1600,
+            height: 1000,
+            bust: true,
+            face: { x: 0.5, y: 0.25, width: 0.16, height: 0.28 },
+        };
+        const rect = placeSubject(layout, subject);
+        const { face: _face, ...faceless } = subject;
+        const before = placeSubject(layout, faceless);
+        // 左边不能越过人物区，脸又要留在可见区里，这张图放到脸高约 23% 为止。
+        expect((subject.face.height * rect.height) / 996).toBeGreaterThan(0.2);
+        expect(rect.height).toBeGreaterThan(before.height * 1.5);
+        // 贴底站，不越过朝向标题的那条边，脸在可见区里。
+        expect(rect.y + rect.height).toBe(area.y + area.height);
+        expect(rect.x).toBeGreaterThanOrEqual(area.x);
+        const faceRight = rect.x + (subject.face.x + subject.face.width / 2) * rect.width;
+        expect(faceRight).toBeLessThanOrEqual(1920);
+        // 没有脸时照原来的办法摆，不放大。
+        expect(before.width).toBeLessThanOrEqual(area.width);
     });
 });

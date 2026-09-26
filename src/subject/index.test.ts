@@ -115,6 +115,43 @@ describe('subject layer', () => {
         expect(cutout).toHaveBeenCalledOnce();
     });
 
+    it('crops a person to head and shoulders when a face is found', async () => {
+        const directory = tempDir();
+        // 抠好的主体去掉透明边后是 200x300。
+        const path = await writeImage(join(directory, 'person.png'), {
+            r: 0,
+            g: 0,
+            b: 0,
+            alpha: 0,
+        });
+        const cacheDir = join(directory, 'cache');
+        const face = { x: 0.5, y: 0.15, width: 0.2, height: 0.1 };
+
+        const bust = await prepareSubject(path, {
+            cacheDir,
+            cutout: writeCutout,
+            findFace: async () => face,
+        });
+        // 下巴在 (0.15 + 0.05) x 300 = 60，往下留 1.8 个脸高（54），裁到 114。
+        expect(bust).toMatchObject({ width: 200, height: 114, bust: true });
+        expect(readdirSync(cacheDir).filter((name) => name.startsWith('face-'))).toEqual([]);
+
+        const noFace = await prepareSubject(path, {
+            cacheDir,
+            cutout: writeCutout,
+            findFace: async () => undefined,
+        });
+        expect(noFace).toMatchObject({ width: 200, height: 300, bust: false });
+
+        // 脸已经在下面，要裁的不到 8%：本来就是头肩照，不裁。
+        const lowFace = await prepareSubject(path, {
+            cacheDir,
+            cutout: writeCutout,
+            findFace: async () => ({ x: 0.5, y: 0.6, width: 0.3, height: 0.2 }),
+        });
+        expect(lowFace).toMatchObject({ height: 300, bust: false });
+    });
+
     it('treats a PNG with an alpha channel but no real transparency as a photo', async () => {
         const directory = tempDir();
         const path = await writeImage(join(directory, 'opaque.png'), {

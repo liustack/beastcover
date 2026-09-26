@@ -102,13 +102,15 @@ export function customLayout(width: number, height: number): CoverLayout {
 /**
  * 人物在人物区里的实际位置。高的主体（人）按高度放满、贴着底边站，身子被裁掉也没关系。
  * 扁的主体（物件、横放的东西）按宽度放满，在人物区和无遮挡区的交集里垂直居中，
- * 免得贴底以后整个掉出平台裁切框，或者被底部界面挡住。
+ * 免得贴底以后整个掉出平台裁切框，或者被底部界面挡住。按脸裁过的头肩（bust）下边是直切口，
+ * 不管扁不扁都贴底站，切口落在画面外。
  */
 export function subjectRect(
     area: Rect,
     clear: Rect | undefined,
     subjectWidth: number,
     subjectHeight: number,
+    bust = false,
 ): Rect {
     const scale = Math.min(area.width / subjectWidth, area.height / subjectHeight);
     const width = Math.round(subjectWidth * scale);
@@ -116,13 +118,81 @@ export function subjectRect(
     const x = Math.round(area.x + (area.width - width) / 2);
     const bottom = area.y + area.height;
     const tall = height >= area.height - 1;
-    if (tall || clear === undefined) {
+    if (tall || bust || clear === undefined) {
         return { x, y: bottom - height, width, height };
     }
     const top = Math.max(area.y, clear.y);
     const end = Math.min(bottom, clear.y + clear.height);
     const y = end - top >= height ? top + (end - top - height) / 2 : bottom - height;
     return { x, y: Math.round(y), width, height };
+}
+
+// 有脸的人物按脸定大小：脸高约占无遮挡区高度的三成。爆款缩略图里脸高中位数是画面的 27%，
+// vidIQ 的前 50 名里常见脸占画面三分之一。
+const FACE_SHARE = 0.3;
+// 脸离可见区左右边缘至少留这么多（按可见区宽度算）。
+const FACE_MARGIN = 0.03;
+const SHRINK_STEP = 0.95;
+
+/** 摆人物要用到的图层信息，和 subject/index.ts 的 SubjectLayer 对得上 */
+export interface PlacedSubject {
+    width: number;
+    height: number;
+    bust: boolean;
+    /** 脸在人物图里的位置，0 到 1，x、y 是中心 */
+    face?: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * 人物的位置和大小。有脸时按脸放大，贴底站，可以越过人物区一直伸到背对标题那一侧的
+ * 画面边缘（被画面切掉），但不越过朝向标题的那条边，脸也要落在可见区里。放不下就缩小，
+ * 缩回原来的大小还不行就照没有脸时的办法摆。
+ */
+export function placeSubject(layout: CoverLayout, subject: PlacedSubject): Rect {
+    const area = layout.subjectArea;
+    if (area === undefined) {
+        throw new Error('A subject needs a layout with a subject area.');
+    }
+    const base = subjectRect(area, layout.clearArea, subject.width, subject.height, subject.bust);
+    const face = subject.face;
+    if (face === undefined) {
+        return base;
+    }
+    const canvas = { x: 0, y: 0, width: layout.width, height: layout.height };
+    const visible = layout.visibleArea ?? canvas;
+    const clear = layout.clearArea ?? visible;
+    const text = layout.textArea;
+    // 标题在人物区左边时，人物不能越过人物区左边。标题在上面时左右都可以伸出画面。
+    const left = text.x + text.width <= area.x ? area.x : Number.NEGATIVE_INFINITY;
+    const right = text.x >= area.x + area.width ? area.x + area.width : Number.POSITIVE_INFINITY;
+    const bottom = area.y + area.height;
+    const margin = visible.width * FACE_MARGIN;
+    const baseScale = base.width / subject.width;
+    const faceScale = (clear.height * FACE_SHARE) / (face.height * subject.height);
+    let scale = Math.max(baseScale, Math.min(faceScale, area.height / subject.height));
+    while (scale > baseScale) {
+        const width = subject.width * scale;
+        const height = subject.height * scale;
+        const faceLeft = (face.x - face.width / 2) * width;
+        const faceRight = (face.x + face.width / 2) * width;
+        const lowest = right - width;
+        let x = area.x + area.width / 2 - face.x * width;
+        x = Math.min(Math.max(x, left), lowest);
+        x = Math.min(x, visible.x + visible.width - margin - faceRight);
+        x = Math.max(x, visible.x + margin - faceLeft);
+        const y = bottom - height;
+        const faceBottom = y + (face.y + face.height / 2) * height;
+        if (x >= left && x <= lowest && faceBottom <= clear.y + clear.height) {
+            return {
+                x: Math.round(x),
+                y: Math.round(y),
+                width: Math.round(width),
+                height: Math.round(height),
+            };
+        }
+        scale *= SHRINK_STEP;
+    }
+    return base;
 }
 
 export function escapeHtml(value: string): string {

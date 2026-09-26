@@ -470,7 +470,18 @@ async function loadSubject(
     const cacheDir = workspaceDir
         ? join(workspaceDir, 'cache')
         : join(tmpdir(), 'beastcover-subjects');
-    return { path, layer: await prepareSubject(path, { cacheDir, cutout: runtime.cutout }) };
+    return {
+        path,
+        layer: await prepareSubject(path, {
+            cacheDir,
+            cutout: runtime.cutout,
+            // 只在真的找到脸时按脸裁。没有 Vision 的系统找的是显著区域，不算脸。
+            findFace: async (imagePath) => {
+                const focus = await runtime.photoFocus(imagePath);
+                return focus.source === 'faces' ? focus : undefined;
+            },
+        }),
+    };
 }
 
 function subjectLine(subject: LoadedSubject | undefined): string[] {

@@ -196,6 +196,7 @@ describe('built-in render template', () => {
             width: 10,
             height: 20,
             method: 'transparent' as const,
+            bust: false,
         };
         const html = createRenderTemplate('人物大字', { ...BASE, layout, subject });
 
@@ -221,7 +222,13 @@ describe('built-in render template', () => {
         expect(() =>
             createRenderTemplate('人物大字', {
                 ...BASE,
-                subject: { dataUri: 'data:,', width: 1, height: 1, method: 'transparent' },
+                subject: {
+                    dataUri: 'data:,',
+                    width: 1,
+                    height: 1,
+                    method: 'transparent',
+                    bust: false,
+                },
             }),
         ).toThrowError('A subject needs a layout with a subject area.');
     });

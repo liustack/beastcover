@@ -6,8 +6,8 @@ import {
     type Headline,
     headlineMarkup,
     lineHeightFor,
+    placeSubject,
     probeMarkup,
-    subjectRect,
     textAreaCss,
 } from './layout.ts';
 
@@ -28,7 +28,7 @@ export interface RenderTemplateOptions {
     subject?: SubjectLayer;
 }
 
-/** 人物层：按 subjectRect 摆放（高的贴底站，扁的放进无遮挡区），白描边加一层投影，压在标题上面 */
+/** 人物层：按 placeSubject 摆放（有脸按脸放大，高的贴底站，扁的放进无遮挡区），白描边加一层投影，压在标题上面 */
 export function subjectMarkup(
     layout: CoverLayout,
     subject: SubjectLayer | undefined,
@@ -39,11 +39,7 @@ export function subjectMarkup(
     if (subject === undefined) {
         return { css: '', html: '' };
     }
-    const area = layout.subjectArea;
-    if (area === undefined) {
-        throw new Error('A subject needs a layout with a subject area.');
-    }
-    const rect = subjectRect(area, layout.clearArea, subject.width, subject.height);
+    const rect = placeSubject(layout, subject);
     const stroke = Math.max(3, Math.round(Math.min(layout.width, layout.height) * 0.007));
     return {
         css: `
