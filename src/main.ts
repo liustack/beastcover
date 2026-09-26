@@ -19,6 +19,7 @@ import {
     headlineLengthWarnings,
     MAX_PHOTO_STRETCH,
     photoStretchWarnings,
+    textOnlyWarnings,
     thumbnailWarnings,
 } from './compose/index.ts';
 import {
@@ -955,6 +956,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     [
                         ...coverLines(written.covers, effective.render.scale),
                         ...written.warnings,
+                        ...(effective.render.canvas
+                            ? []
+                            : textOnlyWarnings(
+                                  effective.render.presets,
+                                  subject !== undefined || templateName === 'compare',
+                              )),
                         ...subjectLine(subject),
                         'Privacy: render stayed on this machine.',
                         '',

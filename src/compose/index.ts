@@ -385,6 +385,19 @@ export function headlineLengthWarnings(text: string, platforms: readonly Platfor
     ];
 }
 
+/**
+ * YouTube 上只有字的封面提醒一句。90 张头部频道的历史爆款里没有一张纯文字缩略图，
+ * 带图的封面字号本来就落在爆款的范围里，缺的是图，不是更小的字。
+ */
+export function textOnlyWarnings(platforms: readonly PlatformName[], hasImage: boolean): string[] {
+    if (hasImage || !platforms.includes('youtube')) {
+        return [];
+    }
+    return [
+        'Cover: this YouTube thumbnail is text only. Breakout thumbnails nearly always show a subject: a face, a product, or a striking object. Add --subject, or use --source stock --photo.',
+    ];
+}
+
 // 照片放大到这个倍数以上就会明显发虚。
 export const MAX_PHOTO_STRETCH = 1.5;
 

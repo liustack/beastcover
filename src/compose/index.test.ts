@@ -21,6 +21,7 @@ import {
     focusCropWarnings,
     headlineLengthWarnings,
     photoStretchWarnings,
+    textOnlyWarnings,
     thumbnailWarnings,
 } from './index.ts';
 
@@ -511,5 +512,15 @@ describe('headline length check', () => {
         expect(
             headlineLengthWarnings('月薪三千到三万，我只做对了一件事', ['bilibili', 'xiaohongshu']),
         ).toEqual([]);
+    });
+});
+
+describe('text only check', () => {
+    it('asks for a subject on a text-only YouTube thumbnail and nowhere else', () => {
+        expect(textOnlyWarnings(['youtube', 'x'], false)[0]).toContain(
+            'Cover: this YouTube thumbnail is text only.',
+        );
+        expect(textOnlyWarnings(['youtube'], true)).toEqual([]);
+        expect(textOnlyWarnings(['wechat', 'x', 'xiaohongshu'], false)).toEqual([]);
     });
 });
