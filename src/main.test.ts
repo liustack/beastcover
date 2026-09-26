@@ -1852,6 +1852,30 @@ describe('BeastCover CLI', () => {
         );
     });
 
+    it('rejects --scale with local-model, whose size comes from the model', async () => {
+        const cwd = tempDir('beastcover-local-scale-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        const runLocalModel = mockRunLocalModel();
+        const stderr = captureOutput();
+        const exitCode = await runCli(
+            ['node', 'beastcover', 'gen', 'A figure', '--source', 'local-model', '--scale', '3'],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                runLocalModel,
+                lookupCommand: () => '/fake/codex',
+                stdout: captureOutput(),
+                stderr,
+            },
+        );
+
+        expect(exitCode).toBe(1);
+        expect(runLocalModel).not.toHaveBeenCalled();
+        expect(stderr.chunks.join('')).toBe(
+            'Error: --scale works with --source render or stock. local-model output size comes from the model.\n',
+        );
+    });
+
     it('prints named --ref paths before calling runLocalModel', async () => {
         const cwd = tempDir('beastcover-local-refs-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });

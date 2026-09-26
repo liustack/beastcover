@@ -726,6 +726,11 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 if (options.hook !== undefined && effective.source === 'local-model') {
                     throw new Error('--hook works with --source render or stock.');
                 }
+                if (options.scale !== undefined && effective.source === 'local-model') {
+                    throw new Error(
+                        '--scale works with --source render or stock. local-model output size comes from the model.',
+                    );
+                }
                 const hook = options.hook === undefined ? undefined : parseHook(options.hook);
                 const look = options.look === undefined ? 'natural' : parsePhotoLook(options.look);
                 const fit = options.fit === undefined ? 'cover' : parsePhotoFit(options.fit);
