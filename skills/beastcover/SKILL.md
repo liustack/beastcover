@@ -56,7 +56,7 @@ Platforms with close ratios share one master and are cropped from it: WeChat fro
 
 Add `--guides` to draw the headline area (green), the focus area (orange), and app UI (red) on each cover when the user wants to check a layout. Do not hand guided covers over as finished files.
 
-When the output has a `Thumbnail:` line, the headline will be hard to read in that platform's feed. Offer a shorter headline.
+When the output has a `Thumbnail:` line, the headline will be hard to read in that platform's feed. Offer a shorter headline. A `Headline:` line means the text is long for a YouTube thumbnail: offer a hook of a few words for the cover and keep the full line for the video title.
 
 Old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone. The CLI names the replacement if one is used.
 
@@ -95,7 +95,7 @@ The photo is framed around its own subject (faces first on macOS, the most strik
 
 ## Put a person on the cover
 
-A face with an expression is the strongest hook a cover can have. When the user has a photo of themselves, a guest, or a character, add it with `--subject`:
+A face often helps, but it is not required: product close-ups, a striking object, or a single big word also top the charts. When there is a face, make it big and the expression real. Calm or a closed-mouth smile has beaten the screaming face in creators' own A/B tests. Prefer the user's own photo over stock for people. When the user has a photo of themselves, a guest, or a character, add it with `--subject`:
 
 ```bash
 beastcover gen "<1 to 6 words>" --source render --subject /absolute/me.jpg --preset youtube,xiaohongshu
@@ -169,7 +169,10 @@ After the command finishes, verify the image at the reported path. Tell the user
 
 ## Make it land
 
-- One subject, one headline. Cut the headline to the fewest words that still make someone curious.
+- One subject, one headline. Cut the headline to the fewest words that still make someone curious. On YouTube the cover carries a hook of a few words (`DAY 6`, `How?`, a figure), not the title. WeChat and X article cards show the title next to the cover, so a full line is fine there.
+- Bright and colourful beats dark and grey. Pick a palette with a strong accent.
+- Covers are judged by what people watch or read after the click. Never promise on the cover what the piece does not deliver.
+- YouTube tests up to three thumbnails. When the user wants to test, make versions that differ clearly (face or no face, text or no text, another subject), not a new outline colour.
 - Check the cover at thumbnail size. The CLI already warns when the headline gets too small in a feed. If the subject is hard to make out there, pick another photo.
 - Lock one style and one palette for every platform version of the same piece.
 - Treat every style prompt as self-contained source text. Never assemble a prompt from global style, palette, and discipline fragments.
