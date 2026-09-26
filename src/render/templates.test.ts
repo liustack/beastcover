@@ -10,7 +10,7 @@ import {
 } from '../platforms/index.ts';
 import { compareLayout, createCompareTemplate, parseLabels } from './compare.ts';
 import { openRenderer } from './index.ts';
-import { customLayout, familyLayout, withSubjectArea } from './layout.ts';
+import { customLayout, familyLayout, headlineClauses, withSubjectArea } from './layout.ts';
 import { createNumberTemplate, numberLayout, validateNumber } from './number.ts';
 import { createPosterTemplate, validateTag } from './poster.ts';
 import { contrastingText } from './template.ts';
@@ -189,11 +189,13 @@ function charTops(page: Page): Promise<{ text: string; tops: number[] }> {
 }
 
 describe('Chinese headline line breaks', () => {
-    it('never splits a Chinese word across two lines', async () => {
+    it('never splits a Chinese word or a kept clause across two lines', async () => {
         const renderer = await openRenderer();
         const browser = await chromium.launch({ headless: true });
         const cases = [
             { text: '封面不抓人，标题白写', words: ['封面', '抓人', '标题'] },
+            // 这句在横版大字报上，整句的宽度正好卡在标题区的边上。
+            { text: '封面不狠，没人点开', words: ['封面'] },
             { text: '月薪三千到三万，我只做对了一件事', words: ['月薪', '三千', '三万', '一件事'] },
         ];
         try {
@@ -237,6 +239,17 @@ describe('Chinese headline line breaks', () => {
                             expect(tops.size, `${familyName} ${keepClauses} ${text} ${word}`).toBe(
                                 1,
                             );
+                        }
+                        // 按标点整句排时，每一句只占一行，不能在句子里再断开。
+                        if (keepClauses) {
+                            let start = 0;
+                            for (const clause of headlineClauses(text)) {
+                                const tops = new Set(
+                                    lines.tops.slice(start, start + clause.length),
+                                );
+                                expect(tops.size, `${familyName} ${text} ${clause}`).toBe(1);
+                                start += clause.length;
+                            }
                         }
                     }
                 }

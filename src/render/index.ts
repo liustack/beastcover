@@ -87,9 +87,11 @@ export async function openRenderer(): Promise<CoverRenderer> {
                     ) {
                         return false;
                     }
+                    // 探针是不能断开的一段。排版时宽出一点点，浏览器就会在它里面断行，
+                    // 所以探针不留余量，必须严格放得下。
                     for (const probe of await page.locator('.probe').all()) {
                         const size = await probe.boundingBox();
-                        if (size !== null && size.width > box.width + FIT_TOLERANCE) {
+                        if (size !== null && size.width > box.width) {
                             return false;
                         }
                     }
