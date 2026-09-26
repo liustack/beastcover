@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 (2026-09-27)
+
+- **`--callout` stays clear of the headline, the crops, and the app UI.** 0.6.0 drew the ring on the master without checking where it landed: YouTube, OG, and GitHub cut its top off, the ring ran into the headline on every real photo, and the arrow could start under Douyin's bottom bar or, when no side was free, at the subject itself. The headline band now shrinks to what is left below the ring (down to a fifth of the text area), the ring and the whole arrow are checked against every requested platform's crop and covered areas, and `gen` runs that check for every family before it opens the browser, so a refusal leaves no half-written set of covers. The message names the platforms and what would go wrong.
+- **`gen` rejects a non-PNG `--output` before starting work for every source.** render and stock used to render the cover first and refuse at the write, and a stock ref was downloaded first. A stock run without a workspace now also removes its temporary download folder whenever it fails.
+- **`--scale` is rejected with `--source local-model`.** It was accepted and ignored, and the skill's `--scale 3` advice now says it applies to render and stock covers.
+- **`doctor` and render share one Chromium launcher**, so the doctor check cannot drift from what render does.
+
 ## 0.6.0 (2026-09-26)
 
 - **`--callout` on photo covers.** Circles the photo subject in red and points an arrow at it from the empty side, clear of the headline. Science and tech channels mark the thing to look at this way (14 of 90 top YouTube thumbnails use a red circle or arrow). It needs one small, clear subject, and fails with a message when the subject fills most of the frame.
