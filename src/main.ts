@@ -16,6 +16,7 @@ import {
     composeCustomCover,
     coverOutputPaths,
     focusCropWarnings,
+    headlineLengthWarnings,
     MAX_PHOTO_STRETCH,
     photoStretchWarnings,
     thumbnailWarnings,
@@ -354,7 +355,10 @@ async function writeCovers(
                     height: platform.height,
                 };
             }),
-            warnings: thumbnailWarnings(composed),
+            warnings: [
+                ...headlineLengthWarnings(text, render.presets),
+                ...thumbnailWarnings(composed),
+            ],
         };
     } finally {
         await renderer.close();

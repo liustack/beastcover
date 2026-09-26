@@ -18,6 +18,7 @@ import {
     familyLayout,
     type Headline,
     headlineClauses,
+    unbreakableRuns,
 } from '../render/layout.ts';
 import { framePhoto, photoFocusTarget, visibleFraction } from '../render/photo-cover.ts';
 import type { PhotoFocus } from '../subject/vision.ts';
@@ -361,6 +362,27 @@ export function thumbnailWarnings(covers: readonly ComposedCover[]): string[] {
             const platform = getPlatform(cover.platform);
             return `Thumbnail: the headline is ${cover.feedHeadlinePx.toFixed(1)}px at ${platform.name} feed size (${platform.feedWidth}px wide). A shorter headline reads bigger.`;
         });
+}
+
+// YouTube 爆款缩略图上的字：vidIQ 500 个爆款里有字的中位数 5 个词，1of10 30 万条里最好的是
+// 不到 10 个字符。中文按 8 个字折算。B 站的封面常把整句标题写上去，没有证据支持同样的上限，
+// 所以只对 YouTube 提醒。
+const YOUTUBE_MAX_WORDS = 5;
+const YOUTUBE_MAX_HAN = 8;
+
+/** 标题放在 YouTube 缩略图上太长时提醒一句。只提醒，不拦 */
+export function headlineLengthWarnings(text: string, platforms: readonly PlatformName[]): string[] {
+    if (!platforms.includes('youtube')) {
+        return [];
+    }
+    const han = (text.match(/\p{Script=Han}/gu) ?? []).length;
+    const words = unbreakableRuns(text).length;
+    if (han / YOUTUBE_MAX_HAN + words / YOUTUBE_MAX_WORDS <= 1) {
+        return [];
+    }
+    return [
+        `Headline: this is long for a YouTube thumbnail. Breakout thumbnails carry about ${YOUTUBE_MAX_WORDS} words or ${YOUTUBE_MAX_HAN} Chinese characters at most, often fewer. Keep a short hook on the cover and the full line in the video title.`,
+    ];
 }
 
 // 照片放大到这个倍数以上就会明显发虚。

@@ -19,6 +19,7 @@ import {
     familyClearArea,
     familyVisibleArea,
     focusCropWarnings,
+    headlineLengthWarnings,
     photoStretchWarnings,
     thumbnailWarnings,
 } from './index.ts';
@@ -490,5 +491,25 @@ describe('photo stretch check with extend', () => {
         expect(photoStretchWarnings({ width: 400, height: 300 }, ['youtube'], 1, 'extend')).toEqual(
             ['Photo: 400x300 is stretched 2.4x on youtube. A larger photo stays sharp.'],
         );
+    });
+});
+
+describe('headline length check', () => {
+    it('asks for a short hook on YouTube only', () => {
+        const long = 'Headline: this is long for a YouTube thumbnail.';
+        expect(headlineLengthWarnings('封面不狠，没人点开', ['youtube'])).toEqual([]);
+        expect(headlineLengthWarnings('We tested it', ['youtube'])).toEqual([]);
+        expect(
+            headlineLengthWarnings('月薪三千到三万，我只做对了一件事', ['youtube'])[0],
+        ).toContain(long);
+        expect(
+            headlineLengthWarnings('Why most productivity advice fails you', ['youtube'])[0],
+        ).toContain(long);
+        // 中英混排按两种上限折算：6 个汉字加 2 个词已经超了。
+        expect(headlineLengthWarnings('用 GPT 和 Claude 写完周报', ['youtube'])).toHaveLength(1);
+        // B 站、小红书等没有证据支持同样的上限，不提醒。
+        expect(
+            headlineLengthWarnings('月薪三千到三万，我只做对了一件事', ['bilibili', 'xiaohongshu']),
+        ).toEqual([]);
     });
 });
