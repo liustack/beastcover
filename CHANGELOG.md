@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 (2026-09-26)
+
+- **`--callout` on photo covers.** Circles the photo subject in red and points an arrow at it from the empty side, clear of the headline. Science and tech channels mark the thing to look at this way (14 of 90 top YouTube thumbnails use a red circle or arrow). It needs one small, clear subject, and fails with a message when the subject fills most of the frame.
+- **`doctor` checks the Chromium that render uses.** It looked for the full Chromium build, while render starts the headless shell. It now starts Chromium the same way render does, so it no longer reports a working setup as broken, or a broken one as working.
+- **local-model refuses a non-PNG output before calling the model.** `--output cover.jpg` used to write PNG bytes into a .jpg file after the model had already run.
+- **Skill:** how to make clearly different versions for YouTube's A/B test, and `--scale 3` for a 3840×2160 YouTube thumbnail.
+
 ## 0.5.0 (2026-09-26)
 
 - **`--hook` for a short cover line.** A video thumbnail wants a hook of a few words, while WeChat and X article cards show the title next to the cover. `--hook "It fails"` puts the short line on the video and note covers and keeps the full headline on WeChat and X. It fails when no requested cover would show it.
