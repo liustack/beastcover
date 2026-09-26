@@ -61,7 +61,7 @@ Install Chromium through the Playwright that ships with beastcover. A bare `npx 
 
 With a workspace, the photo and its provenance record land in `.beastcover/refs/` and the cover lands in `.beastcover/out/`. `project.json` holds the project's style and palette, `history.jsonl` records every cover, and both are safe to commit.
 
-Photo covers are framed around the photo's own subject and keep it clear of the headline. `--look mono|duotone|punch` grades the photo, and `--fit extend` keeps a photo whole when its shape does not suit the platform, filling the rest with a blurred copy. With a model CLI, `--source local-model --remix me.jpg` redraws your image in the project style, and a second `--remix scene.jpg` puts you into that scene.
+Photo covers are framed around the photo's own subject and keep it clear of the headline. `--look mono|duotone|punch` grades the photo, `--fit extend` keeps a photo whole when its shape does not suit the platform, filling the rest with a blurred copy, and `--callout` circles the subject in red with an arrow pointing at it. With a model CLI, `--source local-model --remix me.jpg` redraws your image in the project style, and a second `--remix scene.jpg` puts you into that scene.
 
 Add `--subject me.jpg` to put a person on the cover: they stand on one side with a white outline, and the headline moves to the other side. A transparent PNG is used as is. On macOS 14 or newer, a normal photo is cut out on your machine with the system's own subject cutout, so nothing is uploaded and your face is not redrawn. Elsewhere, cut the photo out first (iPhone and macOS "Copy Subject", remove.bg, Photoshop) and pass the PNG.
 

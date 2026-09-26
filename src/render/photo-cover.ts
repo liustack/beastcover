@@ -15,6 +15,8 @@ export interface PhotoLayer {
     dataUri: string;
     sourceWidth: number;
     sourceHeight: number;
+    /** 照片主体落在画布上的范围（0 到 1）。按主体构图时才有 */
+    focusBox?: Rect;
 }
 
 export const PHOTO_FITS = ['cover', 'extend'] as const;
@@ -173,6 +175,7 @@ export async function preparePhotoLayer(
     const target = framing.target ?? { x: 0.5, y: 0.5 };
     const focus = framing.focus;
     let bytes: Buffer;
+    let focusBox: Rect | undefined;
 
     const visible = framing.visible ?? { x: 0, y: 0, width: 1, height: 1 };
     if (framing.fit === 'extend') {
@@ -228,12 +231,94 @@ export async function preparePhotoLayer(
             .resize(pixelWidth, pixelHeight, { fit: 'fill' })
             .jpeg({ quality: PHOTO_JPEG_QUALITY, mozjpeg: true })
             .toBuffer();
+        focusBox = {
+            x: ((focus.x - focus.width / 2) * source.width - framed.left) / framed.width,
+            y: ((focus.y - focus.height / 2) * source.height - framed.top) / framed.height,
+            width: (focus.width * source.width) / framed.width,
+            height: (focus.height * source.height) / framed.height,
+        };
     }
     return {
         dataUri: `data:image/jpeg;base64,${bytes.toString('base64')}`,
         sourceWidth: source.width,
         sourceHeight: source.height,
+        ...(focusBox === undefined ? {} : { focusBox }),
     };
+}
+
+// 圈注：红圈比主体范围四周各大这么多（按主体宽高算）。
+const CALLOUT_PAD = 0.15;
+// 主体超过画面这么大就不圈：圈住半个画面等于没圈。
+const CALLOUT_MAX_WIDTH = 0.45;
+const CALLOUT_MAX_HEIGHT = 0.6;
+
+/**
+ * 红圈圈住照片主体，一支箭头从背离标题的空处指过来。教育和技术频道的爆款常用这一手
+ * （90 张头部缩略图里 14 张有红圈或箭头）。
+ */
+function calloutMarkup(layout: CoverLayout, box: Rect): string {
+    if (box.width > CALLOUT_MAX_WIDTH || box.height > CALLOUT_MAX_HEIGHT) {
+        throw new Error(
+            `--callout needs a small subject to circle, and this photo's subject covers ${Math.round(box.width * 100)}% of the width and ${Math.round(box.height * 100)}% of the height. Pick a photo with one small, clear subject.`,
+        );
+    }
+    const w = layout.width;
+    const h = layout.height;
+    const unit = Math.min(w, h);
+    const cx = (box.x + box.width / 2) * w;
+    const cy = (box.y + box.height / 2) * h;
+    const rx = Math.max((box.width * w * (1 + CALLOUT_PAD * 2)) / 2, unit * 0.06);
+    const ry = Math.max((box.height * h * (1 + CALLOUT_PAD * 2)) / 2, unit * 0.06);
+    const stroke = Math.max(4, Math.round(unit * 0.012));
+    // 箭头从背离标题的空处伸过来：先试「标题中心指向红圈」的方向，那边被画面边缘挡住时
+    // 左右转着试，挑箭头最长、起点又不落进标题区的那个方向。
+    const text = layout.textArea;
+    const base = Math.atan2(cy - (text.y + text.height / 2), cx - (text.x + text.width / 2));
+    const reach = Math.max(rx, ry) + unit * 0.2;
+    const visible = layout.visibleArea ?? { x: 0, y: 0, width: w, height: h };
+    const margin = unit * 0.06;
+    const clamp = (value: number, low: number, high: number) =>
+        Math.min(Math.max(value, low), high);
+    const inText = (x: number, y: number) =>
+        x >= text.x && x <= text.x + text.width && y >= text.y && y <= text.y + text.height;
+    let startX = cx;
+    let startY = cy;
+    let best = -1;
+    for (const turn of [0, 30, -30, 60, -60, 90, -90]) {
+        const angle = base + (turn * Math.PI) / 180;
+        const x = clamp(
+            cx + Math.cos(angle) * reach,
+            visible.x + margin,
+            visible.x + visible.width - margin,
+        );
+        const y = clamp(
+            cy + Math.sin(angle) * reach,
+            visible.y + margin,
+            visible.y + visible.height - margin,
+        );
+        const free = Math.hypot(x - cx, y - cy) - Math.max(rx, ry);
+        if (!inText(x, y) && free > best) {
+            best = free;
+            startX = x;
+            startY = y;
+        }
+    }
+    // 终点在椭圆边外一点，朝着起点。
+    const angle = Math.atan2(startY - cy, startX - cx);
+    const endX = cx + (rx + stroke * 2.5) * Math.cos(angle);
+    const endY = cy + (ry + stroke * 2.5) * Math.sin(angle);
+    const head = stroke * 4;
+    const tip = Math.atan2(endY - startY, endX - startX);
+    const wing = (side: number) =>
+        `${endX - head * Math.cos(tip + side * 0.5)},${endY - head * Math.sin(tip + side * 0.5)}`;
+    const arrow = `M ${startX} ${startY} L ${endX} ${endY} M ${wing(1)} L ${endX} ${endY} L ${wing(-1)}`;
+    const ink = (width: number, color: string) =>
+        `fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"`;
+    const shapes = (width: number, color: string) => `
+            <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" ${ink(width, color)}/>
+            <path d="${arrow}" ${ink(width * 1.3, color)}/>`;
+    return `<svg class="callout" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${shapes(stroke * 2.2, '#ffffff')}${shapes(stroke, '#ff2a2a')}
+        </svg>`;
 }
 
 // 照片封面的标题只占标题区的下面这一截，上面留给照片主体。
@@ -327,6 +412,8 @@ interface PhotoCoverBase {
     subject?: SubjectLayer;
     /** 照片调色，默认 natural */
     look?: PhotoLook;
+    /** 用红圈圈住照片主体，再画一支箭头指过去 */
+    callout?: boolean;
 }
 
 export const PHOTO_LOOKS = ['natural', 'mono', 'duotone', 'punch'] as const;
@@ -379,6 +466,13 @@ export function createPhotoCoverTemplate(text: string, options: PhotoCoverOption
     const subject = subjectMarkup(layout, options.measure === true ? undefined : options.subject);
     const photo =
         options.measure === true ? '' : `<img class="photo" src="${options.photo.dataUri}" alt="">`;
+    let callout = '';
+    if (options.callout === true && options.measure !== true) {
+        if (options.photo.focusBox === undefined) {
+            throw new Error('--callout needs the photo framed around its subject.');
+        }
+        callout = calloutMarkup(layout, options.photo.focusBox);
+    }
 
     return `<!doctype html>
 <html lang="en">
@@ -457,6 +551,12 @@ ${headlineCss(layout, options.headline, text)}
                 0 0.03em 0.06em color-mix(in srgb, var(--cover-ink) 70%, transparent),
                 0 0.04em 0.4em color-mix(in srgb, var(--cover-ink) 60%, transparent);
         }
+
+        .callout {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
 ${subject.css}
     </style>
 </head>
@@ -470,6 +570,7 @@ ${subject.css}
         <section class="text-box" aria-label="Headline">
             <p class="copy">${headlineMarkup(text, options.headline)}</p>${options.measure === true ? probeMarkup(text, options.headline) : ''}
         </section>
+        ${callout}
         ${subject.html}
     </main>
 </body>

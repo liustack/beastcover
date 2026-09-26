@@ -44,6 +44,49 @@ describe('photo cover', () => {
         expect([meta.width, meta.height]).toEqual([320, 180]);
     });
 
+    it('circles a small photo subject and points an arrow at it', async () => {
+        const source = await writeTestPhoto(1600, 900);
+        // 主体在原图正中偏右上，宽高各占一成。
+        const focus = { x: 0.7, y: 0.3, width: 0.1, height: 0.1, source: 'saliency' as const };
+        const layer = await preparePhotoLayer(source, 1600, 900, {
+            focus,
+            target: { x: 0.7, y: 0.3 },
+            fit: 'cover',
+        });
+        expect(layer.focusBox?.width).toBeCloseTo(0.1, 2);
+        expect(layer.focusBox?.x).toBeCloseTo(0.65, 2);
+
+        const layout = customLayout(1600, 900);
+        const html = createPhotoCoverTemplate('Look', {
+            layout,
+            headline: { fontPx: 48, keepClauses: false },
+            photo: layer,
+            callout: true,
+        });
+        expect(html).toContain('<svg class="callout"');
+        expect(html).toContain('<ellipse');
+        expect(html).toContain('stroke="#ff2a2a"');
+
+        const big = { ...layer, focusBox: { x: 0, y: 0, width: 0.9, height: 0.8 } };
+        expect(() =>
+            createPhotoCoverTemplate('Look', {
+                layout,
+                headline: { fontPx: 48, keepClauses: false },
+                photo: big,
+                callout: true,
+            }),
+        ).toThrowError(/--callout needs a small subject to circle/);
+        const { focusBox: _box, ...unframed } = layer;
+        expect(() =>
+            createPhotoCoverTemplate('Look', {
+                layout,
+                headline: { fontPx: 48, keepClauses: false },
+                photo: unframed,
+                callout: true,
+            }),
+        ).toThrowError('--callout needs the photo framed around its subject.');
+    });
+
     it('escapes text, inlines the photo, and applies palette colors', () => {
         const html = createPhotoCoverTemplate('<Dawn> & "sea"', {
             ...BASE,

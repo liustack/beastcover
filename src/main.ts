@@ -627,6 +627,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         )
         .option('--look <name>', `Photo cover colour: ${PHOTO_LOOKS.join(', ')}`)
         .option(
+            '--callout',
+            'Photo cover: circle the photo subject in red and point an arrow at it',
+        )
+        .option(
             '--fit <mode>',
             'Photo cover framing: cover (crop, default) or extend (keep the whole photo)',
         )
@@ -663,6 +667,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     subject?: string;
                     template?: string;
                     hook?: string;
+                    callout?: boolean;
                     look?: string;
                     fit?: string;
                     tag?: string;
@@ -700,6 +705,20 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const hook = options.hook === undefined ? undefined : parseHook(options.hook);
                 const look = options.look === undefined ? 'natural' : parsePhotoLook(options.look);
                 const fit = options.fit === undefined ? 'cover' : parsePhotoFit(options.fit);
+                const callout = options.callout === true;
+                if (callout && effective.source !== 'stock') {
+                    throw new Error('--callout works with --source stock.');
+                }
+                if (callout && fit === 'extend') {
+                    throw new Error(
+                        '--callout circles the framed subject. Drop --fit extend to use it.',
+                    );
+                }
+                if (callout && options.subject !== undefined) {
+                    throw new Error(
+                        '--callout points at the photo subject, and --subject would cover it. Use one of them.',
+                    );
+                }
 
                 if (effective.source === 'stock') {
                     if (options.photo === undefined || options.photo.trim() === '') {
@@ -784,6 +803,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                     ...visibleOption(layout),
                                 }),
                                 look,
+                                callout,
                                 ...paletteOption,
                                 ...(subject ? { subject: subject.layer } : {}),
                             }),

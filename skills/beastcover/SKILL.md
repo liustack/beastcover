@@ -88,10 +88,11 @@ beastcover gen "<headline>" --source stock --photo openverse:<id> --preset wecha
 
 Use a short concrete English query of two to four words. Keep mood words and negatives out of it.
 
-The photo is framed around its own subject (faces first on macOS, the most striking area elsewhere) and moved clear of the headline, which keeps to the lower part of the cover. Two options change the photo itself, all on the machine:
+The photo is framed around its own subject (faces first on macOS, the most striking area elsewhere) and moved clear of the headline, which keeps to the lower part of the cover. Three options change the photo itself, all on the machine:
 
 - `--look mono|duotone|punch` grades it: black and white, the palette's dark and accent colours, or more saturation and contrast. The default `natural` keeps the palette wash.
 - `--fit extend` keeps the whole photo and fills the rest with a blurred copy. Use it when the output says `Photo: the subject does not fit the ... crop`, typically a portrait photo on the X or WeChat banner.
+- `--callout` circles the photo's subject in red and points an arrow at it from the empty side, the way science and tech channels mark the thing to look at. It needs one small, clear subject and fails with a message when the subject fills most of the frame. It does not combine with `--subject` or `--fit extend`.
 
 ## Put a person on the cover
 
@@ -172,7 +173,8 @@ After the command finishes, verify the image at the reported path. Tell the user
 - One subject, one headline. Cut the headline to the fewest words that still make someone curious. On YouTube the cover carries a hook of a few words (`DAY 6`, `How?`, a figure), not the title. WeChat and X article cards show the title next to the cover, so a full line is fine there. When one run covers both, pass the full line as the headline and the short one as `--hook`: video and note covers get the hook, WeChat and X keep the headline.
 - Bright and colourful beats dark and grey. Pick a palette with a strong accent.
 - Covers are judged by what people watch or read after the click. Never promise on the cover what the piece does not deliver.
-- YouTube tests up to three thumbnails. When the user wants to test, make versions that differ clearly (face or no face, text or no text, another subject), not a new outline colour.
+- YouTube tests up to three thumbnails. When the user wants to test, run `gen` two or three times with versions that differ clearly (face or no face, another template, `--hook` or not, another photo), not a new outline colour. Each run in a workspace gets its own file name.
+- For a 4K YouTube thumbnail (the current recommendation is 3840×2160), add `--scale 3`. Keep the default for uploads from a phone, where the limit is 2 MB.
 - Check the cover at thumbnail size. The CLI already warns when the headline gets too small in a feed. If the subject is hard to make out there, pick another photo.
 - Lock one style and one palette for every platform version of the same piece.
 - Treat every style prompt as self-contained source text. Never assemble a prompt from global style, palette, and discipline fragments.

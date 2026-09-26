@@ -959,6 +959,35 @@ describe('BeastCover CLI', () => {
         expect(renderHtml.open).toHaveBeenCalledOnce();
     });
 
+    it('refuses --callout where it cannot circle the photo subject', async () => {
+        const directory = tempDir('beastcover-cli-callout-refuse-');
+        for (const [args, message] of [
+            [['--source', 'render'], 'Error: --callout works with --source stock.\n'],
+            [
+                ['--source', 'stock', '--photo', 'x.jpg', '--fit', 'extend'],
+                'Error: --callout circles the framed subject. Drop --fit extend to use it.\n',
+            ],
+            [
+                ['--source', 'stock', '--photo', 'x.jpg', '--subject', 'me.png'],
+                'Error: --callout points at the photo subject, and --subject would cover it. Use one of them.\n',
+            ],
+        ] as const) {
+            const stderr = captureOutput();
+            const exitCode = await runCli(
+                ['node', 'beastcover', 'gen', 'Headline', '--callout', ...args],
+                {
+                    cwd: directory,
+                    configPath: join(directory, 'config.json'),
+                    openRenderer: mockRender().open,
+                    stdout: captureOutput(),
+                    stderr,
+                },
+            );
+            expect(exitCode).toBe(1);
+            expect(stderr.chunks.join('')).toBe(message);
+        }
+    });
+
     it('refuses --hook where no cover would show it', async () => {
         const directory = tempDir('beastcover-cli-hook-refuse-');
         for (const [args, message] of [
