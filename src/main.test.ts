@@ -1118,6 +1118,110 @@ describe('BeastCover CLI', () => {
         expect(readdirSync(cwd).filter((name) => name.startsWith('look'))).toEqual([]);
     });
 
+    it('refuses a non-PNG output for a stock ref before downloading anything', async () => {
+        const cwd = tempDir('beastcover-cli-stock-jpg-');
+        const fetchImpl = vi.fn();
+        const renderHtml = mockRender();
+        const stderr = captureOutput();
+        const before = readdirSync(tmpdir()).filter((name) => name.startsWith('beastcover-stock-'));
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Headline',
+                '--source',
+                'stock',
+                '--photo',
+                'openverse:4e78d273-4403-467b-8ec3-439619a55e01',
+                '--output',
+                'cover.jpg',
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                stock: { fetch: fetchImpl as unknown as typeof fetch },
+                stdout: captureOutput(),
+                stderr,
+            },
+        );
+        expect(exitCode).toBe(1);
+        expect(stderr.chunks.join('')).toBe(
+            `Error: Cover output must use the .png extension: ${join(cwd, 'cover.jpg')}\n`,
+        );
+        expect(fetchImpl).not.toHaveBeenCalled();
+        expect(renderHtml.open).not.toHaveBeenCalled();
+        const after = readdirSync(tmpdir()).filter((name) => name.startsWith('beastcover-stock-'));
+        expect(after).toEqual(before);
+    });
+
+    it('removes the temporary stock folder when the callout check refuses', async () => {
+        const cwd = tempDir('beastcover-cli-stock-tmp-');
+        const png = await testPngBytes(400, 200);
+        const fetchImpl = vi.fn(
+            async () =>
+                new Response(
+                    JSON.stringify({
+                        id: 'a1',
+                        url: 'https://upload.example/a1.png',
+                        license: 'cc0',
+                        creator: 'Ada',
+                        width: 400,
+                        height: 200,
+                        foreign_landing_url: 'https://flickr.example/a1',
+                    }),
+                    { status: 200 },
+                ),
+        );
+        const stderr = captureOutput();
+        const before = readdirSync(tmpdir()).filter((name) => name.startsWith('beastcover-stock-'));
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Look',
+                '--source',
+                'stock',
+                '--photo',
+                'openverse:a1',
+                '--callout',
+                '--preset',
+                'youtube',
+                '--output',
+                join(cwd, 'look.png'),
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: mockRender().open,
+                photoFocus: centreFocus,
+                stock: {
+                    fetch: fetchImpl as typeof fetch,
+                    sleep: async () => undefined,
+                    download: {
+                        lookup: async () => [{ address: '104.16.1.1', family: 4 }],
+                        pinnedFetch: async () =>
+                            new Response(png, {
+                                status: 200,
+                                headers: { 'content-type': 'image/png' },
+                            }),
+                    },
+                },
+                stdout: captureOutput(),
+                stderr,
+            },
+        );
+        expect(exitCode).toBe(1);
+        expect(fetchImpl).toHaveBeenCalledOnce();
+        expect(stderr.chunks.join('')).toMatch(
+            /^Error: --callout cannot mark the subject on youtube/,
+        );
+        const after = readdirSync(tmpdir()).filter((name) => name.startsWith('beastcover-stock-'));
+        expect(after).toEqual(before);
+    });
+
     it('draws the ring where the pre-render check put it, even at a scale that rounds the master', async () => {
         const cwd = tempDir('beastcover-cli-callout-scale-');
         // 1200x641 进 16:10 母版的窗口宽度落在 1025.6 附近，2.02 倍的像素画布比例会把它推到另一边。
@@ -1167,6 +1271,34 @@ describe('BeastCover CLI', () => {
         expect(Number(drawn?.[2])).toBeCloseTo(expected.cy, 6);
         expect(Number(drawn?.[3])).toBeCloseTo(expected.rx, 6);
         expect(Number(drawn?.[4])).toBeCloseTo(expected.ry, 6);
+    });
+
+    it('refuses a non-PNG render or stock output before opening the renderer', async () => {
+        const cwd = tempDir('beastcover-cli-jpg-');
+        writeFileSync(join(cwd, 'wide.png'), await testPngBytes(400, 200));
+        for (const args of [
+            ['--source', 'render'],
+            ['--source', 'stock', '--photo', 'wide.png'],
+        ] as const) {
+            const renderHtml = mockRender();
+            const stderr = captureOutput();
+            const exitCode = await runCli(
+                ['node', 'beastcover', 'gen', 'Headline', ...args, '--output', 'cover.jpg'],
+                {
+                    cwd,
+                    configPath: join(cwd, 'unused-config.json'),
+                    openRenderer: renderHtml.open,
+                    photoFocus: centreFocus,
+                    stdout: captureOutput(),
+                    stderr,
+                },
+            );
+            expect(exitCode, args.join(' ')).toBe(1);
+            expect(stderr.chunks.join('')).toBe(
+                `Error: Cover output must use the .png extension: ${join(cwd, 'cover.jpg')}\n`,
+            );
+            expect(renderHtml.open).not.toHaveBeenCalled();
+        }
     });
 
     it('refuses --hook where no cover would show it', async () => {

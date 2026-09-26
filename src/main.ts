@@ -408,6 +408,28 @@ async function writeCovers(
     }
 }
 
+/**
+ * 成品路径：--output 优先，其次工作区的 out/，再其次配置里的默认。裁好的成品一律是 PNG，
+ * 渲染和调模型都慢，所以在动手之前就拦下别的扩展名。
+ */
+function coverOutputPath(
+    runtime: CliRuntime,
+    flags: ConfigFlags,
+    fallback: string,
+    workspaceDir: string | undefined,
+    now: Date,
+): string {
+    const path = resolve(
+        runtime.cwd,
+        flags.output ??
+            (workspaceDir === undefined ? fallback : defaultWorkspaceOutputPath(workspaceDir, now)),
+    );
+    if (extname(path).toLowerCase() !== '.png') {
+        throw new Error(`Cover output must use the .png extension: ${path}`);
+    }
+    return path;
+}
+
 function coverLines(covers: readonly WrittenCover[], scale: number): string[] {
     return covers.flatMap((cover) => [
         `Created ${cover.outputPath}`,
@@ -738,6 +760,14 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         ...runtime.stock,
                     };
 
+                    // 成品路径不依赖照片，先算先拦，别为一个 .jpg 去下载图库照片。
+                    const outputPath = coverOutputPath(
+                        runtime,
+                        flags,
+                        effective.output,
+                        workspaceDir,
+                        now,
+                    );
                     let photoPath: string;
                     let tempDir: string | undefined;
                     let photoMeta: {
@@ -748,85 +778,86 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         attribution?: string;
                         pageUrl?: string;
                     } = {};
-                    if (isStockRef(options.photo)) {
-                        const stem = stockFileStem(options.photo);
-                        if (!workspaceDir) {
-                            tempDir = mkdtempSync(join(tmpdir(), 'beastcover-stock-'));
-                        }
-                        const refsDir = workspaceDir
-                            ? join(workspaceDir, 'refs')
-                            : (tempDir as string);
-                        const fetched = await fetchStockPhoto(
-                            { ref: options.photo, basePath: join(refsDir, stem), now },
-                            stockRuntime,
-                        );
-                        photoPath = fetched.imagePath;
-                        photoMeta = {
-                            ref: fetched.photo.ref,
-                            provider: fetched.photo.provider,
-                            creator: fetched.photo.creator,
-                            license: fetched.photo.license,
-                            attribution: fetched.photo.attribution,
-                            pageUrl: fetched.photo.pageUrl,
-                        };
-                    } else {
-                        photoPath = resolve(runtime.cwd, options.photo);
-                        if (!existsSync(photoPath)) {
-                            throw new Error(`Photo not found: ${photoPath}`);
-                        }
-                    }
-
-                    const outputPath = flags.output
-                        ? flags.output
-                        : workspaceDir
-                          ? defaultWorkspaceOutputPath(workspaceDir, now)
-                          : effective.output;
-                    const paletteOption = renderPalette ? { palette: renderPalette } : {};
-                    const photoSize = await imageSize(photoPath);
-                    const focus = await runtime.photoFocus(photoPath);
-                    if (callout) {
-                        checkCallout(
-                            photoSize,
-                            focus,
-                            effective.render.presets,
-                            effective.render.canvas,
-                        );
-                    }
-                    const subject = await loadSubject(runtime, workspaceDir, options.subject);
-                    const templateFor = (line: string): CoverTemplate => ({
-                        layoutFor: callout
-                            ? (layout) => calloutLayout(layout, photoSize, focus)
-                            : subject
-                              ? withSubjectArea
-                              : photoTextLayout,
-                        measureHtml: (layout, headline) =>
-                            createPhotoCoverTemplate(line, {
-                                layout,
-                                headline,
-                                measure: true,
-                                ...paletteOption,
-                            }),
-                        renderHtml: async (layout, headline, pixelWidth, pixelHeight) =>
-                            createPhotoCoverTemplate(line, {
-                                layout,
-                                headline,
-                                photo: await preparePhotoLayer(photoPath, pixelWidth, pixelHeight, {
-                                    focus,
-                                    target: photoFocusTarget(layout, subject !== undefined),
-                                    fit,
-                                    // 按版式比例构图，和渲染前的圈注检查用同一个窗口。
-                                    canvas: { width: layout.width, height: layout.height },
-                                    ...visibleOption(layout),
-                                }),
-                                look,
-                                callout,
-                                ...paletteOption,
-                                ...(subject ? { subject: subject.layer } : {}),
-                            }),
-                    });
-                    let written: Awaited<ReturnType<typeof writeCovers>>;
+                    // 没有工作区时图库照片落在临时目录里，从建目录起到出图结束都在这个 try 里，
+                    // 中途任何一步报错都会把目录删掉。
                     try {
-                        written = await writeCovers(
+                        if (isStockRef(options.photo)) {
+                            const stem = stockFileStem(options.photo);
+                            if (!workspaceDir) {
+                                tempDir = mkdtempSync(join(tmpdir(), 'beastcover-stock-'));
+                            }
+                            const refsDir = workspaceDir
+                                ? join(workspaceDir, 'refs')
+                                : (tempDir as string);
+                            const fetched = await fetchStockPhoto(
+                                { ref: options.photo, basePath: join(refsDir, stem), now },
+                                stockRuntime,
+                            );
+                            photoPath = fetched.imagePath;
+                            photoMeta = {
+                                ref: fetched.photo.ref,
+                                provider: fetched.photo.provider,
+                                creator: fetched.photo.creator,
+                                license: fetched.photo.license,
+                                attribution: fetched.photo.attribution,
+                                pageUrl: fetched.photo.pageUrl,
+                            };
+                        } else {
+                            photoPath = resolve(runtime.cwd, options.photo);
+                            if (!existsSync(photoPath)) {
+                                throw new Error(`Photo not found: ${photoPath}`);
+                            }
+                        }
+
+                        const paletteOption = renderPalette ? { palette: renderPalette } : {};
+                        const photoSize = await imageSize(photoPath);
+                        const focus = await runtime.photoFocus(photoPath);
+                        if (callout) {
+                            checkCallout(
+                                photoSize,
+                                focus,
+                                effective.render.presets,
+                                effective.render.canvas,
+                            );
+                        }
+                        const subject = await loadSubject(runtime, workspaceDir, options.subject);
+                        const templateFor = (line: string): CoverTemplate => ({
+                            layoutFor: callout
+                                ? (layout) => calloutLayout(layout, photoSize, focus)
+                                : subject
+                                  ? withSubjectArea
+                                  : photoTextLayout,
+                            measureHtml: (layout, headline) =>
+                                createPhotoCoverTemplate(line, {
+                                    layout,
+                                    headline,
+                                    measure: true,
+                                    ...paletteOption,
+                                }),
+                            renderHtml: async (layout, headline, pixelWidth, pixelHeight) =>
+                                createPhotoCoverTemplate(line, {
+                                    layout,
+                                    headline,
+                                    photo: await preparePhotoLayer(
+                                        photoPath,
+                                        pixelWidth,
+                                        pixelHeight,
+                                        {
+                                            focus,
+                                            target: photoFocusTarget(layout, subject !== undefined),
+                                            fit,
+                                            // 按版式比例构图，和渲染前的圈注检查用同一个窗口。
+                                            canvas: { width: layout.width, height: layout.height },
+                                            ...visibleOption(layout),
+                                        },
+                                    ),
+                                    look,
+                                    callout,
+                                    ...paletteOption,
+                                    ...(subject ? { subject: subject.layer } : {}),
+                                }),
+                        });
+                        const written = await writeCovers(
                             runtime,
                             text,
                             templateFor,
@@ -835,51 +866,51 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             guides,
                             hook,
                         );
+
+                        if (workspaceDir && pack) {
+                            for (const cover of written.covers) {
+                                appendHistory(workspaceDir, {
+                                    createdAt: now.toISOString(),
+                                    style: pack.style,
+                                    palette: palette ?? {},
+                                    text,
+                                    ...(hook === undefined ? {} : { hook }),
+                                    source: 'stock',
+                                    ...(cover.platform ? { preset: cover.platform } : {}),
+                                    output: cover.outputPath,
+                                    photo: { path: photoPath, ...photoMeta },
+                                    ...subjectHistory(subject),
+                                });
+                            }
+                        }
+
+                        runtime.stdout.write(
+                            [
+                                ...coverLines(written.covers, effective.render.scale),
+                                ...written.warnings,
+                                ...stretchLines(photoSize, effective.render, fit),
+                                ...(fit === 'cover' && effective.render.canvas === undefined
+                                    ? focusCropWarnings(
+                                          photoSize,
+                                          focus,
+                                          effective.render.presets,
+                                          subject !== undefined,
+                                      )
+                                    : []),
+                                ...subjectLine(subject),
+                                `Photo: ${photoMeta.ref ?? photoPath}`,
+                                ...creditLines(photoMeta),
+                                photoMeta.provider
+                                    ? `Privacy: the photo was downloaded from ${photoMeta.provider}. Render stayed on this machine.`
+                                    : 'Privacy: render stayed on this machine.',
+                                '',
+                            ].join('\n'),
+                        );
                     } finally {
                         if (tempDir !== undefined) {
                             rmSync(tempDir, { recursive: true, force: true });
                         }
                     }
-
-                    if (workspaceDir && pack) {
-                        for (const cover of written.covers) {
-                            appendHistory(workspaceDir, {
-                                createdAt: now.toISOString(),
-                                style: pack.style,
-                                palette: palette ?? {},
-                                text,
-                                ...(hook === undefined ? {} : { hook }),
-                                source: 'stock',
-                                ...(cover.platform ? { preset: cover.platform } : {}),
-                                output: cover.outputPath,
-                                photo: { path: photoPath, ...photoMeta },
-                                ...subjectHistory(subject),
-                            });
-                        }
-                    }
-
-                    runtime.stdout.write(
-                        [
-                            ...coverLines(written.covers, effective.render.scale),
-                            ...written.warnings,
-                            ...stretchLines(photoSize, effective.render, fit),
-                            ...(fit === 'cover' && effective.render.canvas === undefined
-                                ? focusCropWarnings(
-                                      photoSize,
-                                      focus,
-                                      effective.render.presets,
-                                      subject !== undefined,
-                                  )
-                                : []),
-                            ...subjectLine(subject),
-                            `Photo: ${photoMeta.ref ?? photoPath}`,
-                            ...creditLines(photoMeta),
-                            photoMeta.provider
-                                ? `Privacy: the photo was downloaded from ${photoMeta.provider}. Render stayed on this machine.`
-                                : 'Privacy: render stayed on this machine.',
-                            '',
-                        ].join('\n'),
-                    );
                     return;
                 }
 
@@ -934,14 +965,13 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     }
 
                     const now = runtime.now();
-                    const outputPath = resolve(
-                        runtime.cwd,
-                        flags.output ?? defaultWorkspaceOutputPath(workspaceDir, now),
+                    const outputPath = coverOutputPath(
+                        runtime,
+                        flags,
+                        effective.output,
+                        workspaceDir,
+                        now,
                     );
-                    // 裁好的成品一律是 PNG。调模型又慢又花钱，所以在调之前就拦下别的扩展名。
-                    if (extname(outputPath).toLowerCase() !== '.png') {
-                        throw new Error(`Cover output must use the .png extension: ${outputPath}`);
-                    }
                     // 一族只调一次模型：原图存进 cache/，族内各平台从同一张图裁。
                     const byFamily = new Map<FamilyName, CoverTarget[]>();
                     for (const target of coverOutputPaths(outputPath, effective.render.presets)) {
@@ -1019,11 +1049,13 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const palette = pack ? mergedPalette(pack) : undefined;
                 const renderPalette = pack ? coverPalette(pack) : undefined;
                 const now = runtime.now();
-                const outputPath = flags.output
-                    ? flags.output
-                    : workspaceDir
-                      ? defaultWorkspaceOutputPath(workspaceDir, now)
-                      : effective.output;
+                const outputPath = coverOutputPath(
+                    runtime,
+                    flags,
+                    effective.output,
+                    workspaceDir,
+                    now,
+                );
                 const subject = await loadSubject(runtime, workspaceDir, options.subject);
                 const request = templateRequest(runtime, templateName, options, subject);
                 const templateFor = (line: string) =>
