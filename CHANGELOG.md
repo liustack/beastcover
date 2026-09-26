@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 (2026-09-26)
+
+- **`--hook` for a short cover line.** A video thumbnail wants a hook of a few words, while WeChat and X article cards show the title next to the cover. `--hook "It fails"` puts the short line on the video and note covers and keeps the full headline on WeChat and X. It fails when no requested cover would show it.
+- **People are sized by the face.** On macOS the cutout is cropped to head and shoulders when a face is found, and the person grows until the face is about 30% of the clear height. The person may run off the canvas edge away from the headline, never toward it, and the face stays inside what every requested platform shows. In test covers the face went from 10-18% to 21-31% of the frame height. Breakout YouTube thumbnails have a median of 27%.
+- **Hints based on real covers.**
+  - `Cover:` suggests a subject when a YouTube thumbnail is text only. None of 90 top YouTube thumbnails were text only.
+  - `Headline:` now also covers Bilibili, with a 10 Chinese character limit. In 136 trending and weekly-pick Bilibili covers the median was 8 characters, and only one in five repeated the video title word for word.
+- **Lighter photo covers.** The dark gradient covered the top and most of the bottom. It now darkens only the lower part, and lightly, and a shadow close to the letters keeps the headline legible. Dark thumbnails consistently lag in 1of10's 300,000-video study.
+
 ## 0.4.0 (2026-09-26)
 
 - **Styles keep their colours on render covers.** Covers looked up colours by slot name, so the risograph pink (slot `spot`) and the impasto blue (slot `colors`) fell back to the default blue. Each style now marks which slot is the cover paper, ink, and accent, and every style must mark one accent.
