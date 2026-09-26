@@ -1,6 +1,6 @@
 {
     "name": "@liustack/beastcover",
-    "version": "0.3.2",
+    "version": "0.3.3",
     "description": "Covers that get the click, for WeChat, X, YouTube, Xiaohongshu, Douyin and more: your agent picks a free photo, adds your headline and palette, and renders it locally",
     "type": "module",
     "bin": {
