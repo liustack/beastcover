@@ -41,69 +41,75 @@ describe('offline doctor', () => {
         });
     });
 
-    it('checks Node, the Chromium executable, private config permissions, and agent CLIs', async () => {
-        const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-'));
-        tempDirectories.push(directory);
-        const configPath = join(directory, 'config.json');
-        writeFileSync(configPath, '{}\n', { mode: 0o600 });
+    // 这条测的是 POSIX 文件权限语义，Windows 用 ACL 管权限，直接跳过。
+    it.runIf(process.platform !== 'win32')(
+        'checks Node, the Chromium executable, private config permissions, and agent CLIs',
+        async () => {
+            const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-'));
+            tempDirectories.push(directory);
+            const configPath = join(directory, 'config.json');
+            writeFileSync(configPath, '{}\n', { mode: 0o600 });
 
-        const healthy = await runDoctor({
-            nodeVersion: '22.19.0',
-            launchChromium: startsChromium,
-            configPath,
-            platform: 'darwin',
-            osRelease: '24.3.0',
-            lookupCommand: () => undefined,
-        });
+            const healthy = await runDoctor({
+                nodeVersion: '22.19.0',
+                launchChromium: startsChromium,
+                configPath,
+                platform: 'darwin',
+                osRelease: '24.3.0',
+                lookupCommand: () => undefined,
+            });
 
-        expect(healthy.healthy).toBe(true);
-        expect(healthy.checks).toHaveLength(6);
-        // 没有 swiftc 时自动抠图不可用，只是提醒，不影响健康。
-        expect(healthy.checks.find((check) => check.id === 'cutout')).toEqual({
-            id: 'cutout',
-            label: 'Subject cutout',
-            status: 'warn',
-            message:
-                '--subject needs a transparent PNG here: automatic cutout needs the Swift compiler. Run xcode-select --install.',
-        });
-        expect(healthy.checks.find((check) => check.id === 'node')).toMatchObject({
-            id: 'node',
-            status: 'ok',
-        });
-        expect(healthy.checks.find((check) => check.id === 'chromium')).toMatchObject({
-            id: 'chromium',
-            status: 'ok',
-        });
-        expect(healthy.checks.find((check) => check.id === 'config-permissions')).toMatchObject({
-            id: 'config-permissions',
-            status: 'ok',
-        });
-        for (const id of ['codex', 'agy'] as const) {
-            expect(healthy.checks.find((check) => check.id === id)).toMatchObject({
-                id,
+            expect(healthy.healthy).toBe(true);
+            expect(healthy.checks).toHaveLength(6);
+            // 没有 swiftc 时自动抠图不可用，只是提醒，不影响健康。
+            expect(healthy.checks.find((check) => check.id === 'cutout')).toEqual({
+                id: 'cutout',
+                label: 'Subject cutout',
+                status: 'warn',
+                message:
+                    '--subject needs a transparent PNG here: automatic cutout needs the Swift compiler. Run xcode-select --install.',
+            });
+            expect(healthy.checks.find((check) => check.id === 'node')).toMatchObject({
+                id: 'node',
+                status: 'ok',
+            });
+            expect(healthy.checks.find((check) => check.id === 'chromium')).toMatchObject({
+                id: 'chromium',
+                status: 'ok',
+            });
+            expect(healthy.checks.find((check) => check.id === 'config-permissions')).toMatchObject(
+                {
+                    id: 'config-permissions',
+                    status: 'ok',
+                },
+            );
+            for (const id of ['codex', 'agy'] as const) {
+                expect(healthy.checks.find((check) => check.id === id)).toMatchObject({
+                    id,
+                    status: 'warn',
+                });
+                expect(healthy.checks.find((check) => check.id === id)?.message).toMatch(id);
+            }
+            expect(renderDoctorReport(healthy)).toContain('BeastCover doctor: healthy');
+
+            chmodSync(configPath, 0o644);
+            const unsafe = await runDoctor({
+                nodeVersion: '22.19.0',
+                launchChromium: startsChromium,
+                configPath,
+                platform: 'darwin',
+                lookupCommand: () => undefined,
+            });
+            expect(unsafe.healthy).toBe(false);
+            expect(unsafe.checks.find((check) => check.id === 'config-permissions')).toMatchObject({
+                id: 'config-permissions',
+                status: 'error',
+            });
+            expect(unsafe.checks.find((check) => check.id === 'codex')).toMatchObject({
                 status: 'warn',
             });
-            expect(healthy.checks.find((check) => check.id === id)?.message).toMatch(id);
-        }
-        expect(renderDoctorReport(healthy)).toContain('BeastCover doctor: healthy');
-
-        chmodSync(configPath, 0o644);
-        const unsafe = await runDoctor({
-            nodeVersion: '22.19.0',
-            launchChromium: startsChromium,
-            configPath,
-            platform: 'darwin',
-            lookupCommand: () => undefined,
-        });
-        expect(unsafe.healthy).toBe(false);
-        expect(unsafe.checks.find((check) => check.id === 'config-permissions')).toMatchObject({
-            id: 'config-permissions',
-            status: 'error',
-        });
-        expect(unsafe.checks.find((check) => check.id === 'codex')).toMatchObject({
-            status: 'warn',
-        });
-    });
+        },
+    );
 
     it('reports the macOS cutout as ok when swiftc is on PATH and as a warning elsewhere', async () => {
         const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-cutout-'));
@@ -145,7 +151,8 @@ describe('offline doctor', () => {
             nodeVersion: '22.19.0',
             launchChromium: startsChromium,
             configPath,
-            platform: 'darwin',
+            // Windows 上 0600 写不进文件系统，权限检查要走它自己的 ACL 分支。
+            platform: process.platform === 'win32' ? 'win32' : 'darwin',
             lookupCommand: (name) => `/usr/bin/${name}`,
         });
 

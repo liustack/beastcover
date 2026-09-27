@@ -54,7 +54,10 @@ describe('layered config', () => {
         initConfigFile(configPath);
 
         expect(readFileSync(configPath, 'utf8')).toBe('{}\n');
-        expect(statSync(configPath).mode & 0o777).toBe(0o600);
+        // Windows manages access through ACLs, so the POSIX mode is meaningless there.
+        if (process.platform !== 'win32') {
+            expect(statSync(configPath).mode & 0o777).toBe(0o600);
+        }
         expect(() => initConfigFile(configPath)).toThrowError(
             `${configPath} already exists. Use --force to replace it.`,
         );
@@ -158,7 +161,9 @@ describe('layered config', () => {
             },
             agent: { via: 'codex' },
         });
-        expect(statSync(configPath).mode & 0o777).toBe(0o600);
+        if (process.platform !== 'win32') {
+            expect(statSync(configPath).mode & 0o777).toBe(0o600);
+        }
         setConfigValue('render.preset', 'douyin, wechat', configPath);
         expect(loadConfigFile(configPath).render?.preset).toBe('wechat,douyin');
         expect(resolveEffectiveConfig(loadConfigFile(configPath), {}).render.presets).toEqual([
