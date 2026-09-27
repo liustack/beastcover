@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { genrePage } from '../genres/page.ts';
 import { chooseFont, type FontChoice, proberFrom } from './fonts.ts';
-import { type CoverRenderer, openRenderer, TextDoesNotFitError } from './index.ts';
+import { type CoverRenderer, captureViewport, openRenderer, TextDoesNotFitError } from './index.ts';
 import { type CoverLayout, customLayout, type Headline } from './layout.ts';
 
 const tempDirectories: string[] = [];
@@ -135,6 +135,32 @@ describe('cover renderer', () => {
             .catch((error: unknown) => error);
         expect(bigger).toBeInstanceOf(TextDoesNotFitError);
     }, 30_000);
+
+    it('retries a screenshot Chromium fails to capture, and only that failure', async () => {
+        let calls = 0;
+        const flaky = {
+            screenshot: async () => {
+                calls += 1;
+                if (calls === 1) {
+                    throw new Error(
+                        'page.screenshot: Protocol error (Page.captureScreenshot): Unable to capture screenshot',
+                    );
+                }
+                return Buffer.from('png');
+            },
+            waitForTimeout: async () => undefined,
+        };
+        expect((await captureViewport(flaky)).toString()).toBe('png');
+        expect(calls).toBe(2);
+
+        const broken = {
+            screenshot: async () => {
+                throw new Error('Target page, context or browser has been closed');
+            },
+            waitForTimeout: async () => undefined,
+        };
+        await expect(captureViewport(broken)).rejects.toThrow('has been closed');
+    });
 
     it('counts the lines the headline wraps to and keeps within the limit', async () => {
         // 窄高的一栏：不限行数时九个字会折成很多行，限两行时字号小一些但只有两行。

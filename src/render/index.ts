@@ -181,6 +181,33 @@ function countLines(page: Page, fontPx: number): Promise<number> {
     }, fontPx);
 }
 
+// Chromium 在 Linux 软件渲染下偶尔抓不到画面（Protocol error: Unable to capture screenshot），
+// 页面没变，隔一下再抓就好。只重试这一种错，最多两次，别的错照抛。
+const CAPTURE_RETRIES = 2;
+const CAPTURE_FAILED = 'Unable to capture screenshot';
+
+/** 截当前视口，Chromium 偶发抓不到画面时重抓 */
+export async function captureViewport(
+    page: Pick<Page, 'screenshot' | 'waitForTimeout'>,
+): Promise<Buffer> {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            return await page.screenshot({
+                type: 'png',
+                animations: 'disabled',
+                caret: 'hide',
+                fullPage: false,
+            });
+        } catch (error) {
+            const transient = error instanceof Error && error.message.includes(CAPTURE_FAILED);
+            if (!transient || attempt >= CAPTURE_RETRIES) {
+                throw error;
+            }
+            await page.waitForTimeout(150 * (attempt + 1));
+        }
+    }
+}
+
 /** render 启动 Chromium 的唯一方式，doctor 用同一个函数检查，两边不会各说各话 */
 export function launchChromium(): Promise<Browser> {
     return chromium.launch({ headless: true });
@@ -244,25 +271,14 @@ export async function openRenderer(): Promise<CoverRenderer> {
             validateScale(request.scale);
             return withPage(browser, request, async (page) => {
                 await page.setContent(request.html, { waitUntil: 'load' });
-                return page.screenshot({
-                    type: 'png',
-                    animations: 'disabled',
-                    caret: 'hide',
-                    fullPage: false,
-                });
+                return captureViewport(page);
             });
         },
 
         async inspect(request) {
             validateDimension('Width', request.width);
             validateDimension('Height', request.height);
-            const shot = (page: Page) =>
-                page.screenshot({
-                    type: 'png',
-                    animations: 'disabled',
-                    caret: 'hide',
-                    fullPage: false,
-                });
+            const shot = captureViewport;
             return withPage(browser, { ...request, scale: 1 }, async (page) => {
                 await page.setContent(request.html, { waitUntil: 'load' });
                 const withText = await shot(page);
