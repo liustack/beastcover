@@ -1,7 +1,8 @@
 // 重新生成 examples/ 里的案例封面，每种封面类型至少一张，三个平台族都有。
 // 用法：pnpm examples （先 pnpm build）
 //
-// 照片来自 Openverse 的 cc0/pdm 记录，人物是 AI 生成的示例人物（examples/assets/face.jpg）。
+// 照片来自 Openverse 的 cc0/pdm 记录，人物是 AI 生成的示例人物（examples/assets/face.jpg），
+// 前后对比的两张桌子是 codex 画的（examples/assets/desk-*.jpg）。
 // 质检是必须工序：任何一张出现 QC FAIL，脚本就停下，不拿不合格的封面当案例。
 // 现画场景的案例要本机的模型或 agent CLI，不在脚本里，手动重画。
 // 改过版式后跑一遍，和 git 里的旧图并排目检，这个目录就是观感回归的基准集。
@@ -30,8 +31,6 @@ const PHOTOS = {
     ramenFancy: 'openverse:a01ecc5c-176b-4d1f-a445-655ff2184e3a',
     tsukemen: 'openverse:1ba9b26d-990f-4c66-ba15-f2cc8cabb41b',
     streetFood: 'openverse:3db8719f-ce9f-4ed3-bc27-0ee02624fe3e',
-    deskBefore: 'openverse:db683a42-45c4-4715-97cc-318a86cc568e',
-    deskAfter: 'openverse:19f89def-c920-4e19-bc37-c20a2dedaa5a',
     coffee: 'openverse:278488ee-cc5d-49d9-84bb-de0281b20f60',
 };
 
@@ -41,6 +40,11 @@ process.on('exit', () => rmSync(staging, { recursive: true, force: true }));
 mkdirSync(examplesDir, { recursive: true });
 const out = (name) => join(examplesDir, name);
 const face = join(examplesDir, 'assets', 'face.jpg');
+// 前后对比要同一张桌子的前后两张，免费图库凑不出来。这一对是 codex 按两段 --scene 画的
+// （第二张照着第一张改），存成素材，改版式时重排不用重画：
+//   beastcover gen "桌面*改造*" --template before-after --scene "<乱桌面>" --scene "<同一张桌子收拾好>" --via codex
+const deskBefore = join(examplesDir, 'assets', 'desk-before.jpg');
+const deskAfter = join(examplesDir, 'assets', 'desk-after.jpg');
 
 /** 跑一条 gen，把输出原样打出来。退出码不为 0 或质检不过都算失败 */
 function gen(args, { optional = false } = {}) {
@@ -65,7 +69,7 @@ function gen(args, { optional = false } = {}) {
 const jpegs = [];
 
 gen(['3个错误*毁了*我的频道', '--template', 'big-type', '--tag', '新手必看', '--preset', 'xiaohongshu,wechat', '--output', out('big-type.png')]);
-gen(['个习惯救了我的时间', '--template', 'number', '--number', '3', '--preset', 'youtube,douyin', '--output', out('number.png')]);
+gen(['个习惯 多出两小时', '--template', 'number', '--number', '3', '--preset', 'youtube,douyin', '--output', out('number.png')]);
 
 // 人物两张要抠图（macOS 14+）。抠不了时留着旧图，不拿缺失文件当输入。
 if (gen(['我看*傻*了', '--subject', face, '--preset', 'youtube,xiaohongshu', '--output', out('face-text.png')], { optional: true })) {
@@ -76,7 +80,7 @@ if (gen(['我看*傻*了', '--subject', face, '--preset', 'youtube,xiaohongshu',
 }
 
 gen(['15元和150元的拉面', '--template', 'versus', '--photo', PHOTOS.ramen, '--photo', PHOTOS.ramenFancy, '--labels', '¥15,¥150', '--preset', 'youtube', '--output', out('versus-youtube.png')]);
-gen(['桌面*改造*', '--template', 'before-after', '--photo', PHOTOS.deskBefore, '--photo', PHOTOS.deskAfter, '--labels', '改前,改后', '--preset', 'xiaohongshu', '--output', out('before-after-xiaohongshu.png')]);
+gen(['桌面*改造*', '--template', 'before-after', '--photo', deskBefore, '--photo', deskAfter, '--labels', '改前,改后', '--preset', 'xiaohongshu', '--output', out('before-after-xiaohongshu.png')]);
 gen(['*出海*第一天', '--template', 'scene-title', '--photo', PHOTOS.sailboat, '--preset', 'youtube,x', '--output', out('scene-title.png')]);
 gen(['这是什么？', '--template', 'callout', '--photo', PHOTOS.plane, '--preset', 'youtube', '--output', out('callout-youtube.png')]);
 gen(['一周吃了*7碗*面', '--template', 'collage', '--photo', PHOTOS.ramen, '--photo', PHOTOS.tsukemen, '--photo', PHOTOS.streetFood, '--photo', PHOTOS.ramenFancy, '--preset', 'xiaohongshu', '--output', out('collage-xiaohongshu.png')]);

@@ -88,7 +88,7 @@ npm i -g @liustack/beastcover
 npx --yes --package @liustack/beastcover playwright install chromium
 
 beastcover gen "我看*傻*了" --subject me.jpg --preset youtube,xiaohongshu
-beastcover gen "个习惯救了我的时间" --template number --number 3 --preset all
+beastcover gen "个习惯 多出两小时" --template number --number 3 --preset all
 beastcover stock search "ramen bowl" --orientation landscape
 beastcover gen "15元和150元的拉面" --template versus --photo openverse:<id> --photo openverse:<id> --labels "¥15,¥150"
 beastcover gen "在火山口*住*了一晚" --subject me.jpg --scene "a volcano crater at dusk, a tent on the rim" --number "50米"

@@ -16,10 +16,10 @@ beastcover gen "3个错误*毁了*我的频道" --template big-type --tag "新�
 
 ## Number hook
 
-One huge figure beside a short line. The figure box is sized to the figure, so a single digit does not leave a hole on the left.
+One huge figure beside a short line. The figure box is sized to the figure, so a single digit does not leave a hole on the left. The space in the headline marks where the line breaks: 个习惯 / 多出两小时.
 
 ```bash
-beastcover gen "个习惯救了我的时间" --template number --number 3 --preset youtube,douyin
+beastcover gen "个习惯 多出两小时" --template number --number 3 --preset youtube,douyin
 ```
 
 <img src="number-youtube.png" width="480"> <img src="number-douyin.png" width="152">
@@ -57,10 +57,10 @@ beastcover gen "15元和150元的拉面" --template versus --photo openverse:0f8
 
 ## Before and after
 
-Before on top, after below on a portrait cover (left and right on landscape), the headline band in the seam.
+Before on top, after below on a portrait cover (left and right on landscape), the headline band in the seam. Both halves have to show the same place, and free stock has no such pairs, so the user's codex CLI painted this one: the first `--scene` is the before, the second says what changes, and the after picture is painted from the before picture.
 
 ```bash
-beastcover gen "桌面*改造*" --template before-after --photo openverse:db683a42-45c4-4715-97cc-318a86cc568e --photo openverse:19f89def-c920-4e19-bc37-c20a2dedaa5a --labels "改前,改后" --preset xiaohongshu
+beastcover gen "桌面*改造*" --template before-after --scene "a messy home office desk seen from the front at eye level: tangled cables, stacked papers, empty mugs, sticky notes everywhere, a laptop and a monitor, warm window light from the left" --scene "the same desk cleared and organised: cables hidden, papers and mugs gone, one small plant, the laptop and the monitor in the same places" --via codex --labels "改前,改后" --preset xiaohongshu
 ```
 
 <img src="before-after-xiaohongshu.jpg" width="203">
@@ -107,4 +107,4 @@ beastcover gen "慢一点的早晨" --template mood --photo openverse:278488ee-c
 
 ## Credits
 
-Photos via [Openverse](https://openverse.org), all CC0: [lava and helicopter](https://www.flickr.com/photos/27784370@N05/16285896735) by U.S. Geological Survey, [sailboat](https://stocksnap.io/photo/sailing-boat-6HIAAM72PR) by JJ Skys the Limit, [airplane](https://stocksnap.io/photo/airplane-sky-YNUT4JAZ0V) by Matt Bango, [ramen](https://www.rawpixel.com/image/5925771/photo-image-public-domain-food-free) via rawpixel, [ramen with egg](https://stocksnap.io/photo/ramen-noodles-KKMQPWQK6H) by Foodie Girl, [tsukemen](https://commons.wikimedia.org/w/index.php?curid=39923890) by Douglas Perkins, [night market](https://www.flickr.com/photos/101561334@N08/9870511026) by Gary Lee Todd, [cluttered desk](https://www.flickr.com/photos/37996646802@N01/132287095) by cogdogblog, [clean desk](https://stocksnap.io/photo/laptop-desk-JCXQS3IVWD) by Lisa Fotios, [coffee](https://www.flickr.com/photos/132795455@N08/17625638243) via Image Catalog. The demo face is AI-generated. No real person appears in these covers. The volcano scene was painted by codex for this example.
+Photos via [Openverse](https://openverse.org), all CC0: [lava and helicopter](https://www.flickr.com/photos/27784370@N05/16285896735) by U.S. Geological Survey, [sailboat](https://stocksnap.io/photo/sailing-boat-6HIAAM72PR) by JJ Skys the Limit, [airplane](https://stocksnap.io/photo/airplane-sky-YNUT4JAZ0V) by Matt Bango, [ramen](https://www.rawpixel.com/image/5925771/photo-image-public-domain-food-free) via rawpixel, [ramen with egg](https://stocksnap.io/photo/ramen-noodles-KKMQPWQK6H) by Foodie Girl, [tsukemen](https://commons.wikimedia.org/w/index.php?curid=39923890) by Douglas Perkins, [night market](https://www.flickr.com/photos/101561334@N08/9870511026) by Gary Lee Todd, [coffee](https://www.flickr.com/photos/132795455@N08/17625638243) via Image Catalog. The demo face is AI-generated. No real person appears in these covers. The volcano scene and the two desks were painted by codex for these examples.

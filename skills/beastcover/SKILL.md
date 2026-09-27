@@ -72,7 +72,7 @@ Options that belong to another type fail with a message naming the types that ta
 
 ```bash
 beastcover gen "3个错误*毁了*我的频道" --template big-type --tag "新手必看" --preset xiaohongshu,wechat
-beastcover gen "个习惯救了我的时间" --template number --number 3 --preset all
+beastcover gen "个习惯 多出两小时" --template number --number 3 --preset all
 beastcover gen "我看*傻*了" --subject /abs/me.jpg --preset youtube,bilibili,douyin
 beastcover gen "在火山口*住*了一晚" --subject /abs/me.jpg --photo openverse:<id> --number "50米" --preset youtube
 beastcover gen "15元和150元的拉面" --template versus --photo /abs/cheap.jpg --photo /abs/fancy.jpg --labels "¥15,¥150" --preset youtube,xiaohongshu
@@ -84,7 +84,7 @@ beastcover gen "东京吃了*7天*" --photo a.jpg --photo b.jpg --photo c.jpg --
 ## 4. Write the words
 
 - **The cover carries a label, not the title.** The title sits right next to the cover in every feed, so repeating it wastes half the space. YouTube covers carry a few words at most (`DAY 6`, `How?`, a figure). Chinese platforms take more words (Bilibili breakout covers carry about 8 characters, 10 at most), but still a rewrite, shorter and louder than the title.
-- **Mark where a line may break.** A headline wraps to at most three lines and prefers fewer. Put punctuation or a space between Chinese phrases where a break reads naturally: `个习惯 救了我的时间` breaks as 个习惯 / 救了我的时间, not in the middle of a phrase.
+- **Mark where a line may break.** A headline wraps to at most three lines and prefers fewer. Put punctuation or a space between Chinese phrases where a break reads naturally: `个习惯 多出两小时` breaks as 个习惯 / 多出两小时, not in the middle of a phrase.
 - **Mark one keyword with `*asterisks*`.** It gets the accent colour, a marker stroke, or a colour block, depending on the type. Without a mark, figures (`3`, `90%`, `¥150`) are highlighted automatically. Mark one word, not three.
 - **`--hook` for mixed runs.** WeChat and X article cards show the title beside the cover, so a full line is fine there. When one run covers both, pass the full line as the headline and the short label as `--hook`: video and note covers get the hook, WeChat and X keep the headline.
 - **`--tag`** is a small label above the headline (`新手必看`, `干货`, `2026`), for `big-type`, `number`, and `face-text`.
