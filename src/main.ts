@@ -438,6 +438,11 @@ async function writeCovers(
             return {
                 covers: [{ outputPath: cover.outputPath, ...render.canvas }],
                 warnings: [
+                    ...(cover.moved
+                        ? [
+                              'Layout: the headline moved to its other spot on the canvas, where it covers less of the picture.',
+                          ]
+                        : []),
                     ...fonts.notes(),
                     ...(runtime.qc === undefined
                         ? []

@@ -337,6 +337,7 @@ describe('cover composition', () => {
             pixelWidth: 1600,
             pixelHeight: 600,
             findings: [],
+            moved: false,
         });
     });
 
@@ -439,6 +440,51 @@ describe('placement fallback', () => {
         const factor = getPlatform('youtube').width / crop.width;
         expect(await pixel(output, 640, (300 - crop.y) * factor)).toEqual([0, 255, 0]);
         expect(await pixel(output, 640, (850 - crop.y) * factor)).toEqual([255, 0, 0]);
+    });
+
+    it('moves the headline on a custom canvas too', async () => {
+        const bottom = (layout: CoverLayout): CoverLayout => ({
+            ...layout,
+            textArea: { x: 60, y: 400, width: 680, height: 150 },
+        });
+        const top = (layout: CoverLayout): CoverLayout => ({
+            ...layout,
+            textArea: { x: 60, y: 50, width: 680, height: 150 },
+        });
+        const screenshots: RenderPage[] = [];
+        const renderer: CoverRenderer = {
+            fitText: vi.fn(async () => 40),
+            screenshot: vi.fn(async (page: RenderPage) => {
+                screenshots.push(page);
+                return draw(page, true);
+            }),
+            close: vi.fn(async () => undefined),
+            probeFonts: vi.fn(async () => []),
+            inspect: vi.fn(async (page: RenderPage) => ({
+                background: await draw(page, false),
+                withText: await draw(page, true),
+            })),
+        };
+        const cover = await composeCustomCover({
+            renderer,
+            template: { ...template, layoutFor: bottom, placements: [top] },
+            text: 'Moved',
+            width: 800,
+            height: 600,
+            scale: 1,
+            outputPath: join(tempDir(), 'custom-moved.png'),
+            qc: {
+                analyze: async () => ({
+                    faces: [{ x: 0.3, y: 0.7, width: 0.2, height: 0.2 }],
+                    people: [],
+                    text: [],
+                    objects: [],
+                }),
+            },
+        });
+        expect(screenshots).toHaveLength(2);
+        expect(cover.moved).toBe(true);
+        expect(cover.findings.filter((finding) => finding.level === 'fail')).toEqual([]);
     });
 
     it('keeps the first placement when it is already clean', async () => {

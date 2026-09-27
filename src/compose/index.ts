@@ -142,6 +142,33 @@ async function findingsFor(
     ];
 }
 
+/**
+ * 模板给了备选排法时，质检不过（字压住人脸、人、主体，或压在花的地方）就换下一种，
+ * 留问题最少的那一种。看不了画面（没有 Vision）时没法比，用第一种。
+ */
+async function bestPlacement<T extends { outputs: readonly { findings: readonly QcFinding[] }[] }>(
+    template: CoverTemplate,
+    qc: QcRuntime | undefined,
+    attempt: (place: ((layout: CoverLayout) => CoverLayout) | undefined) => Promise<T>,
+): Promise<{ chosen: T; moved: boolean }> {
+    const places = [template.layoutFor, ...(template.placements ?? [])];
+    let chosen = await attempt(places[0]);
+    let moved = false;
+    if (qc?.analyze !== undefined) {
+        for (const place of places.slice(1)) {
+            if (placementScore(chosen.outputs) === 0) {
+                break;
+            }
+            const next = await attempt(place);
+            if (placementScore(next.outputs) < placementScore(chosen.outputs)) {
+                chosen = next;
+                moved = true;
+            }
+        }
+    }
+    return { chosen, moved };
+}
+
 /** 一种排法的问题分：不过关的按十个提醒算。0 表示干净 */
 function placementScore(outputs: readonly { findings: readonly QcFinding[] }[]): number {
     return outputs
@@ -441,23 +468,7 @@ export async function composeCovers(input: {
             return { headline, outputs };
         };
 
-        // 模板给了备选排法时，质检不过（字压住人脸、人、主体，或压在花的地方）就换下一种，
-        // 留问题最少的那一种。看不了画面（没有 Vision）时没法比，用第一种。
-        const places = [input.template.layoutFor, ...(input.template.placements ?? [])];
-        let chosen = await attempt(places[0]);
-        let moved = false;
-        if (input.qc?.analyze !== undefined) {
-            for (const place of places.slice(1)) {
-                if (placementScore(chosen.outputs) === 0) {
-                    break;
-                }
-                const next = await attempt(place);
-                if (placementScore(next.outputs) < placementScore(chosen.outputs)) {
-                    chosen = next;
-                    moved = true;
-                }
-            }
-        }
+        const { chosen, moved } = await bestPlacement(input.template, input.qc, attempt);
         for (const { platform, outputPath, png, findings } of chosen.outputs) {
             composed.set(platform.name, {
                 platform: platform.name,
@@ -489,42 +500,53 @@ export async function composeCustomCover(input: {
     pixelWidth: number;
     pixelHeight: number;
     findings: QcFinding[];
+    moved: boolean;
 }> {
     const base = customLayout(input.width, input.height);
     const canvas = { x: 0, y: 0, width: input.width, height: input.height };
     const areas = { visibleArea: canvas, clearArea: canvas, coveredAreas: [] };
     const framed = { ...base, ...areas };
-    const layout = { ...(input.template.layoutFor?.(framed) ?? framed), ...areas };
-    const headline = await fitHeadline(
-        input.renderer,
-        input.template,
-        layout,
-        input.text,
-        `a ${input.width}x${input.height} canvas`,
-    );
     const pixelWidth = Math.round(input.width * input.scale);
     const pixelHeight = Math.round(input.height * input.scale);
-    const html = await input.template.renderHtml(layout, headline, pixelWidth, pixelHeight);
-    const png = await input.renderer.screenshot({
-        html,
-        width: input.width,
-        height: input.height,
-        scale: input.scale,
-    });
-    const findings =
-        input.qc === undefined
-            ? []
-            : await findingsFor(
-                  'canvas',
-                  canvas,
-                  await inspectMaster(input.renderer, input.qc, {
-                      html,
-                      width: input.width,
-                      height: input.height,
-                  }),
-                  png,
-              );
-    return { outputPath: writePng(input.outputPath, png), pixelWidth, pixelHeight, findings };
+    const attempt = async (place: ((layout: CoverLayout) => CoverLayout) | undefined) => {
+        const layout = { ...(place?.(framed) ?? framed), ...areas };
+        const headline = await fitHeadline(
+            input.renderer,
+            input.template,
+            layout,
+            input.text,
+            `a ${input.width}x${input.height} canvas`,
+        );
+        const html = await input.template.renderHtml(layout, headline, pixelWidth, pixelHeight);
+        const png = await input.renderer.screenshot({
+            html,
+            width: input.width,
+            height: input.height,
+            scale: input.scale,
+        });
+        const findings =
+            input.qc === undefined
+                ? []
+                : await findingsFor(
+                      'canvas',
+                      canvas,
+                      await inspectMaster(input.renderer, input.qc, {
+                          html,
+                          width: input.width,
+                          height: input.height,
+                      }),
+                      png,
+                  );
+        return { png, findings, outputs: [{ findings }] };
+    };
+    const { chosen, moved } = await bestPlacement(input.template, input.qc, attempt);
+    return {
+        outputPath: writePng(input.outputPath, chosen.png),
+        pixelWidth,
+        pixelHeight,
+        findings: chosen.findings,
+        moved,
+    };
 }
 
 export function thumbnailWarnings(covers: readonly ComposedCover[]): string[] {
