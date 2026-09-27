@@ -205,7 +205,11 @@ describe('built-in render template', () => {
         expect(html).toContain('top: 60px;');
         expect(html).toContain('width: 570px;');
         expect(html).toContain('z-index: 2;');
-        expect(html).toContain('drop-shadow(8px 0 0 #fff)');
+        // 白描边是透明度膨胀出来的一圈（1.4% 短边，1200 高约 17px），不是四向叠影。
+        expect(html).toContain('filter: url(#subject-outline)');
+        expect(html).toContain('<filter id="subject-outline"');
+        expect(html).toContain('flood-color="#ffffff"');
+        expect(html).not.toContain('drop-shadow(8px 0 0 #fff)');
         expect(html).toContain('<img class="subject" src="data:image/png;base64,AAAA"');
         expect(html.indexOf('class="subject"')).toBeGreaterThan(html.indexOf('class="text-box"'));
 

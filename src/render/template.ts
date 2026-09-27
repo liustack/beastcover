@@ -28,10 +28,43 @@ export interface RenderTemplateOptions {
     subject?: SubjectLayer;
 }
 
-/** 人物层：按 placeSubject 摆放（有脸按脸放大，高的贴底站，扁的放进无遮挡区），白描边加一层投影，压在标题上面 */
+/** 人物描边的粗细：clean 是干净分离，sticker 是贴纸感。按画布短边的比例 */
+export type SubjectOutline = 'clean' | 'sticker';
+
+const OUTLINE_SHARE: Record<SubjectOutline, number> = { clean: 0.014, sticker: 0.024 };
+
+/**
+ * 人物描边滤镜：把人物的透明度模糊后陡峭截断，得到一圈圆角外扩，填白就是白描边。
+ * 四个方向叠 drop-shadow 在斜边上会出台阶，这个不会。浅底时白边会消失，外面再包一圈深色细边。
+ * 单位是 CSS 像素，截图放大倍数自动跟着走。
+ */
+function outlineFilter(width: number, darkEdge: boolean): string {
+    const blur = (w: number) => Math.max(1, Number((w * 0.55).toFixed(2)));
+    const grow = (from: string, w: number, result: string) => `
+            <feGaussianBlur in="${from}" stdDeviation="${blur(w)}" result="${result}-blur"/>
+            <feComponentTransfer in="${result}-blur" result="${result}">
+                <feFuncA type="linear" slope="14" intercept="-0.4"/>
+            </feComponentTransfer>`;
+    const ring = (alpha: string, color: string, result: string) => `
+            <feFlood flood-color="${color}"/>
+            <feComposite in2="${alpha}" operator="in" result="${result}"/>`;
+    const dark = darkEdge ? width * 0.28 : 0;
+    return `<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <filter id="subject-outline" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">${grow('SourceAlpha', width, 'white-a')}${ring('white-a', '#ffffff', 'white')}${
+            darkEdge
+                ? `${grow('white-a', dark, 'dark-a')}${ring('dark-a', 'rgba(0,0,0,0.55)', 'dark')}`
+                : ''
+        }
+            <feMerge>${darkEdge ? '<feMergeNode in="dark"/>' : ''}<feMergeNode in="white"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+    </svg>`;
+}
+
+/** 人物层：按 placeSubject 摆放（有脸按脸放大，高的贴底站，扁的放进无遮挡区），白描边加接地投影，压在标题上面 */
 export function subjectMarkup(
     layout: CoverLayout,
     subject: SubjectLayer | undefined,
+    options: { outline?: SubjectOutline; lightBackground?: boolean } = {},
 ): {
     css: string;
     html: string;
@@ -40,7 +73,9 @@ export function subjectMarkup(
         return { css: '', html: '' };
     }
     const rect = placeSubject(layout, subject);
-    const stroke = Math.max(3, Math.round(Math.min(layout.width, layout.height) * 0.007));
+    const short = Math.min(layout.width, layout.height);
+    const width = Math.max(3, Math.round(short * OUTLINE_SHARE[options.outline ?? 'clean']));
+    const shadow = Math.round(short * 0.02);
     return {
         css: `
         .subject {
@@ -50,11 +85,9 @@ export function subjectMarkup(
             width: ${rect.width}px;
             height: ${rect.height}px;
             z-index: 2;
-            filter: drop-shadow(${stroke}px 0 0 #fff) drop-shadow(-${stroke}px 0 0 #fff)
-                drop-shadow(0 ${stroke}px 0 #fff) drop-shadow(0 -${stroke}px 0 #fff)
-                drop-shadow(0 ${stroke * 2}px ${stroke * 4}px rgba(0, 0, 0, 0.35));
+            filter: url(#subject-outline) drop-shadow(0 ${Math.round(shadow * 0.3)}px ${shadow}px rgba(0, 0, 0, 0.4));
         }`,
-        html: `<img class="subject" src="${subject.dataUri}" alt="" aria-hidden="true">`,
+        html: `${outlineFilter(width, options.lightBackground === true)}<img class="subject" src="${subject.dataUri}" alt="" aria-hidden="true">`,
     };
 }
 
