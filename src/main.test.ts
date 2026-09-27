@@ -11,9 +11,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AgentRunInput } from './agent/index.ts';
 import { familyClearArea, familyCoveredAreas, familyVisibleArea } from './compose/index.ts';
 import { setConfigValue } from './config.ts';
-import type { LocalModelRunInput } from './local-model/index.ts';
 import { createProgram, runCli } from './main.ts';
 import type { CoverRenderer, RenderPage } from './render/index.ts';
 import { familyLayout } from './render/layout.ts';
@@ -82,8 +82,8 @@ async function testPngBytes(width: number, height: number): Promise<Buffer> {
         .toBuffer();
 }
 
-function mockRunLocalModel() {
-    return vi.fn(async (input: LocalModelRunInput) => ({
+function mockRunAgent() {
+    return vi.fn(async (input: AgentRunInput) => ({
         outputPaths: input.targets.map((target) => target.outputPath),
     }));
 }
@@ -588,21 +588,21 @@ describe('BeastCover CLI', () => {
         );
     });
 
-    it('rejects --via when the source is render and does not switch to local-model', async () => {
+    it('rejects --via when the source is render and does not switch to agent', async () => {
         const directory = tempDir('beastcover-via-render-');
         const renderHtml = mockRender();
-        const runLocalModel = mockRunLocalModel();
-        const lookupCommand = vi.fn(() => '/fake/grok');
+        const runAgent = mockRunAgent();
+        const lookupCommand = vi.fn(() => '/fake/agy');
 
         const flagged = captureOutput();
         const flaggedErr = captureOutput();
         const flaggedCode = await runCli(
-            ['node', 'beastcover', 'gen', 'A figure', '--via', 'grok', '--source', 'render'],
+            ['node', 'beastcover', 'gen', 'A figure', '--via', 'agy', '--source', 'render'],
             {
                 cwd: directory,
                 configPath: join(directory, 'unused-config.json'),
                 openRenderer: renderHtml.open,
-                runLocalModel,
+                runAgent,
                 lookupCommand,
                 stdout: flagged,
                 stderr: flaggedErr,
@@ -610,19 +610,19 @@ describe('BeastCover CLI', () => {
         );
         expect(flaggedCode).toBe(1);
         expect(renderHtml).not.toHaveBeenCalled();
-        expect(runLocalModel).not.toHaveBeenCalled();
+        expect(runAgent).not.toHaveBeenCalled();
         expect(flaggedErr.chunks.join('')).toContain('--via');
-        expect(flaggedErr.chunks.join('')).toMatch(/local-model/);
+        expect(flaggedErr.chunks.join('')).toMatch(/agent/);
 
         const implicit = captureOutput();
         const implicitErr = captureOutput();
         const implicitCode = await runCli(
-            ['node', 'beastcover', 'gen', 'A figure', '--via', 'grok'],
+            ['node', 'beastcover', 'gen', 'A figure', '--via', 'agy'],
             {
                 cwd: directory,
                 configPath: join(directory, 'unused-config.json'),
                 openRenderer: renderHtml.open,
-                runLocalModel,
+                runAgent,
                 lookupCommand,
                 stdout: implicit,
                 stderr: implicitErr,
@@ -630,22 +630,22 @@ describe('BeastCover CLI', () => {
         );
         expect(implicitCode).toBe(1);
         expect(renderHtml).not.toHaveBeenCalled();
-        expect(runLocalModel).not.toHaveBeenCalled();
+        expect(runAgent).not.toHaveBeenCalled();
         expect(implicitErr.chunks.join('')).toContain('--via');
-        expect(implicitErr.chunks.join('')).toMatch(/local-model/);
+        expect(implicitErr.chunks.join('')).toMatch(/agent/);
     });
 
-    it('requires a workspace for local-model and does not create one', async () => {
+    it('requires a workspace for agent and does not create one', async () => {
         const cwd = tempDir('beastcover-local-missing-ws-');
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stdout = captureOutput();
         const stderr = captureOutput();
         const exitCode = await runCli(
-            ['node', 'beastcover', 'gen', 'A figure on a shore', '--source', 'local-model'],
+            ['node', 'beastcover', 'gen', 'A figure on a shore', '--source', 'agent'],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout,
                 stderr,
@@ -656,15 +656,15 @@ describe('BeastCover CLI', () => {
         expect(stderr.chunks.join('')).toBe(
             'Error: No BeastCover workspace found. Run beastcover new <name> first.\n',
         );
-        expect(runLocalModel).not.toHaveBeenCalled();
+        expect(runAgent).not.toHaveBeenCalled();
         expect(existsSync(join(cwd, '.beastcover'))).toBe(false);
         expect(readdirSync(cwd)).toEqual([]);
     });
 
-    it('refuses a non-PNG local-model output before calling the model', async () => {
+    it('refuses a non-PNG agent output before calling the model', async () => {
         const cwd = tempDir('beastcover-local-jpg-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stderr = captureOutput();
         const exitCode = await runCli(
             [
@@ -673,14 +673,14 @@ describe('BeastCover CLI', () => {
                 'gen',
                 'A figure on a shore',
                 '--source',
-                'local-model',
+                'agent',
                 '--output',
                 'cover.jpg',
             ],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout: captureOutput(),
                 stderr,
@@ -690,15 +690,15 @@ describe('BeastCover CLI', () => {
         expect(stderr.chunks.join('')).toBe(
             `Error: Cover output must use the .png extension: ${join(cwd, 'cover.jpg')}\n`,
         );
-        expect(runLocalModel).not.toHaveBeenCalled();
+        expect(runAgent).not.toHaveBeenCalled();
     });
 
-    it('runs gen through local-model with an injected runner', async () => {
+    it('runs gen through agent with an injected runner', async () => {
         const cwd = tempDir('beastcover-local-happy-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
 
         const renderHtml = mockRender();
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stdout = captureOutput();
         const stderr = captureOutput();
         const now = new Date('2026-08-23T00:00:00.000Z');
@@ -709,7 +709,7 @@ describe('BeastCover CLI', () => {
                 'gen',
                 'A figure on a shore',
                 '--source',
-                'local-model',
+                'agent',
                 '--via',
                 'codex',
                 '--preset',
@@ -719,7 +719,7 @@ describe('BeastCover CLI', () => {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
                 openRenderer: renderHtml.open,
-                runLocalModel,
+                runAgent,
                 lookupCommand: (name) => (name === 'codex' ? '/fake/codex' : undefined),
                 stdout,
                 stderr,
@@ -740,14 +740,12 @@ describe('BeastCover CLI', () => {
         expect(printed).toContain('Backend: codex');
         expect(printed).toContain('Canvas: 900x383');
         expect(printed).not.toContain('at 1x');
-        expect(printed).toContain(
-            'Privacy: local-model used your own CLI. We did not handle the data.',
-        );
+        expect(printed).toContain('Privacy: agent used your own CLI. We did not handle the data.');
         expect(renderHtml).not.toHaveBeenCalled();
-        expect(runLocalModel).toHaveBeenCalledOnce();
-        const localInput = runLocalModel.mock.calls[0]?.[0];
+        expect(runAgent).toHaveBeenCalledOnce();
+        const localInput = runAgent.mock.calls[0]?.[0];
         if (localInput === undefined) {
-            throw new Error('runLocalModel was not called.');
+            throw new Error('runAgent was not called.');
         }
         const generatedPath = join(
             cwd,
@@ -778,7 +776,7 @@ describe('BeastCover CLI', () => {
             palette,
             catalogPalette: palette,
             text: 'A figure on a shore',
-            source: 'local-model',
+            source: 'agent',
             via: 'codex',
             preset: 'wechat',
             output: join('out', 'beastcover-2026-08-23T00-00-00.000Z.png'),
@@ -790,7 +788,7 @@ describe('BeastCover CLI', () => {
         const cwd = tempDir('beastcover-local-douyin-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
 
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stdout = captureOutput();
         const stderr = captureOutput();
         const now = new Date('2026-08-23T00:00:00.000Z');
@@ -801,14 +799,14 @@ describe('BeastCover CLI', () => {
                 'gen',
                 'A figure on a shore',
                 '--source',
-                'local-model',
+                'agent',
                 '--preset',
                 'douyin',
             ],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout,
                 stderr,
@@ -819,20 +817,20 @@ describe('BeastCover CLI', () => {
         expect(exitCode).toBe(0);
         expect(stderr.chunks).toEqual([]);
         expect(stdout.chunks.join('')).toContain('Canvas: 1080x1920');
-        expect(runLocalModel).toHaveBeenCalledOnce();
-        const input = runLocalModel.mock.calls[0]?.[0];
+        expect(runAgent).toHaveBeenCalledOnce();
+        const input = runAgent.mock.calls[0]?.[0];
         if (input === undefined) {
-            throw new Error('runLocalModel was not called.');
+            throw new Error('runAgent was not called.');
         }
         expect(input.targets.map((target) => target.preset)).toEqual(['douyin']);
         expect(input.prompt).toContain('竖版 1024x1536');
         expect(input.prompt).not.toContain('1080x1920');
     });
 
-    it('passes verbose true to runLocalModel', async () => {
+    it('passes verbose true to runAgent', async () => {
         const cwd = tempDir('beastcover-local-verbose-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const exitCode = await runCli(
             [
                 'node',
@@ -840,7 +838,7 @@ describe('BeastCover CLI', () => {
                 'gen',
                 'A figure on a shore',
                 '--source',
-                'local-model',
+                'agent',
                 '--via',
                 'codex',
                 '--preset',
@@ -850,7 +848,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: (name) => (name === 'codex' ? '/fake/codex' : undefined),
                 stdout: captureOutput(),
                 now: () => new Date('2026-08-23T00:00:00.000Z'),
@@ -858,7 +856,7 @@ describe('BeastCover CLI', () => {
         );
 
         expect(exitCode).toBe(0);
-        expect(runLocalModel.mock.calls[0]?.[0]).toMatchObject({ verbose: true });
+        expect(runAgent.mock.calls[0]?.[0]).toMatchObject({ verbose: true });
     });
 
     it('writes one cover per platform from one master per family', async () => {
@@ -1400,7 +1398,7 @@ describe('BeastCover CLI', () => {
     it('calls the model once per family and crops every platform from that image', async () => {
         const cwd = tempDir('beastcover-local-families-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stdout = captureOutput();
 
         const exitCode = await runCli(
@@ -1410,7 +1408,7 @@ describe('BeastCover CLI', () => {
                 'gen',
                 'A figure on a shore',
                 '--source',
-                'local-model',
+                'agent',
                 '--via',
                 'codex',
                 '--preset',
@@ -1419,7 +1417,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout,
                 now: () => new Date('2026-09-25T00:00:00.000Z'),
@@ -1429,7 +1427,7 @@ describe('BeastCover CLI', () => {
         expect(exitCode).toBe(0);
         const stem = 'beastcover-2026-09-25T00-00-00.000Z';
         expect(
-            runLocalModel.mock.calls.map(([input]) => [
+            runAgent.mock.calls.map(([input]) => [
                 input.generatedPath,
                 input.targets.map((target) => target.preset),
             ]),
@@ -1539,7 +1537,7 @@ describe('BeastCover CLI', () => {
         expect(stdout.chunks.join('')).toContain('(cut out on this machine with macOS Vision)');
     });
 
-    it('rejects a missing subject and a subject with local-model', async () => {
+    it('rejects a missing subject and a subject with agent', async () => {
         const cwd = tempDir('beastcover-cli-subject-errors-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         for (const [args, message] of [
@@ -1548,7 +1546,7 @@ describe('BeastCover CLI', () => {
                 `Error: Subject not found: ${join(cwd, 'nobody.png')}\n`,
             ],
             [
-                ['--source', 'local-model', '--subject', 'nobody.png'],
+                ['--source', 'agent', '--subject', 'nobody.png'],
                 'Error: --subject works with --source render or stock.\n',
             ],
         ] as const) {
@@ -1557,7 +1555,7 @@ describe('BeastCover CLI', () => {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
                 openRenderer: mockRender().open,
-                runLocalModel: mockRunLocalModel(),
+                runAgent: mockRunAgent(),
                 lookupCommand: () => '/fake/codex',
                 stdout: captureOutput(),
                 stderr,
@@ -1735,7 +1733,7 @@ describe('BeastCover CLI', () => {
         writeFileSync(join(cwd, 'me.jpg'), 'jpg');
         writeFileSync(join(cwd, 'beach.jpg'), 'jpg');
         writeFileSync(join(cwd, 'extra.png'), 'png');
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stdout = captureOutput();
 
         const exitCode = await runCli(
@@ -1745,7 +1743,7 @@ describe('BeastCover CLI', () => {
                 'gen',
                 '我在海边',
                 '--source',
-                'local-model',
+                'agent',
                 '--via',
                 'codex',
                 '--remix',
@@ -1760,14 +1758,14 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout,
             },
         );
 
         expect(exitCode).toBe(0);
-        const input = runLocalModel.mock.calls[0]?.[0];
+        const input = runAgent.mock.calls[0]?.[0];
         expect(input?.referencePaths).toEqual([
             join(cwd, 'me.jpg'),
             join(cwd, 'beach.jpg'),
@@ -1797,7 +1795,7 @@ describe('BeastCover CLI', () => {
             },
         );
         expect(renderCode).toBe(1);
-        expect(stderr.chunks.join('')).toBe('Error: --remix works with --source local-model.\n');
+        expect(stderr.chunks.join('')).toBe('Error: --remix works with --source agent.\n');
     });
 
     it('names the platform preset when an old ratio preset is passed', async () => {
@@ -1819,10 +1817,10 @@ describe('BeastCover CLI', () => {
         expect(stderr.chunks.join('')).toBe('Error: Preset "16:9" is now "youtube".\n');
     });
 
-    it('rejects local-model width overrides that leave preset sizes', async () => {
+    it('rejects agent width overrides that leave preset sizes', async () => {
         const cwd = tempDir('beastcover-local-width-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stderr = captureOutput();
         const exitCode = await runCli(
             [
@@ -1831,14 +1829,14 @@ describe('BeastCover CLI', () => {
                 'gen',
                 'A figure on a shore',
                 '--source',
-                'local-model',
+                'agent',
                 '--width',
                 '800',
             ],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout: captureOutput(),
                 stderr,
@@ -1846,23 +1844,23 @@ describe('BeastCover CLI', () => {
         );
 
         expect(exitCode).toBe(1);
-        expect(runLocalModel).not.toHaveBeenCalled();
+        expect(runAgent).not.toHaveBeenCalled();
         expect(stderr.chunks.join('')).toBe(
-            'Error: local-model uses preset sizes. Omit --width and --height.\n',
+            'Error: agent uses preset sizes. Omit --width and --height.\n',
         );
     });
 
-    it('rejects --scale with local-model, whose size comes from the model', async () => {
+    it('rejects --scale with agent, whose size comes from the model', async () => {
         const cwd = tempDir('beastcover-local-scale-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stderr = captureOutput();
         const exitCode = await runCli(
-            ['node', 'beastcover', 'gen', 'A figure', '--source', 'local-model', '--scale', '3'],
+            ['node', 'beastcover', 'gen', 'A figure', '--source', 'agent', '--scale', '3'],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout: captureOutput(),
                 stderr,
@@ -1870,13 +1868,13 @@ describe('BeastCover CLI', () => {
         );
 
         expect(exitCode).toBe(1);
-        expect(runLocalModel).not.toHaveBeenCalled();
+        expect(runAgent).not.toHaveBeenCalled();
         expect(stderr.chunks.join('')).toBe(
-            'Error: --scale works with --source render or stock. local-model output size comes from the model.\n',
+            'Error: --scale works with --source render or stock. agent output size comes from the model.\n',
         );
     });
 
-    it('prints named --ref paths before calling runLocalModel', async () => {
+    it('prints named --ref paths before calling runAgent', async () => {
         const cwd = tempDir('beastcover-local-refs-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const abs1 = resolve(cwd, 'a.png');
@@ -1885,7 +1883,7 @@ describe('BeastCover CLI', () => {
         writeFileSync(abs2, 'jpg', 'utf8');
 
         const stdout = captureOutput();
-        const runLocalModel = vi.fn(async (input: LocalModelRunInput) => {
+        const runAgent = vi.fn(async (input: AgentRunInput) => {
             expect(stdout.chunks.join('')).toContain(
                 ['References sent to codex:', `  ${abs1}`, `  ${abs2}`].join('\n'),
             );
@@ -1899,7 +1897,7 @@ describe('BeastCover CLI', () => {
                 'gen',
                 'A figure on a shore',
                 '--source',
-                'local-model',
+                'agent',
                 '--via',
                 'codex',
                 '--ref',
@@ -1910,7 +1908,7 @@ describe('BeastCover CLI', () => {
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout,
                 now: () => new Date('2026-08-23T00:00:00.000Z'),
@@ -1918,27 +1916,27 @@ describe('BeastCover CLI', () => {
         );
 
         expect(exitCode).toBe(0);
-        expect(runLocalModel).toHaveBeenCalledOnce();
+        expect(runAgent).toHaveBeenCalledOnce();
     });
 
-    it('allows --via when config source is already local-model', async () => {
+    it('allows --via when config source is already agent', async () => {
         const cwd = tempDir('beastcover-local-config-via-');
         const configPath = join(cwd, 'config.json');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
-        setConfigValue('source', 'local-model', configPath);
+        setConfigValue('source', 'agent', configPath);
 
         const renderHtml = mockRender();
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stdout = captureOutput();
         const stderr = captureOutput();
         const exitCode = await runCli(
-            ['node', 'beastcover', 'gen', 'A figure on a shore', '--via', 'grok'],
+            ['node', 'beastcover', 'gen', 'A figure on a shore', '--via', 'agy'],
             {
                 cwd,
                 configPath,
                 openRenderer: renderHtml.open,
-                runLocalModel,
-                lookupCommand: (name) => (name === 'grok' ? '/fake/grok' : undefined),
+                runAgent,
+                lookupCommand: (name) => (name === 'agy' ? '/fake/agy' : undefined),
                 stdout,
                 stderr,
                 now: () => new Date('2026-08-23T00:00:00.000Z'),
@@ -1948,18 +1946,18 @@ describe('BeastCover CLI', () => {
         expect(exitCode).toBe(0);
         expect(stderr.chunks).toEqual([]);
         expect(renderHtml).not.toHaveBeenCalled();
-        expect(runLocalModel).toHaveBeenCalledOnce();
-        expect(runLocalModel.mock.calls[0]?.[0]).toMatchObject({
-            provider: 'grok',
-            commandPath: '/fake/grok',
+        expect(runAgent).toHaveBeenCalledOnce();
+        expect(runAgent.mock.calls[0]?.[0]).toMatchObject({
+            provider: 'agy',
+            commandPath: '/fake/agy',
         });
-        expect(stdout.chunks.join('')).toContain('Backend: grok');
+        expect(stdout.chunks.join('')).toContain('Backend: agy');
     });
 
-    it('does not fall back from an explicit missing --via grok to codex', async () => {
+    it('does not fall back from an explicit missing --via agy to codex', async () => {
         const cwd = tempDir('beastcover-local-via-missing-');
         await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
-        const runLocalModel = mockRunLocalModel();
+        const runAgent = mockRunAgent();
         const stdout = captureOutput();
         const stderr = captureOutput();
         const lookupCommand = vi.fn((name: string) =>
@@ -1973,14 +1971,14 @@ describe('BeastCover CLI', () => {
                 'gen',
                 'A figure on a shore',
                 '--source',
-                'local-model',
+                'agent',
                 '--via',
-                'grok',
+                'agy',
             ],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
-                runLocalModel,
+                runAgent,
                 lookupCommand,
                 stdout,
                 stderr,
@@ -1988,9 +1986,45 @@ describe('BeastCover CLI', () => {
         );
 
         expect(exitCode).toBe(1);
-        expect(runLocalModel).not.toHaveBeenCalled();
-        expect(stderr.chunks.join('')).toContain('grok');
+        expect(runAgent).not.toHaveBeenCalled();
+        expect(stderr.chunks.join('')).toContain('agy');
         expect(stderr.chunks.join('')).not.toMatch(/falling back|using codex/i);
+    });
+
+    it('points the old local-model source and the removed backends at the new names', async () => {
+        const cwd = tempDir('beastcover-old-names-');
+        const runAgent = mockRunAgent();
+
+        const oldSource = captureOutput();
+        const oldSourceCode = await runCli(
+            ['node', 'beastcover', 'gen', 'A figure', '--source', 'local-model'],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                runAgent,
+                stdout: captureOutput(),
+                stderr: oldSource,
+            },
+        );
+        expect(oldSourceCode).toBe(1);
+        expect(oldSource.chunks.join('')).toContain('Source "local-model" is now "agent".');
+
+        const removed = captureOutput();
+        const removedCode = await runCli(
+            ['node', 'beastcover', 'gen', 'A figure', '--source', 'agent', '--via', 'claude'],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                runAgent,
+                stdout: captureOutput(),
+                stderr: removed,
+            },
+        );
+        expect(removedCode).toBe(1);
+        expect(removed.chunks.join('')).toContain(
+            'via "claude" was removed: the claude CLI has no image generation. Use codex or agy.',
+        );
+        expect(runAgent).not.toHaveBeenCalled();
     });
 });
 

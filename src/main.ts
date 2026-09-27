@@ -9,6 +9,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Command, CommanderError } from 'commander';
 import sharp from 'sharp';
 import {
+    buildEnvelopePrompt,
+    runAgent as defaultRunAgent,
+    getAgentCanvasPlan,
+    resolveNamedRefFiles,
+    selectAgentProvider,
+} from './agent/index.ts';
+import { assertRedrawable, remixModeFor } from './agent/remix.ts';
+import {
     type ComposedCover,
     type CoverTarget,
     type CoverTemplate,
@@ -31,28 +39,20 @@ import {
     textCoverTemplate,
 } from './compose/templates.ts';
 import {
+    AGENT_PROVIDERS,
+    type AgentProvider,
     CONFIG_PATH,
     type ConfigFlags,
     type EffectiveConfig,
     IMAGE_SOURCES,
     type ImageSource,
     initConfigFile,
-    LOCAL_MODEL_PROVIDERS,
-    type LocalModelProvider,
     loadConfigFile,
     renderConfigShow,
     resolveEffectiveConfig,
     setConfigValue,
 } from './config.ts';
 import { type DoctorReport, lookupCommandOnPath, renderDoctorReport, runDoctor } from './doctor.ts';
-import {
-    buildEnvelopePrompt,
-    runLocalModel as defaultRunLocalModel,
-    getLocalModelCanvasPlan,
-    resolveNamedRefFiles,
-    selectLocalModelProvider,
-} from './local-model/index.ts';
-import { assertRedrawable, remixModeFor } from './local-model/remix.ts';
 import {
     type FamilyName,
     getPlatform,
@@ -129,7 +129,7 @@ export interface CliRuntime {
     now: () => Date;
     setExitCode: (code: number) => void;
     lookupCommand: (name: string) => string | undefined;
-    runLocalModel: typeof defaultRunLocalModel;
+    runAgent: typeof defaultRunAgent;
     stock: Pick<StockRuntime, 'fetch' | 'sleep' | 'download'>;
     /** 把普通照片里的主体抠成透明 PNG，默认用 macOS Vision */
     cutout: (inputPath: string, outputPath: string) => Promise<void>;
@@ -162,7 +162,7 @@ function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
         now: overrides.now ?? (() => new Date()),
         setExitCode: overrides.setExitCode ?? (() => undefined),
         lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
-        runLocalModel: overrides.runLocalModel ?? defaultRunLocalModel,
+        runAgent: overrides.runAgent ?? defaultRunAgent,
         stock: overrides.stock ?? {},
         cutout: overrides.cutout ?? visionSubjectCutout(vision),
         photoFocus:
@@ -226,17 +226,25 @@ function sizeLine(fetched: { width: number; height: number; photo: StockHit }): 
 }
 
 function parseImageSource(value: string): ImageSource {
+    if (value === 'local-model') {
+        throw new Error('Source "local-model" is now "agent".');
+    }
     if (!IMAGE_SOURCES.includes(value as ImageSource)) {
         throw new Error(`Unknown source "${value}". Use ${IMAGE_SOURCES.join(', ')}.`);
     }
     return value as ImageSource;
 }
 
-function parseVia(value: string): LocalModelProvider {
-    if (!LOCAL_MODEL_PROVIDERS.includes(value as LocalModelProvider)) {
-        throw new Error(`Unknown via "${value}". Use ${LOCAL_MODEL_PROVIDERS.join(', ')}.`);
+function parseVia(value: string): AgentProvider {
+    if (value === 'grok' || value === 'claude') {
+        throw new Error(
+            `via "${value}" was removed: the ${value} CLI has no image generation. Use codex or agy.`,
+        );
     }
-    return value as LocalModelProvider;
+    if (!AGENT_PROVIDERS.includes(value as AgentProvider)) {
+        throw new Error(`Unknown via "${value}". Use ${AGENT_PROVIDERS.join(', ')}.`);
+    }
+    return value as AgentProvider;
 }
 
 function collectRefs(value: string, previous: string[]): string[] {
@@ -619,12 +627,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
     program
         .command('gen')
         .description('Generate covers from a headline')
-        .argument(
-            '[text]',
-            'Headline for the cover, or the subject for local-model',
-            DEFAULT_RENDER_TEXT,
-        )
-        .option('--source <source>', 'Image source: render, stock, or local-model')
+        .argument('[text]', 'Headline for the cover, or the subject for agent', DEFAULT_RENDER_TEXT)
+        .option('--source <source>', 'Image source: render, stock, or agent')
         .option(
             '-o, --output <path>',
             'Output PNG path. With several presets, each file gets the platform name',
@@ -637,11 +641,11 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         .option('--height <pixels>', 'Custom canvas height instead of a platform preset')
         .option('--scale <factor>', 'Device scale factor from 1 to 4')
         .option('--guides', 'Draw the safe areas on each cover for checking the layout')
-        .option('--via <provider>', 'Local model CLI: codex, grok, or claude')
+        .option('--via <provider>', 'Agent CLI backend: codex or agy')
         .option('--ref <path>', 'Named reference image (repeatable)', collectRefs, [])
         .option(
             '--remix <path>',
-            'local-model: one image to redraw in the project style, or two (person, then scene) to combine',
+            'agent: one image to redraw in the project style, or two (person, then scene) to combine',
             collectRefs,
             [],
         )
@@ -707,15 +711,15 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const effective = resolveEffectiveConfig(fileConfig, flags);
                 const guides = Boolean(options.guides);
 
-                if (flags.via !== undefined && effective.source !== 'local-model') {
-                    throw new Error('--via is only valid with --source local-model.');
+                if (flags.via !== undefined && effective.source !== 'agent') {
+                    throw new Error('--via is only valid with --source agent.');
                 }
                 if (options.photo !== undefined && effective.source !== 'stock') {
                     throw new Error('--photo is only valid with --source stock.');
                 }
                 const templateName = checkTemplateOptions(options, effective.source);
-                if ((options.remix ?? []).length > 0 && effective.source !== 'local-model') {
-                    throw new Error('--remix works with --source local-model.');
+                if ((options.remix ?? []).length > 0 && effective.source !== 'agent') {
+                    throw new Error('--remix works with --source agent.');
                 }
                 if (
                     (options.look !== undefined || options.fit !== undefined) &&
@@ -723,12 +727,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 ) {
                     throw new Error('--look and --fit work with --source stock.');
                 }
-                if (options.hook !== undefined && effective.source === 'local-model') {
+                if (options.hook !== undefined && effective.source === 'agent') {
                     throw new Error('--hook works with --source render or stock.');
                 }
-                if (options.scale !== undefined && effective.source === 'local-model') {
+                if (options.scale !== undefined && effective.source === 'agent') {
                     throw new Error(
-                        '--scale works with --source render or stock. local-model output size comes from the model.',
+                        '--scale works with --source render or stock. agent output size comes from the model.',
                     );
                 }
                 const hook = options.hook === undefined ? undefined : parseHook(options.hook);
@@ -919,7 +923,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     return;
                 }
 
-                if (effective.source === 'local-model') {
+                if (effective.source === 'agent') {
                     const workspaceDir = findWorkspace(runtime.cwd);
                     if (workspaceDir === undefined) {
                         throw new Error(
@@ -927,9 +931,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         );
                     }
                     if (effective.render.canvas) {
-                        throw new Error(
-                            'local-model uses preset sizes. Omit --width and --height.',
-                        );
+                        throw new Error('agent uses preset sizes. Omit --width and --height.');
                     }
                     if (guides) {
                         throw new Error('--guides works with --source render or stock.');
@@ -946,9 +948,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             { prompt: slot.prompt, css: slot.css },
                         ]),
                     );
-                    const selected = selectLocalModelProvider({
+                    const selected = selectAgentProvider({
                         via: flags.via,
-                        configVia: effective.localModel?.via,
+                        configVia: effective.agent?.via,
                         lookup: runtime.lookupCommand,
                     });
                     // 二创的图排在最前面，提示词里的「参考图 1、2」就是它们。
@@ -997,7 +999,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             referencePaths: refs,
                             ...(remix ? { remix } : {}),
                         });
-                        await runtime.runLocalModel({
+                        await runtime.runAgent({
                             provider: selected.provider,
                             commandPath: selected.commandPath,
                             prompt,
@@ -1017,13 +1019,13 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 palette,
                                 catalogPalette,
                                 text,
-                                source: 'local-model',
+                                source: 'agent',
                                 via: selected.provider,
                                 preset: target.platform,
                                 output: target.outputPath,
                                 ...(remix ? { remix: { mode: remix, paths: remixPaths } } : {}),
                             });
-                            const plan = getLocalModelCanvasPlan(target.platform);
+                            const plan = getAgentCanvasPlan(target.platform);
                             lines.push(
                                 `Created ${target.outputPath}`,
                                 `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
@@ -1042,7 +1044,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                         `Remix: put the person from ${remixPaths[0]} into ${remixPaths[1]}`,
                                     ]
                                   : []),
-                            'Privacy: local-model used your own CLI. We did not handle the data.',
+                            'Privacy: agent used your own CLI. We did not handle the data.',
                             '',
                         ].join('\n'),
                     );

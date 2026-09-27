@@ -7,12 +7,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import {
-    IMAGE_SOURCES,
-    type ImageSource,
-    LOCAL_MODEL_PROVIDERS,
-    type LocalModelProvider,
-} from '../config.ts';
+import { AGENT_PROVIDERS, type AgentProvider, IMAGE_SOURCES, type ImageSource } from '../config.ts';
 import { PLATFORM_NAMES, type PlatformName } from '../platforms/index.ts';
 import { STOCK_PROVIDERS, type StockProvider } from '../stock/types.ts';
 import { loadFallbackStyle, loadStyle } from '../styles/loader.ts';
@@ -53,7 +48,7 @@ export interface HistoryRecord {
     text: string;
     output: string;
     source?: ImageSource;
-    via?: LocalModelProvider;
+    via?: AgentProvider;
     /** 出图的平台，自定义画布时没有 */
     preset?: PlatformName;
     /** render 用的文字封面模板，默认的 text 不记 */
@@ -63,7 +58,7 @@ export interface HistoryRecord {
     catalogPalette?: Record<string, PaletteSlotValue>;
     photo?: HistoryPhoto;
     subject?: HistorySubject;
-    /** local-model 二创：模式和交给模型的图 */
+    /** agent 二创：模式和交给模型的图 */
     remix?: { mode: 'restyle' | 'place'; paths: string[] };
 }
 
@@ -398,13 +393,13 @@ function parseHistoryRecord(filePath: string, lineNumber: number, raw: string): 
     if (parsed.via !== undefined) {
         if (
             typeof parsed.via !== 'string' ||
-            !LOCAL_MODEL_PROVIDERS.includes(parsed.via as LocalModelProvider)
+            !AGENT_PROVIDERS.includes(parsed.via as AgentProvider)
         ) {
             throw new Error(
-                `${filePath}:${lineNumber} has invalid "via". Expected one of ${LOCAL_MODEL_PROVIDERS.join(', ')}.`,
+                `${filePath}:${lineNumber} has invalid "via". Expected one of ${AGENT_PROVIDERS.join(', ')}.`,
             );
         }
-        record.via = parsed.via as LocalModelProvider;
+        record.via = parsed.via as AgentProvider;
     }
     if (parsed.preset !== undefined) {
         if (

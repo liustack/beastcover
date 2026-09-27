@@ -66,9 +66,9 @@ Old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone. The CLI names the replac
 | :-- | :-- |
 | A real photo carries the mood and the headline sits on it | `stock` |
 | The headline is the whole cover, or the wording will change often | `render` |
-| A painted cover in the project style, and the user has a model CLI | `local-model` |
+| A painted cover in the project style, and the user has an agent CLI | `agent` |
 
-`stock` and `render` need nothing beyond Node and Chromium. `local-model` needs the user's own Codex, Grok, or Claude CLI. Do not silently substitute one source for another. If a requested local-model backend is missing, stop and name the CLI to install. Do not switch to stock, render, or a different CLI.
+`stock` and `render` need nothing beyond Node and Chromium. `agent` needs the user's own Codex or agy CLI. Do not silently substitute one source for another. If a requested agent backend is missing, stop and name the CLI to install. Do not switch to stock, render, or a different CLI.
 
 ## Photo cover from free stock
 
@@ -104,10 +104,10 @@ beastcover gen "<headline>" --source stock --photo openverse:<id> --subject /abs
 ```
 
 - A transparent PNG is used as is. On macOS 14 or newer a normal photo is cut out on the machine with the system cutout, and the output says `cut out on this machine with macOS Vision`. The first cutout compiles a small tool, which takes a few seconds.
-- Other systems fail with a message asking for a transparent PNG. Tell the user to cut the photo out first (iPhone or macOS "Copy Subject", remove.bg, Photoshop). Never pass the photo to a local-model CLI to remove the background: the model redraws the face.
+- Other systems fail with a message asking for a transparent PNG. Tell the user to cut the photo out first (iPhone or macOS "Copy Subject", remove.bg, Photoshop). Never pass the photo to a agent CLI to remove the background: the model redraws the face.
 - The person stands on one side (the bottom on portrait covers) with a white outline, and the headline takes the other side. Keep that headline short: three to six characters, or a few words.
 - The cutout keeps everything that stands out in the foreground. When the photo has several people or things close together, crop it to the one person first, or ask for a PNG that is already cut out.
-- `--subject` works with `render` and `stock`, not with `local-model`.
+- `--subject` works with `render` and `stock`, not with `agent`.
 
 ## Render a text cover
 
@@ -139,26 +139,26 @@ After the command finishes, verify that the PNG exists at the reported path. Tel
 
 ## Paint with a local model
 
-`local-model` needs a workspace. The style lives in `.beastcover/project.json`. Do not create a workspace silently.
+`agent` needs a workspace. The style lives in `.beastcover/project.json`. Do not create a workspace silently.
 
 Copy the selected style prompt in full, then append one subject description (`主体：...`). Do not assemble extra style, palette, or discipline layers.
 
 ```bash
-beastcover gen "<subject>" --source local-model --via codex --preset youtube
-beastcover gen "<subject>" --source local-model --via grok --ref /absolute/a.png --preset xiaohongshu,douyin
+beastcover gen "<subject>" --source agent --via codex --preset youtube
+beastcover gen "<subject>" --source agent --via agy --ref /absolute/a.png --preset xiaohongshu,douyin
 ```
 
 The model runs once per group of platforms, saves its image in `.beastcover/cache/`, and each platform is cropped from that image. `xiaohongshu,douyin` is one model call. `wechat,youtube` is two.
 
-`--via` chooses `codex`, `grok`, or `claude`. It is only valid with `--source local-model`. `--ref` names files only. Do not glob. Do not pass a directory.
+`--via` chooses `codex` or `agy`. It is only valid with `--source agent`. `--ref` names files only. Do not glob. Do not pass a directory.
 
 ### Redraw or combine images
 
 Only when the user asks for it, `--remix` hands their images to the model:
 
 ```bash
-beastcover gen "<subject>" --source local-model --via codex --remix /abs/me.jpg --preset youtube
-beastcover gen "<subject>" --source local-model --via codex --remix /abs/me.jpg --remix /abs/scene.jpg --preset douyin
+beastcover gen "<subject>" --source agent --via codex --remix /abs/me.jpg --preset youtube
+beastcover gen "<subject>" --source agent --via codex --remix /abs/me.jpg --remix /abs/scene.jpg --preset douyin
 ```
 
 - One image: redrawn in the project style, keeping the composition, pose, and face.
@@ -166,7 +166,7 @@ beastcover gen "<subject>" --source local-model --via codex --remix /abs/me.jpg 
 - Only the user's own images or cc0/pdm photos go to the model. A photo fetched from Pexels is refused.
 - The model redraws the face and invents what the photo does not show, like the rest of a body. When the face must stay exact, use `--subject` on a render or stock cover instead.
 
-After the command finishes, verify the image at the reported path. Tell the user: `Privacy: local-model used your own CLI. We did not handle the data.`
+After the command finishes, verify the image at the reported path. Tell the user: `Privacy: agent used your own CLI. We did not handle the data.`
 
 ## Make it land
 
@@ -174,7 +174,7 @@ After the command finishes, verify the image at the reported path. Tell the user
 - Bright and colourful beats dark and grey. Pick a palette with a strong accent.
 - Covers are judged by what people watch or read after the click. Never promise on the cover what the piece does not deliver.
 - YouTube tests up to three thumbnails. When the user wants to test, run `gen` two or three times with versions that differ clearly (face or no face, another template, `--hook` or not, another photo), not a new outline colour. Each run in a workspace gets its own file name.
-- For a 4K YouTube thumbnail (the current recommendation is 3840×2160), add `--scale 3` to a `render` or `stock` cover. `local-model` output is sized by the model and rejects `--scale`. Keep the default for uploads from a phone, where the limit is 2 MB.
+- For a 4K YouTube thumbnail (the current recommendation is 3840×2160), add `--scale 3` to a `render` or `stock` cover. `agent` output is sized by the model and rejects `--scale`. Keep the default for uploads from a phone, where the limit is 2 MB.
 - Check the cover at thumbnail size. The CLI already warns when the headline gets too small in a feed. If the subject is hard to make out there, pick another photo.
 - Lock one style and one palette for every platform version of the same piece.
 - Treat every style prompt as self-contained source text. Never assemble a prompt from global style, palette, and discipline fragments.

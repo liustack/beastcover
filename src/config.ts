@@ -5,11 +5,11 @@ import { getPlatform, type PlatformName, parsePlatformList } from './platforms/i
 
 export const CONFIG_PATH = join(homedir(), '.beastcover', 'config.json');
 
-export const IMAGE_SOURCES = ['render', 'stock', 'local-model'] as const;
+export const IMAGE_SOURCES = ['render', 'stock', 'agent'] as const;
 export type ImageSource = (typeof IMAGE_SOURCES)[number];
 
-export const LOCAL_MODEL_PROVIDERS = ['codex', 'grok', 'claude'] as const;
-export type LocalModelProvider = (typeof LOCAL_MODEL_PROVIDERS)[number];
+export const AGENT_PROVIDERS = ['codex', 'agy'] as const;
+export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 
 export interface StockConfig {
     pexels?: {
@@ -32,8 +32,8 @@ export interface BeastCoverConfigFile {
         scale?: number;
     };
     stock?: StockConfig;
-    localModel?: {
-        via?: LocalModelProvider;
+    agent?: {
+        via?: AgentProvider;
     };
 }
 
@@ -44,7 +44,7 @@ export interface ConfigFlags {
     width?: number;
     height?: number;
     scale?: number;
-    via?: LocalModelProvider;
+    via?: AgentProvider;
 }
 
 export interface EffectiveConfig {
@@ -57,7 +57,7 @@ export interface EffectiveConfig {
         scale: number;
     };
     stock?: BeastCoverConfigFile['stock'];
-    localModel?: BeastCoverConfigFile['localModel'];
+    agent?: BeastCoverConfigFile['agent'];
 }
 
 export const BUILT_IN_CONFIG = {
@@ -143,13 +143,21 @@ function validateStockConfig(stock: unknown, configPath: string): void {
 }
 
 function validateConfig(parsed: Record<string, unknown>, configPath: string): BeastCoverConfigFile {
-    const rootKeys = new Set(['source', 'output', 'render', 'stock', 'localModel']);
+    const rootKeys = new Set(['source', 'output', 'render', 'stock', 'agent']);
     for (const key of Object.keys(parsed)) {
+        if (key === 'localModel') {
+            throw new Error(
+                `${configPath} uses the old "localModel" key. The section is now "agent": rename it in the file.`,
+            );
+        }
         if (!rootKeys.has(key)) {
             throw new Error(`${configPath} contains unknown config key "${key}".`);
         }
     }
 
+    if (parsed.source === 'local-model') {
+        throw new Error(`${configPath} has source "local-model". The source is now "agent".`);
+    }
     if (
         parsed.source !== undefined &&
         (typeof parsed.source !== 'string' || !IMAGE_SOURCES.includes(parsed.source as ImageSource))
@@ -210,25 +218,26 @@ function validateConfig(parsed: Record<string, unknown>, configPath: string): Be
         validateStockConfig(parsed.stock, configPath);
     }
 
-    if (parsed.localModel !== undefined) {
-        if (!isPlainObject(parsed.localModel)) {
-            invalidConfig(configPath, 'localModel', 'an object');
+    if (parsed.agent !== undefined) {
+        if (!isPlainObject(parsed.agent)) {
+            invalidConfig(configPath, 'agent', 'an object');
         }
-        for (const key of Object.keys(parsed.localModel)) {
+        for (const key of Object.keys(parsed.agent)) {
             if (key !== 'via') {
-                throw new Error(`${configPath} contains unknown config key "localModel.${key}".`);
+                throw new Error(`${configPath} contains unknown config key "agent.${key}".`);
             }
         }
-        if (
-            parsed.localModel.via !== undefined &&
-            (typeof parsed.localModel.via !== 'string' ||
-                !LOCAL_MODEL_PROVIDERS.includes(parsed.localModel.via as LocalModelProvider))
-        ) {
-            invalidConfig(
-                configPath,
-                'localModel.via',
-                `one of ${LOCAL_MODEL_PROVIDERS.join(', ')}`,
+        if (parsed.agent.via === 'grok' || parsed.agent.via === 'claude') {
+            throw new Error(
+                `${configPath} has agent.via "${parsed.agent.via}". That backend was removed: the ${parsed.agent.via} CLI has no image generation. Use codex or agy.`,
             );
+        }
+        if (
+            parsed.agent.via !== undefined &&
+            (typeof parsed.agent.via !== 'string' ||
+                !AGENT_PROVIDERS.includes(parsed.agent.via as AgentProvider))
+        ) {
+            invalidConfig(configPath, 'agent.via', `one of ${AGENT_PROVIDERS.join(', ')}`);
         }
     }
 
@@ -279,7 +288,12 @@ export function setConfigValue(
     const config = loadConfigFile(configPath);
 
     switch (dottedKey) {
+        case 'localModel.via':
+            throw new Error('The "localModel.via" key is now "agent.via".');
         case 'source': {
+            if (value === 'local-model') {
+                throw new Error('Source "local-model" is now "agent".');
+            }
             if (!IMAGE_SOURCES.includes(value as ImageSource)) {
                 throw new Error(`source must be one of ${IMAGE_SOURCES.join(', ')}.`);
             }
@@ -324,14 +338,17 @@ export function setConfigValue(
             config.stock.openverse[field] = rawValue;
             break;
         }
-        case 'localModel.via': {
-            if (!LOCAL_MODEL_PROVIDERS.includes(value as LocalModelProvider)) {
+        case 'agent.via': {
+            if (value === 'grok' || value === 'claude') {
                 throw new Error(
-                    `localModel.via must be one of ${LOCAL_MODEL_PROVIDERS.join(', ')}.`,
+                    `agent.via "${value}" was removed: the ${value} CLI has no image generation. Use codex or agy.`,
                 );
             }
-            config.localModel ??= {};
-            config.localModel.via = value as LocalModelProvider;
+            if (!AGENT_PROVIDERS.includes(value as AgentProvider)) {
+                throw new Error(`agent.via must be one of ${AGENT_PROVIDERS.join(', ')}.`);
+            }
+            config.agent ??= {};
+            config.agent.via = value as AgentProvider;
             break;
         }
         default:
@@ -370,7 +387,7 @@ export function resolveEffectiveConfig(
             scale: flags.scale ?? fileConfig.render?.scale ?? BUILT_IN_CONFIG.render.scale,
         },
         ...(fileConfig.stock ? { stock: structuredClone(fileConfig.stock) } : {}),
-        ...(fileConfig.localModel ? { localModel: { ...fileConfig.localModel } } : {}),
+        ...(fileConfig.agent ? { agent: { ...fileConfig.agent } } : {}),
     };
 }
 

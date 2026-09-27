@@ -83,6 +83,37 @@ describe('layered config', () => {
         );
     });
 
+    it('points old local-model names at the new agent names', () => {
+        const configPath = tempConfigPath();
+        initConfigFile(configPath);
+
+        writeFileSync(configPath, '{"localModel":{"via":"codex"}}\n', 'utf8');
+        expect(() => loadConfigFile(configPath)).toThrowError(
+            `${configPath} uses the old "localModel" key. The section is now "agent": rename it in the file.`,
+        );
+
+        writeFileSync(configPath, '{"source":"local-model"}\n', 'utf8');
+        expect(() => loadConfigFile(configPath)).toThrowError(
+            `${configPath} has source "local-model". The source is now "agent".`,
+        );
+
+        writeFileSync(configPath, '{"agent":{"via":"grok"}}\n', 'utf8');
+        expect(() => loadConfigFile(configPath)).toThrowError(
+            `${configPath} has agent.via "grok". That backend was removed: the grok CLI has no image generation. Use codex or agy.`,
+        );
+
+        writeFileSync(configPath, '{}\n', 'utf8');
+        expect(() => setConfigValue('localModel.via', 'codex', configPath)).toThrowError(
+            'The "localModel.via" key is now "agent.via".',
+        );
+        expect(() => setConfigValue('source', 'local-model', configPath)).toThrowError(
+            'Source "local-model" is now "agent".',
+        );
+        expect(() => setConfigValue('agent.via', 'claude', configPath)).toThrowError(
+            'agent.via "claude" was removed: the claude CLI has no image generation. Use codex or agy.',
+        );
+    });
+
     it('rejects unknown stock providers and non-string credentials at the config boundary', () => {
         const configPath = tempConfigPath();
         initConfigFile(configPath);
@@ -116,7 +147,7 @@ describe('layered config', () => {
         setConfigValue('stock.pexels.apiKey', 'sk-private-value', configPath);
         setConfigValue('stock.openverse.clientId', 'ov-client', configPath);
         setConfigValue('stock.openverse.clientSecret', 'ov-secret', configPath);
-        setConfigValue('localModel.via', 'codex', configPath);
+        setConfigValue('agent.via', 'codex', configPath);
 
         expect(loadConfigFile(configPath)).toEqual({
             source: 'stock',
@@ -125,7 +156,7 @@ describe('layered config', () => {
                 pexels: { apiKey: 'sk-private-value' },
                 openverse: { clientId: 'ov-client', clientSecret: 'ov-secret' },
             },
-            localModel: { via: 'codex' },
+            agent: { via: 'codex' },
         });
         expect(statSync(configPath).mode & 0o777).toBe(0o600);
         setConfigValue('render.preset', 'douyin, wechat', configPath);
