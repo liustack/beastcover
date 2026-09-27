@@ -1769,6 +1769,40 @@ describe('BeastCover CLI', () => {
         );
     });
 
+    it('refuses a doomed --scene run before it calls the painter', async () => {
+        const cwd = tempDir('beastcover-cli-scene-early-');
+        const configPath = join(cwd, 'config.json');
+        writeFileSync(configPath, '{"model":{"openai":{"apiKey":"o-key"}}}\n', 'utf8');
+        const runModelApi = mockRunModelApi();
+        for (const [args, message] of [
+            [
+                ['--width', '800', '--height', '600', '--guides'],
+                '--guides draws platform safe areas. Drop --width and --height to use it.',
+            ],
+            [['--hook', 'short', '--preset', 'x'], '--hook is for video and note covers'],
+            [['--subject', 'nobody.png'], `Subject not found: ${join(cwd, 'nobody.png')}`],
+        ] as const) {
+            const stderr = captureOutput();
+            const code = await runCli(
+                ['node', 'beastcover', 'gen', 'Test', '--scene', 'sky', ...args],
+                {
+                    cwd,
+                    configPath,
+                    openRenderer: mockRender().open,
+                    qc: undefined,
+                    runModelApi,
+                    photoFocus: centreFocus,
+                    lookupCommand: () => undefined,
+                    stdout: captureOutput(),
+                    stderr,
+                },
+            );
+            expect(code, args.join(' ')).toBe(1);
+            expect(stderr.chunks.join(''), args.join(' ')).toContain(message);
+        }
+        expect(runModelApi).not.toHaveBeenCalled();
+    });
+
     it('falls back to a gradient scene and says how to paint it', async () => {
         const cwd = tempDir('beastcover-cli-scene-degrade-');
         const stdout = captureOutput();

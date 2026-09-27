@@ -388,16 +388,12 @@ function coverLine(platform: PlatformName, text: string, hook: string | undefine
     return hook !== undefined && getPlatform(platform).family !== 'ultrawide' ? hook : text;
 }
 
-/** 按平台出一组封面，或给了 --width/--height 时出一张自定义画布 */
-async function writeCovers(
-    runtime: CliRuntime,
-    text: string,
-    templateFor: (line: string, fonts: FontKit) => CoverTemplate,
+/** 画布、--guides、--hook 的组合对不对。下载照片、抠图、画场景之前先查，别为必然失败的命令花时间和额度 */
+function checkCoverRequest(
     render: EffectiveRender,
-    outputPath: string,
     guides: boolean,
-    hook?: string,
-): Promise<{ covers: WrittenCover[]; warnings: string[] }> {
+    hook: string | undefined,
+): void {
     if (render.canvas && guides) {
         throw new Error('--guides draws platform safe areas. Drop --width and --height to use it.');
     }
@@ -414,6 +410,19 @@ async function writeCovers(
             '--hook is for video and note covers, and WeChat and X article covers keep the headline. Add a video or note platform, or drop --hook.',
         );
     }
+}
+
+/** 按平台出一组封面，或给了 --width/--height 时出一张自定义画布 */
+async function writeCovers(
+    runtime: CliRuntime,
+    text: string,
+    templateFor: (line: string, fonts: FontKit) => CoverTemplate,
+    render: EffectiveRender,
+    outputPath: string,
+    guides: boolean,
+    hook?: string,
+): Promise<{ covers: WrittenCover[]; warnings: string[] }> {
+    checkCoverRequest(render, guides, hook);
     const renderer = await runtime.openRenderer();
     try {
         // 本机装了哪些字体、覆不覆盖标题里的字：在出图的同一个 Chromium 里探一次，按角色挑。
@@ -818,7 +827,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
 
                 // --via 在 render 和 stock 里只用来点名画场景的后端。
                 if (flags.via !== undefined && rendered && options.scene === undefined) {
-                    throw new Error('--via is only valid with --source agent or model.');
+                    throw new Error(
+                        '--via is only valid with --source agent or model, or with --scene to name the painter.',
+                    );
                 }
                 if ((options.remix ?? []).length > 0 && effective.source !== 'agent') {
                     throw new Error('--remix works with --source agent.');
@@ -1097,8 +1108,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const fit: PhotoFit =
                     options.fit === undefined ? 'cover' : parsePhotoFit(options.fit);
 
-                // 成品路径不依赖照片，先算先拦，别为一个 .jpg 去下载图库照片。
+                // 成品路径和各选项的组合不依赖照片，先算先拦，别为必然失败的命令下载照片或画场景。
+                checkCoverRequest(effective.render, guides, hook);
                 const outputPath = coverOutputPath(runtime, flags, effective.output);
+                const subject = await loadSubject(runtime, options.subject);
                 const stockRuntime: StockRuntime = { config: fileConfig.stock, ...runtime.stock };
                 const photos: LoadedPhoto[] = [];
                 for (const value of photoValues) {
@@ -1182,7 +1195,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         effective.render.canvas,
                     );
                 }
-                const subject = await loadSubject(runtime, options.subject);
                 const templateFor = (line: string, fonts: FontKit): CoverTemplate =>
                     genreTemplate(genre, {
                         text: line,
