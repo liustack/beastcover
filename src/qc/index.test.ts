@@ -247,6 +247,27 @@ describe('subjects', () => {
         ).toHaveLength(1);
     });
 
+    it('warns when a face is too small to read in the feed', () => {
+        const face = (height: number) => [
+            {
+                name: 'the face',
+                box: { x: 400, y: 600, width: height * 0.8, height },
+                frame: douyin,
+                minShare: 1 / 3,
+            },
+        ];
+        // 看得清的区域 1080 x 1320，短边 1080：脸 400 高够了，200 高太小。
+        expect(checkSubjects('douyin', face(400), douyin, bars)).toEqual([]);
+        expect(checkSubjects('douyin', face(200), douyin, bars)).toEqual([
+            {
+                level: 'warn',
+                platform: 'douyin',
+                message:
+                    "the face is small (19% of the cover's short side, 33% or more reads in the feed). Use a photo cropped closer, head and shoulders.",
+            },
+        ]);
+    });
+
     it('works out the clear part of a crop from full-width bars only', () => {
         expect(clearCrop(douyin, bars)).toEqual({ x: 0, y: 220, width: 1080, height: 1320 });
     });

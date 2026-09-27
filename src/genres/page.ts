@@ -81,6 +81,9 @@ export function photoSubject(
 }
 
 /** 人物的脸在母版上的位置：人可以被画面切掉，脸不行 */
+// 脸高至少是封面短边的三分之一，信息流里才认得出表情（research.md 第 2.1 节）。
+export const MIN_FACE_SHARE = 1 / 3;
+
 export function faceSubject(
     layout: CoverLayout,
     subject: SubjectLayer,
@@ -101,6 +104,7 @@ export function faceSubject(
                 height: face.height * rect.height,
             },
             frame: { x: 0, y: 0, width: layout.width, height: layout.height },
+            minShare: MIN_FACE_SHARE,
         },
     ];
 }

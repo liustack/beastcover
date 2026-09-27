@@ -303,6 +303,8 @@ export interface PictureSubject {
     box: Rect;
     /** 这张照片占的地方：面板、格子，或整张画布 */
     frame: Rect;
+    /** 至少要占平台看得清的区域短边的这么多（人脸要够大），不够就提醒 */
+    minShare?: number;
 }
 
 // 横跨裁切框这么宽的遮挡才算顶栏或底栏（抖音右侧那一列按钮不算）。
@@ -369,15 +371,25 @@ export function checkSubjects(
             !underButtons &&
             shownAlong(box.x, box.x + box.width, window.x, window.x + window.width) &&
             shownAlong(box.y, box.y + box.height, window.y, window.y + window.height);
-        return shown
-            ? []
-            : [
+        if (!shown) {
+            return [
+                {
+                    level: 'fail',
+                    platform: target,
+                    message: `${subject.name} is cut off or hidden under the app's buttons. Pick a photo with more room around its subject, or another type.`,
+                },
+            ];
+        }
+        const share = box.height / Math.min(clear.width, clear.height);
+        return subject.minShare !== undefined && share < subject.minShare
+            ? [
                   {
-                      level: 'fail',
+                      level: 'warn',
                       platform: target,
-                      message: `${subject.name} is cut off or hidden under the app's buttons. Pick a photo with more room around its subject, or another type.`,
+                      message: `${subject.name} is small (${Math.round(share * 100)}% of the cover's short side, ${Math.round(subject.minShare * 100)}% or more reads in the feed). Use a photo cropped closer, head and shoulders.`,
                   },
-              ];
+              ]
+            : [];
     });
 }
 
