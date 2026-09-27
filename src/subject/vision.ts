@@ -19,113 +19,9 @@ import sharp from 'sharp';
 
 const execFileAsync = promisify(execFile);
 
-export const VISION_TOOL_SWIFT = String.raw`import CoreImage
-import Foundation
-import ImageIO
-import UniformTypeIdentifiers
-import Vision
+import VISION_TOOL_SWIFT from '../../skills/beastcover/scripts/vision-tool.swift?raw';
 
-// 用法：
-//   vision cutout <输入图片> <输出 PNG>   抠出前景主体
-//   vision focus <输入图片>              打印主体中心的 JSON：人脸，其次显著物体，其次注意力区域
-// 退出码 2 参数错，3 没找到主体，4 读写失败。
-let args = CommandLine.arguments
-
-func fail(_ message: String, _ code: Int32) -> Never {
-    FileHandle.standardError.write("\(message)\n".data(using: .utf8)!)
-    exit(code)
-}
-
-func loadImage(_ path: String) -> CGImage {
-    let url = URL(fileURLWithPath: path)
-    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-          let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-        fail("cannot read \(path)", 4)
-    }
-    return image
-}
-
-func union(_ boxes: [CGRect]) -> CGRect? {
-    guard var result = boxes.first else { return nil }
-    for box in boxes.dropFirst() { result = result.union(box) }
-    return result
-}
-
-func printFocus(_ box: CGRect, _ source: String) {
-    // Vision 的坐标原点在左下角，换成左上角。
-    let x = box.midX
-    let y = 1 - box.midY
-    print("{\"x\":\(x),\"y\":\(y),\"width\":\(box.width),\"height\":\(box.height),\"source\":\"\(source)\"}")
-}
-
-func focus(_ path: String) {
-    let handler = VNImageRequestHandler(cgImage: loadImage(path), options: [:])
-    let faces = VNDetectFaceRectanglesRequest()
-    // 按物体的显著性框得紧，按注意力的常常框住大半张图，所以先用前者，没有结果再用后者。
-    let objects = VNGenerateObjectnessBasedSaliencyImageRequest()
-    let attention = VNGenerateAttentionBasedSaliencyImageRequest()
-    do {
-        try handler.perform([faces, objects, attention])
-    } catch {
-        fail("vision failed: \(error)", 4)
-    }
-    if let box = union((faces.results ?? []).map { $0.boundingBox }) {
-        printFocus(box, "faces")
-        return
-    }
-    let candidates: [[VNSaliencyImageObservation]?] = [objects.results, attention.results]
-    for results in candidates {
-        if let box = union((results?.first?.salientObjects ?? []).map { $0.boundingBox }) {
-            printFocus(box, "saliency")
-            return
-        }
-    }
-    fail("no subject found", 3)
-}
-
-func cutout(_ inputPath: String, _ outputPath: String) {
-    let image = loadImage(inputPath)
-    let request = VNGenerateForegroundInstanceMaskRequest()
-    let handler = VNImageRequestHandler(cgImage: image, options: [:])
-    do {
-        try handler.perform([request])
-    } catch {
-        fail("vision failed: \(error)", 4)
-    }
-    guard let observation = request.results?.first, !observation.allInstances.isEmpty else {
-        fail("no subject found", 3)
-    }
-    do {
-        let masked = try observation.generateMaskedImage(
-            ofInstances: observation.allInstances,
-            from: handler,
-            croppedToInstancesExtent: true
-        )
-        let ciImage = CIImage(cvPixelBuffer: masked)
-        let context = CIContext()
-        let output = URL(fileURLWithPath: outputPath)
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent),
-              let destination = CGImageDestinationCreateWithURL(
-                  output as CFURL, UTType.png.identifier as CFString, 1, nil) else {
-            fail("cannot write \(outputPath)", 4)
-        }
-        CGImageDestinationAddImage(destination, cgImage, nil)
-        guard CGImageDestinationFinalize(destination) else {
-            fail("cannot write \(outputPath)", 4)
-        }
-    } catch {
-        fail("mask failed: \(error)", 4)
-    }
-}
-
-if args.count == 4 && args[1] == "cutout" {
-    cutout(args[2], args[3])
-} else if args.count == 3 && args[1] == "focus" {
-    focus(args[2])
-} else {
-    fail("usage: vision cutout <input> <output.png> | vision focus <input>", 2)
-}
-`;
+export { VISION_TOOL_SWIFT };
 
 // 退出码约定见 Swift 源码第一行注释。
 const NO_SUBJECT_EXIT = 3;
@@ -138,6 +34,10 @@ export interface VisionCutoutRuntime {
     platform: NodeJS.Platform;
     /** 放编译好的抠图小程序，通常是 ~/.beastcover/bin */
     binDir: string;
+    /** binDir 建不了（codex 这类沙箱写不进 home）时的退路，默认系统临时目录 */
+    fallbackBinDir?: string;
+    /** 降级时说一声，并告诉 agent 怎么替用户申请持久权限。不给就不出声 */
+    note?: (line: string) => void;
     lookupCommand: (name: string) => string | undefined;
     /** Darwin 内核版本，默认取本机。macOS 14 对应 Darwin 23 */
     osRelease?: string;
@@ -150,54 +50,83 @@ function toolPath(binDir: string): string {
     return join(binDir, `vision-tool-${hash}`);
 }
 
+function binDirCandidates(runtime: VisionCutoutRuntime): string[] {
+    return [runtime.binDir, runtime.fallbackBinDir ?? join(tmpdir(), 'beastcover', 'bin')];
+}
+
 /** 抠图不可用时返回原因，可用时返回 undefined */
 export function visionCutoutUnavailable(runtime: VisionCutoutRuntime): string | undefined {
     const darwinMajor = Number.parseInt((runtime.osRelease ?? release()).split('.')[0] ?? '', 10);
     if (runtime.platform !== 'darwin' || !(darwinMajor >= MIN_DARWIN_MAJOR)) {
         return 'automatic cutout needs macOS 14 or newer';
     }
-    if (!existsSync(toolPath(runtime.binDir)) && runtime.lookupCommand('swiftc') === undefined) {
+    const built = binDirCandidates(runtime).some((dir) => existsSync(toolPath(dir)));
+    if (!built && runtime.lookupCommand('swiftc') === undefined) {
         return 'automatic cutout needs the Swift compiler. Run xcode-select --install';
     }
     return undefined;
 }
 
+/** 只把权限类失败当「这个目录用不了」，磁盘满、编译错这类问题照抛 */
+function isPermissionError(error: unknown): boolean {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'EPERM' || code === 'EACCES' || code === 'EROFS';
+}
+
 async function ensureTool(runtime: VisionCutoutRuntime): Promise<string> {
-    const path = toolPath(runtime.binDir);
-    if (existsSync(path)) {
-        return path;
+    const candidates = binDirCandidates(runtime);
+    for (const dir of candidates) {
+        if (existsSync(toolPath(dir))) {
+            return toolPath(dir);
+        }
     }
     const swiftc = runtime.lookupCommand('swiftc');
     if (swiftc === undefined) {
         throw new Error('Automatic cutout needs the Swift compiler. Run xcode-select --install.');
     }
-    mkdirSync(runtime.binDir, { recursive: true, mode: 0o700 });
-    // 源码和编译中的文件名带上随机后缀，几个进程同时首次编译也不会互相踩文件。
-    const attempt = randomUUID();
-    const source = `${path}.${attempt}.swift`;
-    const building = `${path}.${attempt}.building`;
-    writeFileSync(source, VISION_TOOL_SWIFT, 'utf8');
-    try {
-        await execFileAsync(swiftc, ['-O', '-o', building, source], {
-            timeout: COMPILE_TIMEOUT_MS,
-        });
-        chmodSync(building, 0o755);
-        renameSync(building, path);
-        // 源码变了才会编新版本，旧版本的小程序不会再用，一起清掉。
-        for (const name of readdirSync(runtime.binDir)) {
-            const stale = join(runtime.binDir, name);
-            if (/^vision-(cutout|tool)-[0-9a-f]+$/.test(name) && stale !== path) {
-                rmSync(stale, { force: true });
+    // 首选 ~/.beastcover/bin：一次编译永久复用。沙箱写不进 home 就退到临时目录，
+    // 代价只是临时目录被系统清理后重编一次（约 2.5 秒）。
+    for (const [index, dir] of candidates.entries()) {
+        const path = toolPath(dir);
+        // 源码和编译中的文件名带上随机后缀，几个进程同时首次编译也不会互相踩文件。
+        const attempt = randomUUID();
+        const source = `${path}.${attempt}.swift`;
+        const building = `${path}.${attempt}.building`;
+        try {
+            mkdirSync(dir, { recursive: true, mode: 0o700 });
+            writeFileSync(source, VISION_TOOL_SWIFT, 'utf8');
+        } catch (error) {
+            if (isPermissionError(error) && index < candidates.length - 1) {
+                runtime.note?.(
+                    `Cutout tool: ${dir} is not writable in this sandbox, using the temp dir for now. To cache the tool permanently, allow writes to ${dir} (codex: add it to sandbox_workspace_write.writable_roots) or run one cutout outside the sandbox.`,
+                );
+                continue;
             }
+            throw error;
         }
-    } catch (error) {
-        rmSync(building, { force: true });
-        const detail = (error as { stderr?: string }).stderr?.trim() || String(error);
-        throw new Error(`Could not build the macOS cutout tool: ${detail}`);
-    } finally {
-        rmSync(source, { force: true });
+        try {
+            await execFileAsync(swiftc, ['-O', '-o', building, source], {
+                timeout: COMPILE_TIMEOUT_MS,
+            });
+            chmodSync(building, 0o755);
+            renameSync(building, path);
+            // 源码变了才会编新版本，旧版本的小程序不会再用，一起清掉。
+            for (const name of readdirSync(dir)) {
+                const stale = join(dir, name);
+                if (/^vision-(cutout|tool)-[0-9a-f]+$/.test(name) && stale !== path) {
+                    rmSync(stale, { force: true });
+                }
+            }
+        } catch (error) {
+            rmSync(building, { force: true });
+            const detail = (error as { stderr?: string }).stderr?.trim() || String(error);
+            throw new Error(`Could not build the macOS cutout tool: ${detail}`);
+        } finally {
+            rmSync(source, { force: true });
+        }
+        return path;
     }
-    return path;
+    throw new Error('Could not create a directory for the macOS cutout tool.');
 }
 
 /**

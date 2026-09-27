@@ -52,7 +52,6 @@ agent 会替你跑这些命令。想自己动手也行：
 npm i -g @liustack/beastcover
 npx --yes --package @liustack/beastcover playwright install chromium
 
-beastcover new my-post
 beastcover stock search "harbour night" --orientation landscape
 beastcover gen "人接不住认知以外的流量，也赚不到认知以外的钱" --source stock --photo openverse:<id> --preset all
 ```
@@ -61,7 +60,7 @@ beastcover gen "人接不住认知以外的流量，也赚不到认知以外的�
 
 `stock search` 每行列一张照片：ref、尺寸、授权、作者、缩略图地址。挑一张，把 ref 交给 `--photo`。`--photo` 也收本地图片路径。
 
-有工作区时，照片和它的来源记录存进 `.beastcover/refs/`，封面写到 `.beastcover/out/`。`project.json` 记着这个项目的风格和配色，`history.jsonl` 记着每一张封面。整个 `.beastcover/` 目录自己对你的 git 隐身，不会混进你的提交。
+没有任何要初始化的东西，也不留任何痕迹：封面落在你运行命令的目录里，下载的照片和它的授权记录暂存在系统临时目录（路径会打印出来），你的项目和 git 完全不被碰。`--style` 每次运行挑一个目录风格。
 
 照片封面会按照片自己的主体来构图，让主体避开标题。`--look mono|duotone|punch` 给照片调色，`--fit extend` 在照片形状不适合平台时保留整张照片，其余部分用模糊的同一张补满，`--callout` 用红圈圈住主体，再画一支箭头指过去。装了模型 CLI 的话，`--source local-model --remix me.jpg` 按项目画风重绘你的图，再加一个 `--remix 场景.jpg` 就能把你放进那个场景。
 

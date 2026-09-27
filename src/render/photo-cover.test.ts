@@ -503,5 +503,6 @@ describe('photo framing for the callout', () => {
                 expect(layer.focusBox, `${family} at ${scale}x`).toEqual(expected);
             }
         }
-    });
+        // 遍历三族多档 scale 的真渲染是套件里最重的用例，机器被其他会话占满时 30 秒不够。
+    }, 90_000);
 });

@@ -156,62 +156,22 @@ describe('BeastCover CLI', () => {
         expect(unknownErr.chunks.join('')).toContain('Unknown style "unknown"');
     });
 
-    it('creates a workspace with new and shows it with project', async () => {
-        const cwd = tempDir('beastcover-cli-new-');
-        mkdirSync(join(cwd, '.git', 'info'), { recursive: true });
-        writeFileSync(join(cwd, '.gitignore'), 'dist/\n', 'utf8');
-        writeFileSync(join(cwd, '.git', 'info', 'exclude'), 'secret\n', 'utf8');
-        const stdout = captureOutput();
-
-        const exitCode = await runCli(
-            ['node', 'beastcover', 'new', 'demo', '--style', 'conceptual_colorfield'],
-            { cwd, stdout },
-        );
-
-        expect(exitCode).toBe(0);
-        expect(stdout.chunks.join('')).toBe(
-            [
-                'Created .beastcover/',
-                '  project.json    style and palette',
-                '  .gitignore      keeps the whole folder out of your git',
-                '  refs/ out/ cache/',
-                '',
-                'Nothing was written to your .gitignore or .git/info/exclude.',
-                '',
-            ].join('\n'),
-        );
-        expect(
-            JSON.parse(readFileSync(join(cwd, '.beastcover', 'project.json'), 'utf8')).style,
-        ).toBe('conceptual_colorfield');
-        expect(readFileSync(join(cwd, '.gitignore'), 'utf8')).toBe('dist/\n');
-        expect(readFileSync(join(cwd, '.git', 'info', 'exclude'), 'utf8')).toBe('secret\n');
-
-        const projectOut = captureOutput();
-        const projectCode = await runCli(['node', 'beastcover', 'project'], {
-            cwd,
-            stdout: projectOut,
-        });
-        expect(projectCode).toBe(0);
-        expect(projectOut.chunks.join('')).toContain('Style: conceptual_colorfield');
-        expect(projectOut.chunks.join('')).toContain('background: 暖白 / #f4efe6');
-        expect(projectOut.chunks.join('')).toContain('accent: 柔和暖色 / #d4a574');
-        expect(projectOut.chunks.join('')).toContain(
-            'Composition: 色域铺满整幅画布，负空间由大面积色块自身承担。',
-        );
-        expect(projectOut.chunks.join('')).toContain('Images: 0');
-    });
-
-    it('tells project to run new instead of creating a workspace', async () => {
-        const cwd = tempDir('beastcover-cli-missing-');
-        const stdout = captureOutput();
-        const stderr = captureOutput();
-        const exitCode = await runCli(['node', 'beastcover', 'project'], { cwd, stdout, stderr });
-
-        expect(exitCode).toBe(1);
-        expect(stderr.chunks.join('')).toBe(
-            'Error: No BeastCover workspace found. Run beastcover new <name> first.\n',
-        );
-        expect(stdout.chunks).toEqual([]);
+    it('points the removed workspace commands at gen and leaves the directory alone', async () => {
+        const cwd = tempDir('beastcover-cli-removed-');
+        for (const [args, hint] of [
+            [['new', 'demo'], 'run beastcover gen directly'],
+            [['project'], 'gen --style <name>'],
+        ] as const) {
+            const stderr = captureOutput();
+            const exitCode = await runCli(['node', 'beastcover', ...args], {
+                cwd,
+                stdout: captureOutput(),
+                stderr,
+            });
+            expect(exitCode).toBe(1);
+            expect(stderr.chunks.join('')).toContain(`beastcover ${args[0]} was removed`);
+            expect(stderr.chunks.join('')).toContain(hint);
+        }
         expect(readdirSync(cwd)).toEqual([]);
     });
 
@@ -255,59 +215,50 @@ describe('BeastCover CLI', () => {
         expect(readdirSync(directory)).not.toContain('.beastcover');
     });
 
-    it('writes workspace gen output under .beastcover/out and records history', async () => {
-        const cwd = tempDir('beastcover-cli-ws-');
-        const stdout = captureOutput();
-        await runCli(['node', 'beastcover', 'new', 'demo', '--style', 'conceptual_colorfield'], {
-            cwd,
-            stdout,
-        });
-
+    it('takes --style for one run and leaves nothing behind in the directory', async () => {
+        const cwd = tempDir('beastcover-cli-style-');
         const renderHtml = mockRender();
         const genOut = captureOutput();
-        const now = new Date('2026-08-23T00:00:00.000Z');
         const exitCode = await runCli(
-            ['node', 'beastcover', 'gen', 'Workspace card', '--source', 'render'],
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Style card',
+                '--source',
+                'render',
+                '--style',
+                'conceptual_colorfield',
+            ],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
                 openRenderer: renderHtml.open,
                 stdout: genOut,
-                now: () => now,
             },
         );
 
         expect(exitCode).toBe(0);
-        const outputPath = join(
-            cwd,
-            '.beastcover',
-            'out',
-            'beastcover-2026-08-23T00-00-00.000Z.png',
-        );
+        const outputPath = join(cwd, 'beastcover.png');
         expect(existsSync(outputPath)).toBe(true);
         expect(genOut.chunks.join('')).toContain(`Created ${outputPath}\nCanvas: 1280x720 at 1x`);
-        expect(renderHtml.mock.calls[0]?.[0]).toMatchObject({
-            width: 1920,
-            height: 1200,
-            scale: 2,
-        });
-        expect(renderHtml.mock.calls[0]?.[0].html).toContain('Workspace card');
-        expect(renderHtml.mock.calls[0]?.[0].html).toContain('暖白');
+        expect(renderHtml.mock.calls[0]?.[0].html).toContain('Style card');
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('--cover-paper: #f4efe6');
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('--cover-ink: #3a3a38');
-        const historyLines = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
-            .trimEnd()
-            .split('\n');
-        expect(historyLines).toHaveLength(1);
-        const history = JSON.parse(historyLines[0] ?? '{}');
-        expect(history).toEqual({
-            createdAt: '2026-08-23T00:00:00.000Z',
-            style: 'conceptual_colorfield',
-            palette: catalogPalette('conceptual_colorfield'),
-            text: 'Workspace card',
-            preset: 'youtube',
-            output: join('out', 'beastcover-2026-08-23T00-00-00.000Z.png'),
-        });
+        // 做完就走：目录里只有成品，没有任何工具目录或档案。
+        expect(readdirSync(cwd)).toEqual(['beastcover.png']);
+
+        const badStyle = captureOutput();
+        expect(
+            await runCli(['node', 'beastcover', 'gen', 'x', '--style', 'watercolor_soft'], {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: renderHtml.open,
+                stdout: captureOutput(),
+                stderr: badStyle,
+            }),
+        ).toBe(1);
+        expect(badStyle.chunks.join('')).toContain('watercolor_soft');
     });
 
     it('requires --photo for the stock source and rejects --photo elsewhere', async () => {
@@ -349,10 +300,6 @@ describe('BeastCover CLI', () => {
 
     it('renders a photo cover from a local image and records the photo in history', async () => {
         const cwd = tempDir('beastcover-photo-local-');
-        await runCli(['node', 'beastcover', 'new', 'demo', '--style', 'conceptual_colorfield'], {
-            cwd,
-            stdout: captureOutput(),
-        });
         const photoPath = join(cwd, 'sea.png');
         writeFileSync(photoPath, await testPngBytes(64, 32));
 
@@ -360,7 +307,18 @@ describe('BeastCover CLI', () => {
         const stdout = captureOutput();
         const now = new Date('2026-09-23T00:00:00.000Z');
         const exitCode = await runCli(
-            ['node', 'beastcover', 'gen', 'Dawn tide', '--source', 'stock', '--photo', 'sea.png'],
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'Dawn tide',
+                '--source',
+                'stock',
+                '--photo',
+                'sea.png',
+                '--style',
+                'conceptual_colorfield',
+            ],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
@@ -381,20 +339,10 @@ describe('BeastCover CLI', () => {
         );
         expect(stdout.chunks.join('')).toContain(`Photo: ${photoPath}`);
         expect(stdout.chunks.join('')).toContain('Privacy: render stayed on this machine.');
-
-        const history = JSON.parse(
-            readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8').trim(),
-        );
-        expect(history).toMatchObject({
-            source: 'stock',
-            text: 'Dawn tide',
-            photo: { path: join('..', 'sea.png') },
-        });
     });
 
-    it('fetches a stock ref into .beastcover/refs and renders it as the cover', async () => {
+    it('fetches a stock ref into the temp staging area and renders it as the cover', async () => {
         const cwd = tempDir('beastcover-photo-ref-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const png = await testPngBytes(80, 40);
         const fetchImpl = vi.fn(async (url: string | URL | Request) => {
             expect(String(url)).toBe('https://api.openverse.org/v1/images/a1/');
@@ -447,7 +395,8 @@ describe('BeastCover CLI', () => {
         );
 
         expect(exitCode).toBe(0);
-        const refPath = join(cwd, '.beastcover', 'refs', 'openverse-a1.png');
+        // 下载暂存在系统临时目录：项目目录零残留，路径打印给 agent 决定去留。
+        const refPath = join(tmpdir(), 'beastcover', 'refs', 'openverse-a1.png');
         expect(existsSync(refPath)).toBe(true);
         expect(JSON.parse(readFileSync(`${refPath}.json`, 'utf8'))).toMatchObject({
             ref: 'openverse:a1',
@@ -456,24 +405,12 @@ describe('BeastCover CLI', () => {
         });
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('Quiet harbour');
         const out = stdout.chunks.join('');
-        expect(out).toContain('Photo: openverse:a1');
+        expect(out).toContain(`Photo: openverse:a1 (saved at ${refPath})`);
         expect(out).toContain('License: cc0');
         expect(out).not.toContain('Credit:');
         expect(out).toContain('Source: https://flickr.example/a1');
         expect(out).toContain('Privacy: the photo was downloaded from openverse.');
-
-        const history = JSON.parse(
-            readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8').trim(),
-        );
-        expect(history.photo).toEqual({
-            path: join('refs', 'openverse-a1.png'),
-            ref: 'openverse:a1',
-            provider: 'openverse',
-            creator: 'Ada',
-            license: 'cc0',
-            attribution: '',
-            pageUrl: 'https://flickr.example/a1',
-        });
+        expect(readdirSync(cwd)).toEqual(['beastcover.png']);
     });
 
     it('searches stock and prints picks without choosing one', async () => {
@@ -577,22 +514,50 @@ describe('BeastCover CLI', () => {
         ).toMatchObject({ width: 80, height: 40, listedWidth: 5000, listedHeight: 2500 });
     });
 
-    it('stock fetch needs a workspace or --dir and never creates one', async () => {
-        const cwd = tempDir('beastcover-stock-fetch-');
-        const stderr = captureOutput();
-        const exitCode = await runCli(['node', 'beastcover', 'stock', 'fetch', 'openverse:a1'], {
+    it('stock fetch lands in the temp staging area by default and honors --dir', async () => {
+        const cwd = tempDir('beastcover-stock-fetch-dir-');
+        const png = await testPngBytes(80, 40);
+        const stock = {
+            fetch: (async () =>
+                new Response(
+                    JSON.stringify({
+                        id: 'd1',
+                        url: 'https://upload.example/d1.png',
+                        license: 'cc0',
+                        creator: 'Ada',
+                        width: 80,
+                        height: 40,
+                    }),
+                    { status: 200 },
+                )) as typeof fetch,
+            sleep: async () => undefined,
+            download: {
+                lookup: async () => [{ address: '104.16.1.1', family: 4 }],
+                pinnedFetch: async () =>
+                    new Response(png, { status: 200, headers: { 'content-type': 'image/png' } }),
+            },
+        };
+
+        const stdout = captureOutput();
+        const exitCode = await runCli(
+            ['node', 'beastcover', 'stock', 'fetch', 'openverse:d1', '--dir', 'picked'],
+            { cwd, configPath: join(cwd, 'unused-config.json'), stdout, stock },
+        );
+        expect(exitCode).toBe(0);
+        expect(existsSync(join(cwd, 'picked', 'openverse-d1.png'))).toBe(true);
+
+        const defaults = captureOutput();
+        const defaultCode = await runCli(['node', 'beastcover', 'stock', 'fetch', 'openverse:d1'], {
             cwd,
             configPath: join(cwd, 'unused-config.json'),
-            stdout: captureOutput(),
-            stderr,
-            stock: { fetch: vi.fn() as unknown as typeof fetch },
+            stdout: defaults,
+            stock,
         });
-
-        expect(exitCode).toBe(1);
-        expect(existsSync(join(cwd, '.beastcover'))).toBe(false);
-        expect(stderr.chunks.join('')).toBe(
-            'Error: No BeastCover workspace found. Pass --dir <directory> or run beastcover new <name> first.\n',
+        expect(defaultCode).toBe(0);
+        expect(defaults.chunks.join('')).toContain(
+            join(tmpdir(), 'beastcover', 'refs', 'openverse-d1.png'),
         );
+        expect(existsSync(join(cwd, '.beastcover'))).toBe(false);
     });
 
     it('rejects --via when the source is render and does not switch to agent', async () => {
@@ -642,11 +607,10 @@ describe('BeastCover CLI', () => {
         expect(implicitErr.chunks.join('')).toMatch(/agent/);
     });
 
-    it('requires a workspace for agent and does not create one', async () => {
-        const cwd = tempDir('beastcover-local-missing-ws-');
+    it('runs agent anywhere with the fallback style and leaves the directory clean', async () => {
+        const cwd = tempDir('beastcover-local-anywhere-');
         const runAgent = mockRunAgent();
         const stdout = captureOutput();
-        const stderr = captureOutput();
         const exitCode = await runCli(
             ['node', 'beastcover', 'gen', 'A figure on a shore', '--source', 'agent'],
             {
@@ -655,22 +619,21 @@ describe('BeastCover CLI', () => {
                 runAgent,
                 lookupCommand: () => '/fake/codex',
                 stdout,
-                stderr,
             },
         );
 
-        expect(exitCode).toBe(1);
-        expect(stderr.chunks.join('')).toBe(
-            'Error: No BeastCover workspace found. Run beastcover new <name> first.\n',
+        expect(exitCode).toBe(0);
+        expect(runAgent).toHaveBeenCalledOnce();
+        // 原图暂存进系统临时目录，项目目录里只有成品路径（mock 不落盘）。
+        expect(runAgent.mock.calls[0]?.[0]?.generatedPath).toBe(
+            join(tmpdir(), 'beastcover', 'cache', 'beastcover-landscape.png'),
         );
-        expect(runAgent).not.toHaveBeenCalled();
+        expect(runAgent.mock.calls[0]?.[0]?.prompt).toContain('孔版'); // fallback 风格
         expect(existsSync(join(cwd, '.beastcover'))).toBe(false);
-        expect(readdirSync(cwd)).toEqual([]);
     });
 
     it('refuses a non-PNG agent output before calling the model', async () => {
         const cwd = tempDir('beastcover-local-jpg-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const runAgent = mockRunAgent();
         const stderr = captureOutput();
         const exitCode = await runCli(
@@ -702,7 +665,6 @@ describe('BeastCover CLI', () => {
 
     it('runs gen through agent with an injected runner', async () => {
         const cwd = tempDir('beastcover-local-happy-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
 
         const renderHtml = mockRender();
         const runAgent = mockRunAgent();
@@ -734,12 +696,7 @@ describe('BeastCover CLI', () => {
             },
         );
 
-        const outputPath = join(
-            cwd,
-            '.beastcover',
-            'out',
-            'beastcover-2026-08-23T00-00-00.000Z.png',
-        );
+        const outputPath = join(cwd, 'beastcover.png');
         const printed = stdout.chunks.join('');
         expect(exitCode).toBe(0);
         expect(stderr.chunks).toEqual([]);
@@ -754,12 +711,7 @@ describe('BeastCover CLI', () => {
         if (localInput === undefined) {
             throw new Error('runAgent was not called.');
         }
-        const generatedPath = join(
-            cwd,
-            '.beastcover',
-            'cache',
-            'beastcover-2026-08-23T00-00-00.000Z-ultrawide.png',
-        );
+        const generatedPath = join(tmpdir(), 'beastcover', 'cache', 'beastcover-ultrawide.png');
         expect(localInput).toMatchObject({
             provider: 'codex',
             commandPath: '/fake/codex',
@@ -771,29 +723,10 @@ describe('BeastCover CLI', () => {
         expect(localInput.prompt).toContain(
             '主体集中在画面正中，上下边缘和左右两侧只放背景. Landscape 1536x1024',
         );
-
-        const historyPath = join(cwd, '.beastcover', 'history.jsonl');
-        const historyText = readFileSync(historyPath, 'utf8');
-        const historyLines = historyText.trimEnd().split('\n');
-        expect(historyLines).toHaveLength(1);
-        const palette = catalogPalette('risograph_editorial');
-        expect(JSON.parse(historyLines[0] ?? '{}')).toEqual({
-            createdAt: '2026-08-23T00:00:00.000Z',
-            style: 'risograph_editorial',
-            palette,
-            catalogPalette: palette,
-            text: 'A figure on a shore',
-            source: 'agent',
-            via: 'codex',
-            preset: 'wechat',
-            output: join('out', 'beastcover-2026-08-23T00-00-00.000Z.png'),
-        });
-        expect(historyText).not.toContain(cwd);
     });
 
     it('prints the douyin production canvas and keeps generate size in the prompt', async () => {
         const cwd = tempDir('beastcover-local-douyin-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
 
         const runAgent = mockRunAgent();
         const stdout = captureOutput();
@@ -836,7 +769,6 @@ describe('BeastCover CLI', () => {
 
     it('passes verbose true to runAgent', async () => {
         const cwd = tempDir('beastcover-local-verbose-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const runAgent = mockRunAgent();
         const exitCode = await runCli(
             [
@@ -868,7 +800,6 @@ describe('BeastCover CLI', () => {
 
     it('writes one cover per platform from one master per family', async () => {
         const cwd = tempDir('beastcover-cli-multi-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const renderHtml = mockRender();
         const stdout = captureOutput();
         const now = new Date('2026-09-25T00:00:00.000Z');
@@ -898,7 +829,7 @@ describe('BeastCover CLI', () => {
             [1920, 768],
             [1080, 1920],
         ]);
-        const stem = join(cwd, '.beastcover', 'out', 'beastcover-2026-09-25T00-00-00.000Z');
+        const stem = join(cwd, 'beastcover');
         const printed = stdout.chunks.join('');
         for (const [platform, size] of [
             ['wechat', [900, 383]],
@@ -910,21 +841,11 @@ describe('BeastCover CLI', () => {
             expect([meta.width, meta.height], platform).toEqual([...size]);
             expect(printed).toContain(`Created ${path}\nCanvas: ${size[0]}x${size[1]} at 1x`);
         }
-        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
-            .trimEnd()
-            .split('\n')
-            .map((line) => JSON.parse(line) as { preset: string; output: string });
-        expect(history.map((record) => [record.preset, record.output])).toEqual([
-            ['wechat', join('out', 'beastcover-2026-09-25T00-00-00.000Z-wechat.png')],
-            ['x', join('out', 'beastcover-2026-09-25T00-00-00.000Z-x.png')],
-            ['douyin', join('out', 'beastcover-2026-09-25T00-00-00.000Z-douyin.png')],
-        ]);
         expect(renderHtml.open).toHaveBeenCalledOnce();
     });
 
     it('puts --hook on video covers and keeps the headline on WeChat and X', async () => {
         const cwd = tempDir('beastcover-cli-hook-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const renderHtml = mockRender();
         const now = new Date('2026-09-26T00:00:00.000Z');
 
@@ -956,14 +877,6 @@ describe('BeastCover CLI', () => {
         expect(landscape).toContain('It fails');
         expect(landscape).not.toContain('productivity');
         expect(wide).toContain('Why most productivity advice fails');
-        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
-            .trimEnd()
-            .split('\n')
-            .map((line) => JSON.parse(line) as { preset: string; text: string; hook?: string });
-        expect(history.map((record) => [record.preset, record.hook])).toEqual([
-            ['youtube', 'It fails'],
-            ['x', 'It fails'],
-        ]);
         expect(renderHtml.open).toHaveBeenCalledOnce();
     });
 
@@ -1404,7 +1317,6 @@ describe('BeastCover CLI', () => {
 
     it('calls the model once per family and crops every platform from that image', async () => {
         const cwd = tempDir('beastcover-local-families-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const runAgent = mockRunAgent();
         const stdout = captureOutput();
 
@@ -1432,30 +1344,25 @@ describe('BeastCover CLI', () => {
         );
 
         expect(exitCode).toBe(0);
-        const stem = 'beastcover-2026-09-25T00-00-00.000Z';
+        const cacheDir = join(tmpdir(), 'beastcover', 'cache');
         expect(
             runAgent.mock.calls.map(([input]) => [
                 input.generatedPath,
                 input.targets.map((target) => target.preset),
             ]),
         ).toEqual([
-            [join(cwd, '.beastcover', 'cache', `${stem}-ultrawide.png`), ['wechat', 'x']],
-            [join(cwd, '.beastcover', 'cache', `${stem}-portrait.png`), ['xiaohongshu', 'douyin']],
+            [join(cacheDir, 'beastcover-ultrawide.png'), ['wechat', 'x']],
+            [join(cacheDir, 'beastcover-portrait.png'), ['xiaohongshu', 'douyin']],
         ]);
         const printed = stdout.chunks.join('');
         expect(printed).toContain(
-            `Created ${join(cwd, '.beastcover', 'out', `${stem}-douyin.png`)}\nCanvas: 1080x1920`,
+            `Created ${join(cwd, 'beastcover-douyin.png')}\nCanvas: 1080x1920`,
         );
         expect(printed.match(/Backend: codex/g)).toHaveLength(1);
-        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
-            .trimEnd()
-            .split('\n');
-        expect(history).toHaveLength(4);
     });
 
     it('paints through the model API once per family with the configured key', async () => {
         const cwd = tempDir('beastcover-model-source-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const configPath = join(cwd, 'config.json');
         writeFileSync(configPath, '{"model":{"openai":{"apiKey":"sk-image"}}}\n', 'utf8');
         const runModelApi = mockRunModelApi();
@@ -1498,19 +1405,10 @@ describe('BeastCover CLI', () => {
         const printed = stdout.chunks.join('');
         expect(printed.match(/Backend: openai gpt-image-2\.5-flare/g)).toHaveLength(1);
         expect(printed).toContain('Privacy: the prompt went to openai with your API key.');
-        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
-            .trimEnd()
-            .split('\n');
-        expect(history).toHaveLength(2);
-        expect(JSON.parse(history[0] as string)).toMatchObject({
-            source: 'model',
-            via: 'openai',
-        });
     });
 
     it('fails without an API key and keeps agent-only options out of the model source', async () => {
         const cwd = tempDir('beastcover-model-guards-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const configPath = join(cwd, 'config.json');
         const runModelApi = mockRunModelApi();
 
@@ -1576,7 +1474,6 @@ describe('BeastCover CLI', () => {
 
     it('puts a transparent subject on the cover and records it in history', async () => {
         const cwd = tempDir('beastcover-cli-subject-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const subjectPath = join(cwd, 'me.png');
         await sharp({
             create: {
@@ -1624,16 +1521,26 @@ describe('BeastCover CLI', () => {
         expect(stdout.chunks.join('')).toContain(
             `Subject: ${subjectPath} (used as a transparent PNG)`,
         );
-        const history = JSON.parse(
-            readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8').trim(),
-        );
-        expect(history.subject).toEqual({ path: join('..', 'me.png'), method: 'transparent' });
     });
 
-    it('cuts out an opaque subject photo into the workspace cache', async () => {
+    it('cuts out an opaque subject photo into the temp cache', async () => {
         const cwd = tempDir('beastcover-cli-cutout-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
-        writeFileSync(join(cwd, 'me.jpg'), await testPngBytes(64, 64));
+        // 抠图缓存按图片哈希放在全局临时目录，图片内容加随机噪声避开上次运行的缓存。
+        const noisy = await sharp({
+            create: {
+                width: 64,
+                height: 64,
+                channels: 3,
+                background: {
+                    r: Math.floor(Math.random() * 256),
+                    g: Math.floor(Math.random() * 256),
+                    b: Math.floor(Math.random() * 256),
+                },
+            },
+        })
+            .png()
+            .toBuffer();
+        writeFileSync(join(cwd, 'me.jpg'), noisy);
         const cutout = vi.fn(async (_input: string, output: string) => {
             await sharp({
                 create: {
@@ -1661,13 +1568,14 @@ describe('BeastCover CLI', () => {
 
         expect(exitCode).toBe(0);
         expect(cutout.mock.calls[0]?.[0]).toBe(join(cwd, 'me.jpg'));
-        expect(cutout.mock.calls[0]?.[1].startsWith(join(cwd, '.beastcover', 'cache'))).toBe(true);
+        expect(cutout.mock.calls[0]?.[1].startsWith(join(tmpdir(), 'beastcover', 'cache'))).toBe(
+            true,
+        );
         expect(stdout.chunks.join('')).toContain('(cut out on this machine with macOS Vision)');
     });
 
     it('rejects a missing subject and a subject with agent', async () => {
         const cwd = tempDir('beastcover-cli-subject-errors-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         for (const [args, message] of [
             [
                 ['--source', 'render', '--subject', 'nobody.png'],
@@ -1695,7 +1603,6 @@ describe('BeastCover CLI', () => {
 
     it('renders the poster, number, and compare templates and records the template', async () => {
         const cwd = tempDir('beastcover-cli-templates-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         writeFileSync(join(cwd, 'a.png'), await testPngBytes(64, 64));
         writeFileSync(join(cwd, 'b.png'), await testPngBytes(64, 64));
 
@@ -1735,12 +1642,6 @@ describe('BeastCover CLI', () => {
             expect(renderHtml.mock.calls[0]?.[0].html, name).toContain(marker);
             expect(existsSync(join(cwd, `${name}.png`)), name).toBe(true);
         }
-
-        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
-            .trimEnd()
-            .split('\n')
-            .map((line) => (JSON.parse(line) as { template?: string }).template);
-        expect(history).toEqual(['poster', 'number', 'compare']);
     });
 
     it('rejects template options that do not match the template', async () => {
@@ -1857,7 +1758,6 @@ describe('BeastCover CLI', () => {
 
     it('sends remix images first and records the remix', async () => {
         const cwd = tempDir('beastcover-cli-remix-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         writeFileSync(join(cwd, 'me.jpg'), 'jpg');
         writeFileSync(join(cwd, 'beach.jpg'), 'jpg');
         writeFileSync(join(cwd, 'extra.png'), 'png');
@@ -1903,13 +1803,6 @@ describe('BeastCover CLI', () => {
         expect(stdout.chunks.join('')).toContain(
             `Remix: put the person from ${join(cwd, 'me.jpg')} into ${join(cwd, 'beach.jpg')}`,
         );
-        const history = JSON.parse(
-            readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8').trim(),
-        );
-        expect(history.remix).toEqual({
-            mode: 'place',
-            paths: [join('..', 'me.jpg'), join('..', 'beach.jpg')],
-        });
 
         const stderr = captureOutput();
         const renderCode = await runCli(
@@ -1947,7 +1840,6 @@ describe('BeastCover CLI', () => {
 
     it('rejects agent width overrides that leave preset sizes', async () => {
         const cwd = tempDir('beastcover-local-width-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const runAgent = mockRunAgent();
         const stderr = captureOutput();
         const exitCode = await runCli(
@@ -1980,7 +1872,6 @@ describe('BeastCover CLI', () => {
 
     it('rejects --scale with agent, whose size comes from the model', async () => {
         const cwd = tempDir('beastcover-local-scale-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const runAgent = mockRunAgent();
         const stderr = captureOutput();
         const exitCode = await runCli(
@@ -2004,7 +1895,6 @@ describe('BeastCover CLI', () => {
 
     it('prints named --ref paths before calling runAgent', async () => {
         const cwd = tempDir('beastcover-local-refs-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const abs1 = resolve(cwd, 'a.png');
         const abs2 = resolve(cwd, 'b.jpg');
         writeFileSync(abs1, 'png', 'utf8');
@@ -2050,7 +1940,6 @@ describe('BeastCover CLI', () => {
     it('allows --via when config source is already agent', async () => {
         const cwd = tempDir('beastcover-local-config-via-');
         const configPath = join(cwd, 'config.json');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         setConfigValue('source', 'agent', configPath);
 
         const renderHtml = mockRender();
@@ -2084,7 +1973,6 @@ describe('BeastCover CLI', () => {
 
     it('does not fall back from an explicit missing --via agy to codex', async () => {
         const cwd = tempDir('beastcover-local-via-missing-');
-        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
         const runAgent = mockRunAgent();
         const stdout = captureOutput();
         const stderr = captureOutput();

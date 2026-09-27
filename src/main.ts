@@ -2,7 +2,7 @@
 
 declare const __APP_VERSION__: string;
 
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -57,6 +57,7 @@ import {
 import { type DoctorReport, lookupCommandOnPath, renderDoctorReport, runDoctor } from './doctor.ts';
 import { runModelApi as defaultRunModelApi, selectModelProvider } from './model/index.ts';
 import { buildModelPrompt } from './model/prompt.ts';
+import { tempCacheDir, tempRefsDir } from './paths.ts';
 import {
     type FamilyName,
     getPlatform,
@@ -96,6 +97,7 @@ import {
     stockFileStem,
 } from './stock/index.ts';
 import { listStyles, loadStyle } from './styles/loader.ts';
+import { coverPalette, mergedPalette, packFor } from './styles/pack.ts';
 import type { StyleDefinition } from './styles/schema.ts';
 import { findPhotoFocus } from './subject/focus.ts';
 import {
@@ -105,16 +107,6 @@ import {
     visionSubjectCutout,
 } from './subject/index.ts';
 import { type PhotoFocus, visionFocus } from './subject/vision.ts';
-import {
-    appendHistory,
-    coverPalette,
-    createWorkspace,
-    defaultWorkspaceOutputPath,
-    findWorkspace,
-    listHistory,
-    loadStylePack,
-    mergedPalette,
-} from './workspace/index.ts';
 
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0-dev';
 const DEFAULT_RENDER_TEXT = 'Your headline here';
@@ -428,21 +420,11 @@ async function writeCovers(
 }
 
 /**
- * 成品路径：--output 优先，其次工作区的 out/，再其次配置里的默认。裁好的成品一律是 PNG，
+ * 成品路径：--output 优先，其次配置里的默认（当前目录下）。裁好的成品一律是 PNG，
  * 渲染和调模型都慢，所以在动手之前就拦下别的扩展名。
  */
-function coverOutputPath(
-    runtime: CliRuntime,
-    flags: ConfigFlags,
-    fallback: string,
-    workspaceDir: string | undefined,
-    now: Date,
-): string {
-    const path = resolve(
-        runtime.cwd,
-        flags.output ??
-            (workspaceDir === undefined ? fallback : defaultWorkspaceOutputPath(workspaceDir, now)),
-    );
+function coverOutputPath(runtime: CliRuntime, flags: ConfigFlags, fallback: string): string {
+    const path = resolve(runtime.cwd, flags.output ?? fallback);
     if (extname(path).toLowerCase() !== '.png') {
         throw new Error(`Cover output must use the .png extension: ${path}`);
     }
@@ -500,7 +482,6 @@ interface LoadedSubject {
 
 async function loadSubject(
     runtime: CliRuntime,
-    workspaceDir: string | undefined,
     subjectOption: string | undefined,
 ): Promise<LoadedSubject | undefined> {
     if (subjectOption === undefined) {
@@ -510,9 +491,7 @@ async function loadSubject(
     if (!existsSync(path)) {
         throw new Error(`Subject not found: ${path}`);
     }
-    const cacheDir = workspaceDir
-        ? join(workspaceDir, 'cache')
-        : join(tmpdir(), 'beastcover-subjects');
+    const cacheDir = tempCacheDir();
     return {
         path,
         layer: await prepareSubject(path, {
@@ -536,10 +515,6 @@ function subjectLine(subject: LoadedSubject | undefined): string[] {
             ? 'used as a transparent PNG'
             : 'cut out on this machine with macOS Vision';
     return [`Subject: ${subject.path} (${how})`];
-}
-
-function subjectHistory(subject: LoadedSubject | undefined) {
-    return subject ? { subject: { path: subject.path, method: subject.layer.method } } : {};
 }
 
 interface TemplateOptions {
@@ -657,6 +632,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         .option('--scale <factor>', 'Device scale factor from 1 to 4')
         .option('--guides', 'Draw the safe areas on each cover for checking the layout')
         .option('--via <provider>', 'Backend: codex or agy for agent, openai or gemini for model')
+        .option('--style <name>', 'Catalog style for this run (see beastcover styles)')
         .option('--ref <path>', 'Named reference image (repeatable)', collectRefs, [])
         .option(
             '--remix <path>',
@@ -704,6 +680,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     scale?: string;
                     guides?: boolean;
                     via?: string;
+                    style?: string;
                     ref?: string[];
                     remix?: string[];
                     photo?: string;
@@ -784,10 +761,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             'Source "stock" needs --photo <ref-or-path>. Run beastcover stock search "<query>" to pick one.',
                         );
                     }
-                    const workspaceDir = findWorkspace(runtime.cwd);
-                    const pack = workspaceDir ? loadStylePack(workspaceDir) : undefined;
-                    const palette = pack ? mergedPalette(pack) : undefined;
-                    const renderPalette = pack ? coverPalette(pack) : undefined;
+                    const pack = packFor(options.style);
+                    const renderPalette = coverPalette(pack);
                     const now = runtime.now();
                     const stockRuntime: StockRuntime = {
                         config: fileConfig.stock,
@@ -795,15 +770,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     };
 
                     // 成品路径不依赖照片，先算先拦，别为一个 .jpg 去下载图库照片。
-                    const outputPath = coverOutputPath(
-                        runtime,
-                        flags,
-                        effective.output,
-                        workspaceDir,
-                        now,
-                    );
+                    const outputPath = coverOutputPath(runtime, flags, effective.output);
                     let photoPath: string;
-                    let tempDir: string | undefined;
                     let photoMeta: {
                         ref?: string;
                         provider?: StockProvider;
@@ -812,17 +780,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         attribution?: string;
                         pageUrl?: string;
                     } = {};
-                    // 没有工作区时图库照片落在临时目录里，从建目录起到出图结束都在这个 try 里，
-                    // 中途任何一步报错都会把目录删掉。
-                    try {
+                    {
                         if (isStockRef(options.photo)) {
+                            // 下载进系统临时目录暂存：项目零残留，路径打印出来，要留的图自己拷走。
                             const stem = stockFileStem(options.photo);
-                            if (!workspaceDir) {
-                                tempDir = mkdtempSync(join(tmpdir(), 'beastcover-stock-'));
-                            }
-                            const refsDir = workspaceDir
-                                ? join(workspaceDir, 'refs')
-                                : (tempDir as string);
+                            const refsDir = tempRefsDir();
+                            mkdirSync(refsDir, { recursive: true });
                             const fetched = await fetchStockPhoto(
                                 { ref: options.photo, basePath: join(refsDir, stem), now },
                                 stockRuntime,
@@ -843,7 +806,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             }
                         }
 
-                        const paletteOption = renderPalette ? { palette: renderPalette } : {};
+                        const paletteOption = { palette: renderPalette };
                         const photoSize = await imageSize(photoPath);
                         const focus = await runtime.photoFocus(photoPath);
                         if (callout) {
@@ -854,7 +817,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 effective.render.canvas,
                             );
                         }
-                        const subject = await loadSubject(runtime, workspaceDir, options.subject);
+                        const subject = await loadSubject(runtime, options.subject);
                         const templateFor = (line: string): CoverTemplate => ({
                             layoutFor: callout
                                 ? (layout) => calloutLayout(layout, photoSize, focus)
@@ -901,23 +864,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             hook,
                         );
 
-                        if (workspaceDir && pack) {
-                            for (const cover of written.covers) {
-                                appendHistory(workspaceDir, {
-                                    createdAt: now.toISOString(),
-                                    style: pack.style,
-                                    palette: palette ?? {},
-                                    text,
-                                    ...(hook === undefined ? {} : { hook }),
-                                    source: 'stock',
-                                    ...(cover.platform ? { preset: cover.platform } : {}),
-                                    output: cover.outputPath,
-                                    photo: { path: photoPath, ...photoMeta },
-                                    ...subjectHistory(subject),
-                                });
-                            }
-                        }
-
                         runtime.stdout.write(
                             [
                                 ...coverLines(written.covers, effective.render.scale),
@@ -932,7 +878,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                       )
                                     : []),
                                 ...subjectLine(subject),
-                                `Photo: ${photoMeta.ref ?? photoPath}`,
+                                photoMeta.ref === undefined
+                                    ? `Photo: ${photoPath}`
+                                    : `Photo: ${photoMeta.ref} (saved at ${photoPath})`,
                                 ...creditLines(photoMeta),
                                 photoMeta.provider
                                     ? `Privacy: the photo was downloaded from ${photoMeta.provider}. Render stayed on this machine.`
@@ -940,21 +888,11 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 '',
                             ].join('\n'),
                         );
-                    } finally {
-                        if (tempDir !== undefined) {
-                            rmSync(tempDir, { recursive: true, force: true });
-                        }
                     }
                     return;
                 }
 
                 if (effective.source === 'agent') {
-                    const workspaceDir = findWorkspace(runtime.cwd);
-                    if (workspaceDir === undefined) {
-                        throw new Error(
-                            'No BeastCover workspace found. Run beastcover new <name> first.',
-                        );
-                    }
                     if (effective.render.canvas) {
                         throw new Error('agent uses preset sizes. Omit --width and --height.');
                     }
@@ -964,15 +902,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     if (options.subject !== undefined) {
                         throw new Error('--subject works with --source render or stock.');
                     }
-                    const pack = loadStylePack(workspaceDir);
+                    const pack = packFor(options.style);
                     const style = loadStyle(pack.style);
                     const palette = mergedPalette(pack);
-                    const catalogPalette = Object.fromEntries(
-                        style.paletteSlots.map((slot) => [
-                            slot.name,
-                            { prompt: slot.prompt, css: slot.css },
-                        ]),
-                    );
                     if (
                         flags.via !== undefined &&
                         !AGENT_PROVIDERS.includes(flags.via as AgentProvider)
@@ -1004,15 +936,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         );
                     }
 
-                    const now = runtime.now();
-                    const outputPath = coverOutputPath(
-                        runtime,
-                        flags,
-                        effective.output,
-                        workspaceDir,
-                        now,
-                    );
-                    // 一族只调一次模型：原图存进 cache/，族内各平台从同一张图裁。
+                    const outputPath = coverOutputPath(runtime, flags, effective.output);
+                    // 一族只调一次模型：原图暂存进系统临时目录，族内各平台从同一张图裁。
                     const byFamily = new Map<FamilyName, CoverTarget[]>();
                     for (const target of coverOutputPaths(outputPath, effective.render.presets)) {
                         const family = getPlatform(target.platform).family;
@@ -1021,7 +946,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     const stem = basename(outputPath, extname(outputPath));
                     const lines: string[] = [];
                     for (const [family, targets] of byFamily) {
-                        const generatedPath = join(workspaceDir, 'cache', `${stem}-${family}.png`);
+                        const generatedPath = join(tempCacheDir(), `${stem}-${family}.png`);
                         const prompt = buildEnvelopePrompt({
                             style,
                             subject: text,
@@ -1046,18 +971,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             backendOutput: runtime.stderr,
                         });
                         for (const target of targets) {
-                            appendHistory(workspaceDir, {
-                                createdAt: now.toISOString(),
-                                style: pack.style,
-                                palette,
-                                catalogPalette,
-                                text,
-                                source: 'agent',
-                                via: selected.provider,
-                                preset: target.platform,
-                                output: target.outputPath,
-                                ...(remix ? { remix: { mode: remix, paths: remixPaths } } : {}),
-                            });
                             const plan = getAgentCanvasPlan(target.platform);
                             lines.push(
                                 `Created ${target.outputPath}`,
@@ -1085,12 +998,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 }
 
                 if (effective.source === 'model') {
-                    const workspaceDir = findWorkspace(runtime.cwd);
-                    if (workspaceDir === undefined) {
-                        throw new Error(
-                            'No BeastCover workspace found. Run beastcover new <name> first.',
-                        );
-                    }
                     if (effective.render.canvas) {
                         throw new Error('model uses preset sizes. Omit --width and --height.');
                     }
@@ -1111,29 +1018,16 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             `--via ${flags.via} works with --source agent. --source model takes ${MODEL_PROVIDERS.join(' or ')}.`,
                         );
                     }
-                    const pack = loadStylePack(workspaceDir);
+                    const pack = packFor(options.style);
                     const style = loadStyle(pack.style);
                     const palette = mergedPalette(pack);
-                    const catalogPalette = Object.fromEntries(
-                        style.paletteSlots.map((slot) => [
-                            slot.name,
-                            { prompt: slot.prompt, css: slot.css },
-                        ]),
-                    );
                     const selected = selectModelProvider({
                         ...(flags.via !== undefined ? { via: flags.via as ModelProvider } : {}),
                         ...(effective.model ? { config: effective.model } : {}),
                     });
 
-                    const now = runtime.now();
-                    const outputPath = coverOutputPath(
-                        runtime,
-                        flags,
-                        effective.output,
-                        workspaceDir,
-                        now,
-                    );
-                    // 和 agent 一样一族只生成一次：原图存进 cache/，族内各平台从同一张图裁。
+                    const outputPath = coverOutputPath(runtime, flags, effective.output);
+                    // 和 agent 一样一族只生成一次：原图暂存进系统临时目录，族内各平台从同一张图裁。
                     const byFamily = new Map<FamilyName, CoverTarget[]>();
                     for (const target of coverOutputPaths(outputPath, effective.render.presets)) {
                         const family = getPlatform(target.platform).family;
@@ -1142,7 +1036,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     const stem = basename(outputPath, extname(outputPath));
                     const lines: string[] = [];
                     for (const [family, targets] of byFamily) {
-                        const generatedPath = join(workspaceDir, 'cache', `${stem}-${family}.png`);
+                        const generatedPath = join(tempCacheDir(), `${stem}-${family}.png`);
                         const prompt = buildModelPrompt({
                             style,
                             subject: text,
@@ -1162,17 +1056,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             })),
                         });
                         for (const target of targets) {
-                            appendHistory(workspaceDir, {
-                                createdAt: now.toISOString(),
-                                style: pack.style,
-                                palette,
-                                catalogPalette,
-                                text,
-                                source: 'model',
-                                via: selected.provider,
-                                preset: target.platform,
-                                output: target.outputPath,
-                            });
                             const plan = getAgentCanvasPlan(target.platform);
                             lines.push(
                                 `Created ${target.outputPath}`,
@@ -1192,24 +1075,15 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     return;
                 }
 
-                const workspaceDir = findWorkspace(runtime.cwd);
-                const pack = workspaceDir ? loadStylePack(workspaceDir) : undefined;
-                const palette = pack ? mergedPalette(pack) : undefined;
-                const renderPalette = pack ? coverPalette(pack) : undefined;
-                const now = runtime.now();
-                const outputPath = coverOutputPath(
-                    runtime,
-                    flags,
-                    effective.output,
-                    workspaceDir,
-                    now,
-                );
-                const subject = await loadSubject(runtime, workspaceDir, options.subject);
+                const pack = packFor(options.style);
+                const renderPalette = coverPalette(pack);
+                const outputPath = coverOutputPath(runtime, flags, effective.output);
+                const subject = await loadSubject(runtime, options.subject);
                 const request = templateRequest(runtime, templateName, options, subject);
                 const templateFor = (line: string) =>
                     textCoverTemplate({
                         text: line,
-                        ...(renderPalette ? { palette: renderPalette } : {}),
+                        palette: renderPalette,
                         ...request,
                     });
                 const written = await writeCovers(
@@ -1221,22 +1095,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     guides,
                     hook,
                 );
-
-                if (workspaceDir && pack) {
-                    for (const cover of written.covers) {
-                        appendHistory(workspaceDir, {
-                            createdAt: now.toISOString(),
-                            style: pack.style,
-                            palette: palette ?? {},
-                            text,
-                            ...(hook === undefined ? {} : { hook }),
-                            ...(cover.platform ? { preset: cover.platform } : {}),
-                            ...(templateName === 'text' ? {} : { template: templateName }),
-                            output: cover.outputPath,
-                            ...subjectHistory(subject),
-                        });
-                    }
-                }
 
                 runtime.stdout.write(
                     [
@@ -1294,20 +1152,11 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         .command('fetch')
         .description('Download one photo and its provenance sidecar')
         .argument('<ref>', 'pexels:<id> or openverse:<id>')
-        .option('--dir <directory>', 'Target directory (defaults to .beastcover/refs/)')
+        .option('--dir <directory>', 'Target directory (defaults to the temp staging area)')
         .action(async (ref: string, options: { dir?: string }) => {
             const fileConfig = loadConfigFile(runtime.configPath);
-            const workspaceDir = findWorkspace(runtime.cwd);
-            const targetDir = options.dir
-                ? resolve(runtime.cwd, options.dir)
-                : workspaceDir
-                  ? join(workspaceDir, 'refs')
-                  : undefined;
-            if (targetDir === undefined) {
-                throw new Error(
-                    'No BeastCover workspace found. Pass --dir <directory> or run beastcover new <name> first.',
-                );
-            }
+            const targetDir = options.dir ? resolve(runtime.cwd, options.dir) : tempRefsDir();
+            mkdirSync(targetDir, { recursive: true });
             const fetched = await fetchStockPhoto(
                 { ref, basePath: join(targetDir, stockFileStem(ref)), now: runtime.now() },
                 { config: fileConfig.stock, ...runtime.stock },
@@ -1323,55 +1172,19 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             );
         });
 
-    program
-        .command('new')
-        .description('Create a cover workspace in this project')
-        .argument('<name>', 'Project name')
-        .option('--style <style>', 'Catalog style name')
-        .action((name: string, options: { style?: string }) => {
-            createWorkspace(runtime.cwd, {
-                name,
-                styleName: options.style,
+    // 工作区随 0.7.2 移除：做完就走，不跟项目绑定。旧命令报错指新路，不静默消失。
+    for (const [removed, hint] of [
+        ['new', 'Covers no longer need a workspace: run beastcover gen directly, anywhere.'],
+        ['project', 'Workspaces were removed. Pick a style per run with gen --style <name>.'],
+    ] as const) {
+        program
+            .command(removed, { hidden: true })
+            .allowUnknownOption()
+            .argument('[args...]')
+            .action(() => {
+                throw new Error(`beastcover ${removed} was removed. ${hint}`);
             });
-            runtime.stdout.write(
-                [
-                    'Created .beastcover/',
-                    '  project.json    style and palette',
-                    '  .gitignore      keeps the whole folder out of your git',
-                    '  refs/ out/ cache/',
-                    '',
-                    'Nothing was written to your .gitignore or .git/info/exclude.',
-                    '',
-                ].join('\n'),
-            );
-        });
-
-    program
-        .command('project')
-        .description('Show the current cover workspace')
-        .action(() => {
-            const workspaceDir = findWorkspace(runtime.cwd);
-            if (!workspaceDir) {
-                throw new Error('No BeastCover workspace found. Run beastcover new <name> first.');
-            }
-
-            const pack = loadStylePack(workspaceDir);
-            const palette = mergedPalette(pack);
-            runtime.stdout.write(
-                [
-                    `Project: ${pack.name}`,
-                    `Path: ${workspaceDir}`,
-                    `Style: ${pack.style}`,
-                    `Composition: ${pack.composition}`,
-                    'Palette:',
-                    ...Object.entries(palette).map(
-                        ([slot, value]) => `  ${slot}: ${value.prompt} / ${value.css}`,
-                    ),
-                    `Images: ${listHistory(workspaceDir).length}`,
-                    '',
-                ].join('\n'),
-            );
-        });
+    }
 
     program
         .command('styles')

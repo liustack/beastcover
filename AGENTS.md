@@ -20,7 +20,7 @@ Phase one currently ships these working surfaces:
 - `gen --source model` paints the same styles through the user's own image API key: GPT Image (`openai`) or Nano Banana (`gemini`), keys in `model.<provider>.apiKey`. No refs or remix yet
 - The default path is completely free (free stock photos plus local HTML rendering). agent and model are opt-ins the user already pays for elsewhere
 - `styles` lists the four self-contained catalog styles
-- `new` and `project` manage a per-project `.beastcover/` workspace
+- No workspace and no project state: the tool finishes and leaves. `--style <name>` picks a catalog style per run (fallback style otherwise), and the removed `new`/`project` commands fail pointing at `gen`
 
 Do not add:
 
@@ -46,20 +46,17 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - Size presets are named after platforms and hold production pixels. Old ratio names fail with a message naming the replacement. `scale` controls Chromium device scale and therefore output pixel density.
 - Platforms belong to three families (landscape, portrait, ultrawide). Each family has one master size, a text area, and a focus area, all in master coordinates, and each platform has a crop box in that master plus the rectangles its app UI covers. `src/platforms/index.test.ts` proves the text and focus areas sit inside every member crop and outside every covered rectangle. Change the geometry only together with that test.
 - `gen` renders one master per family at 2x or more, then crops and scales every requested platform from it with `sharp`. The renderer finds the largest font that keeps the headline inside the text area, keeps Latin words whole, and keeps punctuated clauses together when that costs under 30% of the size. Headline size is never set by fixed CSS ratios.
-- agent runs the model once per family, saves the raw image in `.beastcover/cache/`, and crops each platform from it.
-- Subject cutout lives in `src/subject/`. A PNG with at least 2% transparent pixels is used as is. Otherwise the Swift source in `vision.ts` is compiled once into `~/.beastcover/bin/vision-tool-<hash>` and run on the image, and the result is cached in the workspace `cache/` by image hash. Non-macOS or macOS before 14 fails with a request for a transparent PNG. The person sits in its own subject area, above the headline, and the subject area never overlaps the text area (`src/render/layout.test.ts`).
+- agent and model run once per family, stage the raw image in the system temp dir (`$TMPDIR/beastcover/cache/`), and crop each platform from it.
+- Subject cutout lives in `src/subject/`. A PNG with at least 2% transparent pixels is used as is. Otherwise the Swift source in `vision.ts` is compiled once into `~/.beastcover/bin/vision-tool-<hash>` and run on the image, and the result is cached in `$TMPDIR/beastcover/cache/` by image hash. The compiled tool prefers `~/.beastcover/bin/` and falls back to the temp dir with a printed note when a sandbox (codex workspace-write) blocks home writes; the Swift source lives in `skills/beastcover/scripts/vision-tool.swift` and is inlined at build time via vite `?raw`. Non-macOS or macOS before 14 fails with a request for a transparent PNG. The person sits in its own subject area, above the headline, and the subject area never overlaps the text area (`src/render/layout.test.ts`).
 - Templates live in `src/render/` (`template.ts`, `poster.ts`, `number.ts`, `compare.ts`, `photo-cover.ts`) and are assembled into a `CoverTemplate` by `src/compose/templates.ts`. A template may change the layout (`layoutFor`) and may fit a second big text (`measureAccentHtml` into `accentArea`, the number figure). Options that belong to another template fail instead of being ignored.
 - Photo framing lives in `src/subject/focus.ts` (where the subject is) and `src/render/photo-cover.ts` (`placeWindow`, `photoFocusTarget`, `photoTextLayout`). The crop window keeps the whole subject box when it fits and moves its centre toward a target clear of the headline. When the subject cannot fit a family crop, `gen` suggests `--fit extend` instead of switching by itself.
 - `--remix` images go first in the model reference list, the instruction joins the subject line, and `src/agent/remix.ts` refuses images whose stock sidecar is not openverse cc0 or pdm.
 - Stock downloads are measured with sharp. The sidecar keeps the served size and, when different, the listed size. `gen` warns when a photo is stretched more than 1.5x on a platform.
-- history.jsonl stores output, photo, and subject paths relative to the workspace.
-- Workspace discovery only accepts a `.beastcover/` that contains `project.json`, because the settings folder `~/.beastcover/` has the same name.
 - `agent` asks the backend for the native generate size, then crops and resizes in-process with `sharp`. It does not shell out to sips or ImageMagick.
 - `model` reuses the agent generate plans and crop pipeline: one API call per family, the returned image is normalized to the plan size with `sharp`, then cropped per platform. Providers never fall back to each other, a missing key is an error naming the config key, keys go only into request headers and never into error messages, and `fetch` is injected so tests never touch the network. Model ids live in `MODEL_DEFAULTS` and `model.<provider>.model` overrides them.
-- history.jsonl is a log: records written before the rename (`local-model` source, `grok`/`claude` backends) stay readable.
 - Each style record is self-contained. Copy its full prompt unchanged and append one subject description.
-- A project workspace lives at `.beastcover/` inside the user project. Discovery walks up from the current directory. Missing workspaces are reported, never created silently.
-- Workspace ignore rules live only in `src/workspace/ignore.ts`. The CLI writes `.beastcover/.gitignore` containing `*`, so the whole workspace, tool records included, stays out of the user's git (user decision, 2026-09-27: the tool must not push its records into the user's repository). It never touches the user's `.gitignore` or `.git/info/exclude`.
+- Intermediates (downloaded stock photos with their license sidecars, model originals, cutout cache) live in `$TMPDIR/beastcover/`: sandboxed agents (codex workspace-write) can always write there, the project directory stays clean, and printed paths tell the agent what to copy if anything is worth keeping. Verified by probing codex and Claude Code sandboxes on 2026-09-27: home is not writable under the codex sandbox, cwd and the temp dir are writable under both.
+- The CLI never touches the user's git: no `.gitignore` writes, no `.git/info/exclude` writes, no files the user is nudged to commit (user decision, 2026-09-27).
 - Tests live next to their modules as `*.test.ts` or `*.test.js`.
 
 ## Code Organization
@@ -130,11 +127,8 @@ src/
 │   ├── loader.ts           # Exact-name style lookup with no fallback, removed-style message
 │   ├── loader.test.ts
 │   └── catalog.test.ts
-└── workspace/
-    ├── ignore.ts           # .beastcover/.gitignore policy
-    ├── ignore.test.ts
-    ├── index.ts            # Discover, create, project.json, history.jsonl
-    └── index.test.ts
+├── paths.ts                # $TMPDIR/beastcover staging areas for refs and cache
+└── raw.d.ts                # vite ?raw module declaration for the Swift source
 
 examples/                   # Real covers with their commands, also the visual regression set
 scripts/examples.mjs        # pnpm examples: regenerate the free-path examples
@@ -147,9 +141,8 @@ cordis.patch.yml            # DSH bundle mount
 
 ```bash
 beastcover styles
-beastcover new demo --style risograph_editorial
-beastcover project
-beastcover gen "One headline, every platform" --source render --preset all
+beastcover gen "One headline, every platform" --preset all
+beastcover gen "封面没人点" --template poster --tag "新手必看" --style luminous_impasto
 beastcover stock search "harbour dawn" --orientation landscape
 beastcover gen "The tide comes back" --source stock --photo openverse:<id> --preset wechat,x --guides
 beastcover gen "别再乱剪了" --source render --subject me.jpg --preset youtube,xiaohongshu

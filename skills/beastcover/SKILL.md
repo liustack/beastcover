@@ -15,24 +15,19 @@ Use an installed `beastcover` command when available. Otherwise prefix each comm
 
 Run `beastcover doctor` once on a new machine. If it reports Chromium missing, run `npx --yes --package @liustack/beastcover@0.7.0 playwright install chromium`, then run doctor again. Do not run a bare `npx playwright install`: it can resolve a different Playwright version and download a browser this package cannot use.
 
-## Workspace first
+## Run anywhere, finish, leave
 
-Run `beastcover project` before generating anything.
+There is no workspace and no setup. `gen` runs in any directory, writes the PNG to the current directory (or `--output`), and stages every intermediate (downloaded photos, model originals) in the system temp dir, printing their paths. The user's project stays clean.
 
-- If a workspace exists, keep it. Do not create another one.
-- If the command says no workspace was found, run `beastcover new <name> --style <style>` once.
-- Every cover in the workspace uses its style and palette, on every platform.
-- Write every generated PNG to `.beastcover/out/`. Do not invent extra image folders in the user project.
-- Keep `.beastcover/project.json` as the project style and palette. Commit it.
-- Keep `.beastcover/history.jsonl` as the generation log. Commit it.
-- Leave `out/`, `cache/`, and `refs/` untracked. Fetched stock photos and their `.json` sidecars live in `refs/`. Force-add only the refs the user names.
+- The cover lands where the content lives. In a blog repo, move it to the post's own convention (Hugo page bundle `content/post/x/featured.jpg`, Astro `src/content/blog/x/cover.jpg`, Jekyll `assets/`); otherwise leave it next to the user's file or where they asked.
+- A printed temp path (a fetched photo, a model original) is yours to copy into the project only when the user wants to keep it.
+- `--style <name>` picks a catalog style per run. Without it the fallback style is used.
 - Copy a style prompt in full. Never rewrite, shorten, or restyle the catalog text.
 
 ```bash
-beastcover project
-beastcover new <name> --style risograph_editorial
 beastcover styles
 beastcover styles risograph_editorial
+beastcover gen "<headline>" --style luminous_impasto --preset youtube
 ```
 
 `risograph_editorial` is the fallback style when the choice is uncertain. `luminous_impasto` needs a scene with depth: a landscape or street, not a desk still life.
@@ -85,7 +80,7 @@ The output lists one photo per line: ref, size, license, creator, thumbnail URL.
 beastcover gen "<headline>" --source stock --photo openverse:<id> --preset wechat,x,xiaohongshu
 ```
 
-`--photo` also accepts a local image path. A fetched photo and its provenance sidecar land in `.beastcover/refs/` when a workspace exists, otherwise in a temp directory. The command prints `License`, `Credit`, and `Source` lines. Repeat the `Credit` line to the user when it is present. cc0 and pdm photos print no credit because none is required.
+`--photo` also accepts a local image path. A fetched photo and its provenance sidecar land in the temp staging area, and the `Photo:` line prints the saved path. The command prints `License`, `Credit`, and `Source` lines. Repeat the `Credit` line to the user when it is present. cc0 and pdm photos print no credit because none is required.
 
 Use a short concrete English query of two to four words. Keep mood words and negatives out of it.
 
@@ -134,13 +129,13 @@ Options that belong to another template fail with a message, so pick the templat
 npx --yes --package @liustack/beastcover@0.7.0 beastcover gen "<headline>" --source render --preset youtube --output <path>.png
 ```
 
-When a workspace exists, omit `--output` so the PNG lands in `.beastcover/out/`. Use `--output` only when the user names a path. Use `--width`, `--height`, and `--scale` only when the requested output needs an explicit override.
+Omit `--output` and the PNG lands in the current directory as `beastcover.png` (several presets add the platform name). Use `--output` when the user names a path. Use `--width`, `--height`, and `--scale` only when the requested output needs an explicit override.
 
 After the command finishes, verify that the PNG exists at the reported path. Tell the user that render content stayed on the machine.
 
 ## Paint with an agent CLI
 
-`agent` needs a workspace. The style lives in `.beastcover/project.json`. Do not create a workspace silently.
+`agent` runs anywhere. `--style` picks the style, the fallback style otherwise.
 
 Copy the selected style prompt in full, then append one subject description (`主体：...`). Do not assemble extra style, palette, or discipline layers.
 
@@ -149,7 +144,7 @@ beastcover gen "<subject>" --source agent --via codex --preset youtube
 beastcover gen "<subject>" --source agent --via agy --ref /absolute/a.png --preset xiaohongshu,douyin
 ```
 
-The model runs once per group of platforms, saves its image in `.beastcover/cache/`, and each platform is cropped from that image. `xiaohongshu,douyin` is one model call. `wechat,youtube` is two.
+The model runs once per group of platforms, stages its image in the temp dir, and each platform is cropped from that image. `xiaohongshu,douyin` is one model call. `wechat,youtube` is two.
 
 `--via` chooses `codex` or `agy`. It is only valid with `--source agent`. `--ref` names files only. Do not glob. Do not pass a directory.
 
@@ -171,7 +166,7 @@ After the command finishes, verify the image at the reported path. Tell the user
 
 ## Paint through an image API
 
-`model` paints the same style prompt through the user's own image model API key: GPT Image (`openai`) or Nano Banana (`gemini`). It needs a workspace, and a key in the config:
+`model` paints the same style prompt through the user's own image model API key: GPT Image (`openai`) or Nano Banana (`gemini`). It needs a key in the config:
 
 ```bash
 beastcover config set model.openai.apiKey <key>
@@ -192,7 +187,7 @@ After the command finishes, verify the image at the reported path. Tell the user
 - One subject, one headline. Cut the headline to the fewest words that still make someone curious. On YouTube the cover carries a hook of a few words (`DAY 6`, `How?`, a figure), not the title. WeChat and X article cards show the title next to the cover, so a full line is fine there. When one run covers both, pass the full line as the headline and the short one as `--hook`: video and note covers get the hook, WeChat and X keep the headline.
 - Bright and colourful beats dark and grey. Pick a palette with a strong accent.
 - Covers are judged by what people watch or read after the click. Never promise on the cover what the piece does not deliver.
-- YouTube tests up to three thumbnails. When the user wants to test, run `gen` two or three times with versions that differ clearly (face or no face, another template, `--hook` or not, another photo), not a new outline colour. Each run in a workspace gets its own file name.
+- YouTube tests up to three thumbnails. When the user wants to test, run `gen` two or three times with versions that differ clearly (face or no face, another template, `--hook` or not, another photo), not a new outline colour. Give each run its own `--output` name so versions never overwrite each other.
 - For a 4K YouTube thumbnail (the current recommendation is 3840×2160), add `--scale 3` to a `render` or `stock` cover. `agent` output is sized by the model and rejects `--scale`. Keep the default for uploads from a phone, where the limit is 2 MB.
 - Check the cover at thumbnail size. The CLI already warns when the headline gets too small in a feed. If the subject is hard to make out there, pick another photo.
 - Lock one style and one palette for every platform version of the same piece.

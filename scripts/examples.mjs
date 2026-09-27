@@ -40,13 +40,12 @@ function run(args, { allowFailure = false } = {}) {
 }
 
 function refPath(ref) {
-    return join(workspace, '.beastcover', 'refs', `${ref.replace(':', '-')}.jpg`);
+    return join(workspace, 'refs', `${ref.replace(':', '-')}.jpg`);
 }
 
 mkdirSync(examplesDir, { recursive: true });
-run(['new', 'examples', '--style', 'risograph_editorial']);
 for (const ref of Object.values(PHOTOS)) {
-    run(['stock', 'fetch', ref]);
+    run(['stock', 'fetch', ref, '--dir', join(workspace, 'refs')]);
 }
 
 const out = (name) => join(examplesDir, name);

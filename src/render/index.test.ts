@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { coverPalette, createWorkspace, loadStylePack } from '../workspace/index.ts';
+import { coverPalette, packFor } from '../styles/pack.ts';
 import { type CoverRenderer, openRenderer, TextDoesNotFitError } from './index.ts';
 import { customLayout, type Headline } from './layout.ts';
 import { createRenderTemplate } from './template.ts';
@@ -155,31 +155,24 @@ describe('cover renderer', () => {
         expect(await measure('试试Understanding')).toBeLessThan(await measure('试试Get'));
     }, 30_000);
 
-    it('changes the rendered PNG when project palette css changes', async () => {
-        const cwd = mkdtempSync(join(tmpdir(), 'beastcover-palette-render-'));
-        tempDirectories.push(cwd);
-        const created = createWorkspace(cwd, { name: 'demo', styleName: 'risograph_editorial' });
+    it('changes the rendered PNG when the palette css changes', async () => {
         const layout = customLayout(320, 180);
-        const shot = () =>
+        const shot = (pack: Parameters<typeof coverPalette>[0]) =>
             renderer.screenshot({
                 html: createRenderTemplate('Palette css probe', {
                     layout,
                     headline: headline(24),
-                    palette: coverPalette(loadStylePack(created.path)),
+                    palette: coverPalette(pack),
                 }),
                 width: 320,
                 height: 180,
                 scale: 1,
             });
 
-        const before = await shot();
-        const packPath = join(created.path, 'project.json');
-        const pack = JSON.parse(readFileSync(packPath, 'utf8')) as {
-            palette: { paper: { prompt: string; css: string } };
-        };
-        pack.palette.paper.css = '#ff0000';
-        writeFileSync(packPath, `${JSON.stringify(pack, null, 2)}\n`, 'utf8');
-        const after = await shot();
+        const before = await shot(packFor('risograph_editorial'));
+        const overridden = packFor('risograph_editorial');
+        overridden.palette.paper = { css: '#ff0000' };
+        const after = await shot(overridden);
 
         expect(after.equals(before)).toBe(false);
     }, 30_000);

@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import { describe, expect, it } from 'vitest';
 import { FAMILY_NAMES } from '../platforms/index.ts';
-import { coverPalette } from '../workspace/index.ts';
+import { coverPalette } from '../styles/pack.ts';
 import { openRenderer } from './index.ts';
 import { customLayout, familyLayout, withSubjectArea } from './layout.ts';
 import { createPhotoCoverTemplate } from './photo-cover.ts';
@@ -9,7 +9,7 @@ import { createRenderTemplate, DEFAULT_RENDER_COLORS, resolveRenderColors } from
 
 /** 一个没改过配色的项目会拿到的调色板 */
 function paletteOf(style: string) {
-    return coverPalette({ name: 'demo', style, palette: {}, composition: '' });
+    return coverPalette({ style, palette: {}, composition: '' });
 }
 
 const BASE = { layout: customLayout(640, 360), headline: { fontPx: 48, keepClauses: false } };

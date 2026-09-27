@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadStyle } from '../styles/loader.ts';
+import { mergedPalette, packFor } from '../styles/pack.ts';
 import type { PaletteSlotValue, StyleDefinition } from '../styles/schema.ts';
-import { createWorkspace, loadStylePack, mergedPalette } from '../workspace/index.ts';
 import { buildEnvelopePrompt, buildStyleAndSubjectPrompt, formatSizePhrase } from './index.ts';
 
 const tempDirectories: string[] = [];
@@ -47,12 +47,7 @@ function colorParagraphs(text: string): string[] {
 
 describe('agent prompt assembly', () => {
     it('keeps two segments: unchanged style prompt then 主体 when palette prompts match the catalog', () => {
-        const cwd = tempDir('beastcover-prompt-default-');
-        const created = createWorkspace(cwd, {
-            name: 'demo',
-            styleName: 'risograph_editorial',
-        });
-        const pack = loadStylePack(created.path);
+        const pack = packFor('risograph_editorial');
         const style = loadStyle(pack.style);
         const subject = '一只背对的人';
 
