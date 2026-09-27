@@ -92,11 +92,22 @@ describe('headline layers', () => {
         expect(css).toMatch(/drop-shadow\([^)]*0 #0B0B0B\)/);
     });
 
-    it('adds a fill-colored stroke when the font is only synthetically bold', () => {
+    it('thickens synthetically bold letters in their own colour and widens the rings to match', () => {
         const css = headlineTypeCss(
             { style: 'ink', font: { ...HEAVY, cjk: 'PingFang SC', syntheticBold: 0.035 } },
             { fill: '#111111', stroke: '#111111', ring: '#FFFFFF', accent: '#FF2D2D' },
         );
-        expect(css).toContain('-webkit-text-stroke: 0.035em #111111');
+        // 换了色的关键词描它自己的颜色，不描成正文的颜色。
+        expect(css).toContain('-webkit-text-stroke: 0.035em currentColor');
+        const double = headlineTypeCss(
+            {
+                style: 'double',
+                font: { ...HEAVY, cjk: 'PingFang SC', syntheticBold: 0.035 },
+            },
+            { fill: '#E0241B', stroke: '#141414', ring: '#FFFFFF', accent: '#E0241B' },
+        );
+        // 内圈和外描边各加宽同样的量，露在字外面的宽度不变。
+        expect(double).toContain('-webkit-text-stroke: 0.205em #FFFFFF');
+        expect(double).toContain('-webkit-text-stroke: 0.315em #141414');
     });
 });

@@ -187,9 +187,12 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
     const outlined = spec.style === 'outline' || spec.style === 'double';
     const synthetic =
         font.syntheticBold > 0
-            ? `-webkit-text-stroke: ${em(font.syntheticBold)} ${colors.fill};`
+            ? `-webkit-text-stroke: ${em(font.syntheticBold)} currentColor;`
             : '';
     const highlight = (() => {
+    // 合成加粗是给填色层加一圈和字同色的描边（currentColor：换了色的关键词描它自己的颜色），
+    // 字往外胖了半圈。描边层和内圈层也跟着加宽同样的量，
+    // 露在字外面的描边和内圈才还是原来那么宽，不会被胖出来的字盖掉。
         switch (spec.highlight ?? 'color') {
             case 'color':
                 return `.copy .hl { color: ${colors.accent}; }`;
@@ -237,14 +240,14 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
 
         .copy-outline {
             color: ${colors.stroke};
-            -webkit-text-stroke: ${em(outer * 2)} ${colors.stroke};
+            -webkit-text-stroke: ${em(outer * 2 + font.syntheticBold)} ${colors.stroke};
             paint-order: stroke fill;
             filter: drop-shadow(${em(SHADOW_EM)} ${em(SHADOW_EM)} 0 ${colors.stroke});
         }
 
         .copy-ring {
             color: ${colors.ring};
-            -webkit-text-stroke: ${em(RING_EM * 2)} ${colors.ring};
+            -webkit-text-stroke: ${em(RING_EM * 2 + font.syntheticBold)} ${colors.ring};
             paint-order: stroke fill;
         }
 
