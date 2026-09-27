@@ -2,6 +2,8 @@
 
 ## 0.7.5 (unreleased)
 
+- **Before and after show the same spot.** When the two photos are the same size (a painted pair, or two shots from one camera), both halves use one framing that holds both subjects, instead of each half centring on its own.
+- **A small face warns.** A face shorter than a third of the cover's short side gets a `QC WARN` asking for a head-and-shoulders photo.
 - **The DeepSeek Harness plugin is gone.** DSH loads skills, so it uses the same `skills/beastcover` skill as every other agent and gets every cover type, not just a headline on the default one. The package no longer exports a plugin entry or ships `cordis.patch.yml`.
 
 ## 0.7.4 (2026-09-28)
