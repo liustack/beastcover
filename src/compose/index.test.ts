@@ -92,6 +92,7 @@ function fakeRenderer(fontFor: (request: FitTextRequest, keepClauses: boolean) =
                 .toBuffer();
         }),
         close: vi.fn(async () => undefined),
+        probeFonts: vi.fn(async () => []),
     };
     return { renderer, screenshots, fits };
 }
@@ -224,6 +225,7 @@ describe('cover composition', () => {
             },
             screenshot: vi.fn(),
             close: async () => undefined,
+            probeFonts: async () => [],
         };
         const directory = tempDir();
 

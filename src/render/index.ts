@@ -179,8 +179,26 @@ function probeFontsInPage(input: {
     covers: boolean;
     density: number;
 }> {
-    const canvas = document.getElementById('c') as HTMLCanvasElement;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+    // 工程不带 DOM 类型库，这里只描述用到的那几个成员。函数会被序列化进浏览器执行。
+    interface Ctx2d {
+        font: string;
+        fillStyle: string;
+        clearRect(x: number, y: number, w: number, h: number): void;
+        fillText(text: string, x: number, y: number): void;
+        getImageData(x: number, y: number, w: number, h: number): { data: ArrayLike<number> };
+    }
+    interface Canvas {
+        width: number;
+        height: number;
+        getContext(kind: '2d', options: { willReadFrequently: boolean }): Ctx2d;
+    }
+    const doc = (
+        globalThis as unknown as {
+            document: { getElementById(id: string): Canvas; createElement(tag: 'canvas'): Canvas };
+        }
+    ).document;
+    const canvas = doc.getElementById('c');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const SIZE = 120;
     const signature = (font: string, char: string): string => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -198,10 +216,10 @@ function probeFontsInPage(input: {
         signature(`64px "${family}", sans-serif`, char) ===
         signature(`64px "${family}", serif`, char);
     const density = (family: string, sample: string): number => {
-        const wide = document.createElement('canvas');
+        const wide = doc.createElement('canvas');
         wide.width = SIZE * (Array.from(sample).length + 1);
         wide.height = SIZE * 1.5;
-        const w = wide.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+        const w = wide.getContext('2d', { willReadFrequently: true });
         w.font = `900 ${SIZE}px "${family}", sans-serif`;
         w.fillStyle = '#000';
         w.fillText(sample, 4, SIZE * 1.2);

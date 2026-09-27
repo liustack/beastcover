@@ -63,6 +63,7 @@ function mockRender() {
         fitText: vi.fn(async () => 64),
         screenshot,
         close: vi.fn(async () => undefined),
+        probeFonts: vi.fn(async () => []),
     };
     return Object.assign(screenshot, { open: vi.fn(async () => renderer) });
 }
