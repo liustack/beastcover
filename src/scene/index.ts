@@ -90,12 +90,13 @@ export function findScenePainter(input: {
 }
 
 /**
- * 这一族的场景画成横的还是竖的。满版的类型跟着画布走。分两半的类型（前后对比）看半边的形状：
- * 横版左右分，半边偏竖，画竖图；竖版上下分，半边偏横，画横图；超宽版左右分，半边还是横的。
+ * 这一族的场景画成横的还是竖的。满版的类型跟着画布走。分两半的类型（前后对比）一律画横图：
+ * 横版和超宽版左右分，每半边下面还让出标题带，都是横的；竖版拿到横图就上下分，每半边也是横的
+ * （genres.test.ts 核对了每一族的半边都不比宽高）。
  */
 export function sceneOrientation(family: FamilyName, halves = false): SceneOrientation {
     if (halves) {
-        return family === 'landscape' ? 'portrait' : 'landscape';
+        return 'landscape';
     }
     return family === 'portrait' ? 'portrait' : 'landscape';
 }

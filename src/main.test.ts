@@ -1255,17 +1255,15 @@ describe('BeastCover CLI', () => {
         );
         expect(exitCode).toBe(0);
         const requests = paintScene.mock.calls.map((call) => call[1]);
-        // YouTube 左右分，半边偏竖，画竖图。小红书上下分，半边偏横，画横图。每个朝向前后各一张。
+        // YouTube 左右分、小红书上下分，半边都是横的：只画一套横图，前后各一张，
+        // 两个平台共用。
         expect(requests.map((request) => [request.orientation, request.index])).toEqual([
-            ['portrait', 0],
-            ['portrait', 1],
             ['landscape', 0],
             ['landscape', 1],
         ]);
         expect(requests[0]?.reference).toBeUndefined();
         expect(requests.every((request) => request.halves === true)).toBe(true);
         expect(requests[1]?.reference).toBe(await paintScene.mock.results[0]?.value);
-        expect(requests[3]?.reference).toBe(await paintScene.mock.results[2]?.value);
         const out = stdout.chunks.join('');
         expect(out).toContain('Template: before-after');
         expect(out).toContain(

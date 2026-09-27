@@ -186,6 +186,20 @@ describe('cover type registry', () => {
     });
 });
 
+describe('split halves', () => {
+    it('gives landscape pictures a landscape half on every family', () => {
+        // 前后对比现画的一对是横图，每一族的半边都得是横的，不然画出来的东西会被裁掉一大截。
+        const photo: GenrePhoto = { path: '/a.jpg', width: 1536, height: 1024 };
+        for (const family of FAMILY_NAMES) {
+            const layout = familyLayout(family);
+            const { panels } = splitLabelRects('before-after', layout, ['a', 'b'], [photo, photo]);
+            for (const panel of panels) {
+                expect(panel.width, family).toBeGreaterThanOrEqual(panel.height);
+            }
+        }
+    });
+});
+
 describe('schemes', () => {
     const luminance = (hex: string) => {
         const [r, g, b] = [1, 3, 5].map((at) => {

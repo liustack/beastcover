@@ -137,7 +137,7 @@ beastcover gen "在火山口*住*了一晚" --subject /abs/me.jpg --scene "an ac
 beastcover gen "桌面*改造*" --template before-after --scene "a cluttered home office desk, tangled cables, stacked papers" --scene "the same desk cleared: cables hidden, papers gone, one plant" --labels "改前,改后"
 ```
 
-Each half is painted in its own shape: tall halves on a landscape cover, wide halves on a portrait one. A before-after needs a real painter. With none, it stops and says so, because two gradients compare nothing.
+The pair is painted as landscape pictures, which fit the halves of every platform: side by side on landscape covers, stacked on portrait ones. A before-after needs a real painter. With none, it stops and says so, because two gradients compare nothing.
 
 The CLI uses what this machine has, in order: the user's image model key (`model.openai.apiKey`, `model.gemini.apiKey`), then their `codex` or `agy` CLI. `--via openai|gemini|codex|agy` (or `scene.via` in the config) names one painter, and a missing key or CLI is then an error, never a switch to another. With no painter at all, the scene is a plain colour gradient and a `Scene:` line says what to install. Tell the user when that happens: the cover no longer shows the story. Describe one concrete picture in English: the place, the subject, the light. The painter is told to draw a real photograph with no text in it, because the words are set by BeastCover.
 

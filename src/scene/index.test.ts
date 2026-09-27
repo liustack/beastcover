@@ -76,8 +76,8 @@ describe('scene painter', () => {
         expect(sceneOrientation('landscape')).toBe('landscape');
         expect(sceneOrientation('ultrawide')).toBe('landscape');
         expect(sceneOrientation('portrait')).toBe('portrait');
-        // 分两半的类型看半边的形状。
-        expect(sceneOrientation('landscape', true)).toBe('portrait');
+        // 分两半的类型每一族的半边都是横的。
+        expect(sceneOrientation('landscape', true)).toBe('landscape');
         expect(sceneOrientation('ultrawide', true)).toBe('landscape');
         expect(sceneOrientation('portrait', true)).toBe('landscape');
         expect(() => parseScene('  ')).toThrow('--scene must not be empty.');
