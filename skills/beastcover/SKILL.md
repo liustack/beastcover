@@ -13,9 +13,9 @@ So work in this order: find the tension, pick the cover type that shows it, writ
 
 ## Setup
 
-Use an installed `beastcover` command when available. Otherwise prefix each command with `npx --yes --package @liustack/beastcover@0.7.4`.
+Use an installed `beastcover` command when available. Otherwise prefix each command with `npx --yes --package @liustack/beastcover@0.7.5`.
 
-Run `beastcover doctor` once on a new machine. If it reports Chromium missing, run `npx --yes --package @liustack/beastcover@0.7.4 playwright install chromium`, then run doctor again. Do not run a bare `npx playwright install`: it can resolve a different Playwright version and download a browser this package cannot use.
+Run `beastcover doctor` once on a new machine. If it reports Chromium missing, run `npx --yes --package @liustack/beastcover@0.7.5 playwright install chromium`, then run doctor again. Do not run a bare `npx playwright install`: it can resolve a different Playwright version and download a browser this package cannot use.
 
 There is no workspace. `gen` runs in any directory, writes the PNGs to the current directory (or `--output`), and stages downloads, cutouts, and painted scenes in the system temp dir, printing their paths. Move the finished cover to where the content lives (a Hugo page bundle, `src/content/blog/x/`, next to the user's file). Copy a printed temp path into the project only when the user wants to keep it.
 
