@@ -11,9 +11,9 @@ People see the title and the cover before anything else. If the cover does not g
 
 ## Setup
 
-Use an installed `beastcover` command when available. Otherwise prefix each command with `npx --yes --package @liustack/beastcover@0.7.0`.
+Use an installed `beastcover` command when available. Otherwise prefix each command with `npx --yes --package @liustack/beastcover@0.7.2`.
 
-Run `beastcover doctor` once on a new machine. If it reports Chromium missing, run `npx --yes --package @liustack/beastcover@0.7.0 playwright install chromium`, then run doctor again. Do not run a bare `npx playwright install`: it can resolve a different Playwright version and download a browser this package cannot use.
+Run `beastcover doctor` once on a new machine. If it reports Chromium missing, run `npx --yes --package @liustack/beastcover@0.7.2 playwright install chromium`, then run doctor again. Do not run a bare `npx playwright install`: it can resolve a different Playwright version and download a browser this package cannot use.
 
 ## Run anywhere, finish, leave
 
@@ -126,7 +126,7 @@ beastcover gen "三个月后" --source render --template compare --before /abs/o
 Options that belong to another template fail with a message, so pick the template first. With `number` and `compare` the headline sits in a smaller area: keep it to a few words, or the `Thumbnail:` warning will ask for it.
 
 ```bash
-npx --yes --package @liustack/beastcover@0.7.0 beastcover gen "<headline>" --source render --preset youtube --output <path>.png
+npx --yes --package @liustack/beastcover@0.7.2 beastcover gen "<headline>" --source render --preset youtube --output <path>.png
 ```
 
 Omit `--output` and the PNG lands in the current directory as `beastcover.png` (several presets add the platform name). Use `--output` when the user names a path. Use `--width`, `--height`, and `--scale` only when the requested output needs an explicit override.
