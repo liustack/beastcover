@@ -3,7 +3,7 @@
 //
 // 照片来自 Openverse 的 cc0/pdm 记录，人物是 AI 生成的示例人物（examples/assets/face.jpg）。
 // 质检是必须工序：任何一张出现 QC FAIL，脚本就停下，不拿不合格的封面当案例。
-// 现画场景和 agent 案例要本机的模型 CLI，不在脚本里，风格变了手动重画。
+// 现画场景的案例要本机的模型或 agent CLI，不在脚本里，手动重画。
 // 改过版式后跑一遍，和 git 里的旧图并排目检，这个目录就是观感回归的基准集。
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, unlinkSync } from 'node:fs';
@@ -96,13 +96,10 @@ for (const name of jpegs) {
     unlinkSync(out(`${name}.png`));
 }
 
-// 现画场景和 agent 案例要本机模型 CLI，慢且计费，默认不重生成。
+// 现画场景的案例要本机的模型或 agent CLI，慢且计费，默认不重生成。
 //   beastcover gen "在火山口*住*了一晚" --subject face.jpg --scene "<画面>" --number 50米 --preset youtube
-//   beastcover gen "<主体描述>" --source agent --via agy --style luminous_impasto --preset youtube
-for (const name of ['face-stakes-scene-youtube.jpg', 'agent-agy-youtube.jpg', 'agent-impasto-youtube.jpg']) {
-    if (!existsSync(out(name))) {
-        console.error(`${name} missing: repaint it with your agent CLI and convert to jpeg.`);
-    }
+if (!existsSync(out('face-stakes-scene-youtube.jpg'))) {
+    console.error('face-stakes-scene-youtube.jpg missing: repaint it with --scene and convert to jpeg.');
 }
 
 console.log('\nDone. Look at every changed file under examples/ and compare against git before committing.');

@@ -128,7 +128,9 @@ When a scene type (`scene-title`, `mood`, `face-stakes`) has no photo, `--scene 
 beastcover gen "在火山口*住*了一晚" --subject /abs/me.jpg --scene "an active volcano crater at dusk, a small tent on the rim" --number "50米" --preset youtube,xiaohongshu
 ```
 
-The CLI uses what this machine has, in order: the user's image model key (`model.openai.apiKey`, `model.gemini.apiKey`), then their `codex` or `agy` CLI. `--via` names one and nothing else is tried. With neither, the scene is a plain colour gradient and a `Scene:` line says what to install. Tell the user when that happens: the cover no longer shows the story. Describe one concrete picture in English: the place, the subject, the light. The model is told not to draw any text.
+The CLI uses what this machine has, in order: the user's image model key (`model.openai.apiKey`, `model.gemini.apiKey`), then their `codex` or `agy` CLI. `--via openai|gemini|codex|agy` (or `scene.via` in the config) names one painter, and a missing key or CLI is then an error, never a switch to another. With no painter at all, the scene is a plain colour gradient and a `Scene:` line says what to install. Tell the user when that happens: the cover no longer shows the story. Describe one concrete picture in English: the place, the subject, the light. The painter is told to draw a real photograph with no text in it, because the words are set by BeastCover.
+
+Only the scene is painted. The words, the person, the layout, and the checks are always BeastCover's own, so a painted scene gets the same QC as a photo. Tell the user the privacy line the run prints: the scene description goes to their image API with their key, or through their own CLI.
 
 ### People
 
@@ -148,22 +150,6 @@ On systems without macOS Vision the picture check is skipped and the output says
 
 YouTube tests up to three thumbnails. When the user wants to test, make versions that differ clearly (another type, face or no face, another photo), not a new outline colour, and give each run its own `--output`.
 
-## Paint the whole cover with an agent or model
-
-The ten types above render the words on the machine. When the user wants a painted cover in a catalog style instead, use `agent` (their Codex or agy CLI) or `model` (their image API key). The words are part of the painting then, so none of the type options apply.
-
-```bash
-beastcover styles
-beastcover gen "<subject>" --source agent --via codex --style luminous_impasto --preset youtube
-beastcover gen "<subject>" --source model --via gemini --preset xiaohongshu
-```
-
-- Copy a style prompt in full. Never rewrite, shorten, or restyle the catalog text, and never assemble a prompt from style, palette, and discipline fragments. `risograph_editorial` is the fallback style.
-- The model runs once per group of platforms and each platform is cropped from that image.
-- `--ref` names reference files for `agent`. `--remix` redraws the user's image or puts the person from one image into another scene. Only the user's own images or cc0/pdm photos go to the model.
-- Do not silently substitute one source for another. If a requested backend or key is missing, stop and name the CLI to install or the config key to set.
-- After it finishes, tell the user: `Privacy: agent used your own CLI. We did not handle the data.` or `Privacy: the prompt went to <provider> with your API key.`
-
 ## Configuration
 
 ```bash
@@ -172,6 +158,7 @@ beastcover config set render.preset wechat,x,xiaohongshu
 beastcover config set render.scale 2
 beastcover config set stock.pexels.apiKey <key>
 beastcover config set model.openai.apiKey <key>
+beastcover config set scene.via codex
 beastcover config show
 ```
 

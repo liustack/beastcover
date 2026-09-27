@@ -105,17 +105,6 @@ beastcover gen "慢一点的早晨" --template mood --photo openverse:278488ee-c
 
 <img src="mood-xiaohongshu.jpg" width="203">
 
-## Painted through your own agent CLI
-
-The whole cover painted in a catalog style by a local agent CLI (`--via agy` here). Not part of `pnpm examples`: repaint by hand when a style changes.
-
-```bash
-beastcover gen "一个人独自坐在深夜的书桌前，屏幕的光照亮他的脸" --source agent --via agy --style luminous_impasto --preset youtube
-beastcover gen "三个习惯" --source agent --via agy --preset youtube
-```
-
-<img src="agent-impasto-youtube.jpg" width="480"> <img src="agent-agy-youtube.jpg" width="480">
-
 ## Credits
 
 Photos via [Openverse](https://openverse.org), all CC0: [lava and helicopter](https://www.flickr.com/photos/27784370@N05/16285896735) by U.S. Geological Survey, [sailboat](https://stocksnap.io/photo/sailing-boat-6HIAAM72PR) by JJ Skys the Limit, [airplane](https://stocksnap.io/photo/airplane-sky-YNUT4JAZ0V) by Matt Bango, [ramen](https://www.rawpixel.com/image/5925771/photo-image-public-domain-food-free) via rawpixel, [ramen with egg](https://stocksnap.io/photo/ramen-noodles-KKMQPWQK6H) by Foodie Girl, [tsukemen](https://commons.wikimedia.org/w/index.php?curid=39923890) by Douglas Perkins, [night market](https://www.flickr.com/photos/101561334@N08/9870511026) by Gary Lee Todd, [cluttered desk](https://www.flickr.com/photos/37996646802@N01/132287095) by cogdogblog, [clean desk](https://stocksnap.io/photo/laptop-desk-JCXQS3IVWD) by Lisa Fotios, [coffee](https://www.flickr.com/photos/132795455@N08/17625638243) via Image Catalog. The demo face is AI-generated. No real person appears in these covers. The volcano scene was painted by codex for this example.

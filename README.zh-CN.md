@@ -96,8 +96,6 @@ beastcover gen "3个错误毁了我" --preset all
 | 十种封面类型（`--template`） | 免费 | 本地 Chromium 渲染，什么都不出机器 |
 | 照片（`--photo`） | 免费 | 你自己的，或 Openverse 的 CC0 和公有领域照片。Pexels key 可选 |
 | 现画场景（`--scene`） | 你的 key 或订阅 | 没有照片时，用你的图像 API key 或你的 Codex、agy CLI 画场景。都没有就退到配色渐变并告诉你 |
-| 画出来的封面（`--source agent`） | 你已有的订阅 | 你的 Codex 或 agy CLI 按四个目录风格作画 |
-| 画出来的封面（`--source model`） | 你的 API key | GPT Image 或 Nano Banana，key 放你自己的配置 |
 
 没有账号、没有积分、没有水印、没有推销。没有任何要初始化的东西，也不留任何痕迹：封面落在你运行命令的目录里，下载的照片和授权记录暂存在系统临时目录（路径会打印出来），你的项目和 git 完全不被碰。
 
@@ -112,8 +110,6 @@ beastcover gen "个习惯救了我的时间" --template number --number 3 --pres
 beastcover stock search "ramen bowl" --orientation landscape
 beastcover gen "15元和150元的拉面" --template versus --photo openverse:<id> --photo openverse:<id> --labels "¥15,¥150"
 beastcover gen "在火山口*住*了一晚" --subject me.jpg --scene "a volcano crater at dusk, a tent on the rim" --number "50米"
-beastcover gen "深夜写代码的人" --source agent --via codex --style luminous_impasto
-beastcover styles
 ```
 
 Chromium 要用 beastcover 自带的 Playwright 装：裸的 `npx playwright` 可能解析到旧版本，下载一个对不上的浏览器。
@@ -122,14 +118,12 @@ Chromium 要用 beastcover 自带的 Playwright 装：裸的 `npx playwright` �
 
 ## 联网与隐私
 
-| 来源 | 什么会离开你的机器 |
+| 你用了什么 | 什么会离开你的机器 |
 | :-- | :-- |
-| `render` | 什么都不会 |
-| `stock` | 搜索词，和下载所选照片的那一个请求 |
+| 渲染 | 什么都不会 |
+| `stock search`、`--photo openverse:<id>` | 搜索词，和下载所选照片的那一个请求 |
 | `--subject` | 什么都不会，抠图在你的 Mac 上跑 |
-| `--scene` | 场景描述带着你的 key 发给你的图像 API，或交给你自己的 agent CLI |
-| `agent` | 走你自己的 CLI 和订阅，BeastCover 碰不到 |
-| `model` | 风格提示词和主体描述带着你的 key 发给 OpenAI 或 Gemini，不上传任何本地文件 |
+| `--scene` | 场景描述带着你的 key 发给 OpenAI 或 Gemini，或交给你自己的 Codex、agy CLI，不上传任何本地文件 |
 
 照片下载直连图片主机，只走 https，私网地址被拦，单张上限 40 MB。
 
@@ -139,6 +133,7 @@ Chromium 要用 beastcover 自带的 Playwright 装：裸的 `npx playwright` �
 beastcover config set stock.pexels.apiKey <key>
 beastcover config set model.openai.apiKey <key>
 beastcover config set model.gemini.apiKey <key>
+beastcover config set scene.via codex
 beastcover config show
 ```
 
@@ -150,7 +145,7 @@ beastcover config show
 beastcover doctor
 ```
 
-离线运行，检查 Node.js 版本、Chromium、配置文件权限、`codex` 或 `agy` 在不在 PATH 上，以及 `--scene` 会用什么画。
+离线运行，检查 Node.js 版本、Chromium、配置文件权限、抠图能不能用，以及 `--scene` 会用谁来画。
 
 ## 聊聊
 

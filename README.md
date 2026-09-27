@@ -96,8 +96,6 @@ Platforms with close ratios share one master and are cropped from it. Across sha
 | Ten cover types (`--template`) | Free | Rendered in a local Chromium, nothing leaves your machine |
 | Photos (`--photo`) | Free | Your own, or CC0 and public-domain photos from Openverse. A Pexels key is optional |
 | Painted scenes (`--scene`) | Your key or subscription | When there is no photo, your image API key or your Codex or agy CLI paints the scene. With neither, it falls back to a colour gradient and says so |
-| Painted covers (`--source agent`) | Your existing subscription | Your Codex or agy CLI paints one of four catalog styles |
-| Painted covers (`--source model`) | Your API key | GPT Image or Nano Banana, key in your config |
 
 No accounts, no credits, no watermarks, no upsell. There is nothing to set up and nothing left behind: the cover lands in the directory you run from, downloaded photos and their license records stage in the system temp folder with their paths printed, and your project and your git stay untouched.
 
@@ -112,8 +110,6 @@ beastcover gen "个习惯救了我的时间" --template number --number 3 --pres
 beastcover stock search "ramen bowl" --orientation landscape
 beastcover gen "15元和150元的拉面" --template versus --photo openverse:<id> --photo openverse:<id> --labels "¥15,¥150"
 beastcover gen "在火山口*住*了一晚" --subject me.jpg --scene "a volcano crater at dusk, a tent on the rim" --number "50米"
-beastcover gen "深夜写代码的人" --source agent --via codex --style luminous_impasto
-beastcover styles
 ```
 
 Install Chromium through the Playwright that ships with beastcover: a bare `npx playwright` can pick up an older copy and download a browser that does not match.
@@ -122,14 +118,12 @@ Install Chromium through the Playwright that ships with beastcover: a bare `npx 
 
 ## Network and privacy
 
-| Source | What leaves your machine |
+| What you use | What leaves your machine |
 | :-- | :-- |
-| `render` | Nothing |
-| `stock` | The search words, and the request that downloads the chosen photo |
+| Rendering | Nothing |
+| `stock search`, `--photo openverse:<id>` | The search words, and the request that downloads the chosen photo |
 | `--subject` | Nothing. The cutout runs on your Mac |
-| `--scene` | Your scene description goes to your image API with your key, or through your own agent CLI |
-| `agent` | Goes through your own CLI and subscription. BeastCover never sees it |
-| `model` | The style prompt and your subject line go to OpenAI or Gemini with your API key. No local file is uploaded |
+| `--scene` | Your scene description goes to OpenAI or Gemini with your API key, or through your own Codex or agy CLI. No local file is uploaded |
 
 Photo downloads connect straight to the image host, over https only, with private addresses blocked and a 40 MB cap per photo.
 
@@ -139,6 +133,7 @@ Photo downloads connect straight to the image host, over https only, with privat
 beastcover config set stock.pexels.apiKey <key>
 beastcover config set model.openai.apiKey <key>
 beastcover config set model.gemini.apiKey <key>
+beastcover config set scene.via codex
 beastcover config show
 ```
 
@@ -150,7 +145,7 @@ Settings live in `~/.beastcover/config.json` with file mode 0600, and `config sh
 beastcover doctor
 ```
 
-Runs offline and checks the Node.js version, Chromium, config file permissions, whether `codex` or `agy` is on your PATH, and what `--scene` would paint with.
+Runs offline and checks the Node.js version, Chromium, config file permissions, whether the cutout works, and who `--scene` would paint with.
 
 ## Talk to us
 
