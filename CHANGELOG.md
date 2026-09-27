@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.7.3 (2026-09-28)
+## 0.7.4 (2026-09-28)
+
+0.7.3 was tagged but never published: its release checks failed on the font probe. Everything planned for 0.7.3 ships here, plus:
+
+- **Fonts are found correctly on Windows and Linux.** A font counts as installed only when it draws differently from a name no machine has, so a system whose Chinese fallback is the same for every generic family no longer reports missing fonts as installed.
+
+## 0.7.3 (2026-09-28, not published)
 
 Covers are now built from ten cover types, the ones that keep winning on each platform, and every cover is checked after rendering. The old four templates looked like a headline on a wall. A cover wins on its idea, so each type is made to show one: the stakes, a before and after, two choices, one thing to look at, a mood.
 
