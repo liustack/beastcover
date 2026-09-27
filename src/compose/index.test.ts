@@ -444,7 +444,7 @@ describe('clear area', () => {
             x: 0,
             y: 60,
             width: 1920,
-            height: 996,
+            height: 960,
         });
     });
 });
@@ -544,7 +544,7 @@ describe('family covered areas', () => {
     it('collects the app UI of the requested platforms in one family', () => {
         expect(familyCoveredAreas('landscape', ['youtube', 'bilibili', 'douyin'])).toEqual([
             { x: 1632, y: 1008, width: 288, height: 132 },
-            { x: 0, y: 1056, width: 1920, height: 144 },
+            { x: 0, y: 1020, width: 1920, height: 180 },
         ]);
         expect(familyCoveredAreas('ultrawide', ['x', 'wechat'])).toEqual([]);
     });
