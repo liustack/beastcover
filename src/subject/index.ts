@@ -129,7 +129,15 @@ async function cutoutCached(imagePath: string, runtime: SubjectRuntime): Promise
     const partial = `${cached}.${randomUUID()}.partial.png`;
     try {
         await runtime.cutout(imagePath, partial);
-        renameSync(partial, cached);
+        try {
+            renameSync(partial, cached);
+        } catch (error) {
+            // POSIX 的 rename 原子覆盖，Windows 上覆盖一个正被对方读着的缓存会报 EPERM。
+            // 并发抠同一张图写出的内容相同，对方已经写好就用对方的，其他错误照抛。
+            if (!existsSync(cached)) {
+                throw error;
+            }
+        }
     } finally {
         rmSync(partial, { force: true });
     }
