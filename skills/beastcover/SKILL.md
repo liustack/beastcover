@@ -1,13 +1,15 @@
 ---
 name: beastcover
-description: "Make covers that get the click: a thumbnail or header for an article, video, or post, sized for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, or TikTok, plus the Open Graph image of a web page and a GitHub social preview. Start with a free photo cover: search cc0 stock, put the headline and project palette on it, no API key and no upload. Use this skill whenever the user asks for a cover, thumbnail, hero image, banner, OG image, social preview, or a text-led title card. Also use it for BeastCover configuration and offline diagnostics."
+description: "Make covers that get the click: a thumbnail or header for an article, video, or post, sized for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, or TikTok, plus the Open Graph image of a web page and a GitHub social preview. Ten cover types (big type, number hook, face with big words, face with stakes, versus, before and after, scene title, callout, collage, mood), every one checked after rendering. Free by default: local render and cc0 stock, no API key, no upload. Use this skill whenever the user asks for a cover, thumbnail, hero image, banner, OG image, or social preview, or wants the title and description that ship with one. Also use it for BeastCover configuration and offline diagnostics."
 compatibility: Requires Node.js 22.19 or newer. Local HTML rendering also requires Playwright Chromium.
 allowed-tools: Bash
 ---
 
 # BeastCover
 
-People see the title and the cover before anything else. If the cover does not grab them, they scroll past. Make covers with impact: one clear subject, a short headline in large type, strong contrast. Keep every platform version of one piece in the same style and palette.
+A cover is the promise of the content, not its decoration. In a feed at least four covers compete at once and people pick in half a second without thinking. The cover that wins shows the tension of the piece (a conflict, a before and after, the stakes, a surprising result) and leaves a gap that only opening it closes. The idea matters more than the design: a plain cover with a sharp idea beats a polished cover of the headline.
+
+So work in this order: find the tension, pick the cover type that shows it, write the words, render, then look at every cover before you hand it over.
 
 ## Setup
 
@@ -15,24 +17,24 @@ Use an installed `beastcover` command when available. Otherwise prefix each comm
 
 Run `beastcover doctor` once on a new machine. If it reports Chromium missing, run `npx --yes --package @liustack/beastcover@0.7.2 playwright install chromium`, then run doctor again. Do not run a bare `npx playwright install`: it can resolve a different Playwright version and download a browser this package cannot use.
 
-## Run anywhere, finish, leave
+There is no workspace. `gen` runs in any directory, writes the PNGs to the current directory (or `--output`), and stages downloads, cutouts, and painted scenes in the system temp dir, printing their paths. Move the finished cover to where the content lives (a Hugo page bundle, `src/content/blog/x/`, next to the user's file). Copy a printed temp path into the project only when the user wants to keep it.
 
-There is no workspace and no setup. `gen` runs in any directory, writes the PNG to the current directory (or `--output`), and stages every intermediate (downloaded photos, model originals) in the system temp dir, printing their paths. The user's project stays clean.
+## 1. Find the tension
 
-- The cover lands where the content lives. In a blog repo, move it to the post's own convention (Hugo page bundle `content/post/x/featured.jpg`, Astro `src/content/blog/x/cover.jpg`, Jekyll `assets/`); otherwise leave it next to the user's file or where they asked.
-- A printed temp path (a fetched photo, a model original) is yours to copy into the project only when the user wants to keep it.
-- `--style <name>` picks a catalog style per run. Without it the fallback style is used.
-- Copy a style prompt in full. Never rewrite, shorten, or restyle the catalog text.
+Before any command, answer: what will make someone stop on this piece? Read the content and pick one:
 
-```bash
-beastcover styles
-beastcover styles risograph_editorial
-beastcover gen "<headline>" --style luminous_impasto --preset youtube
-```
+- **A result with the cause hidden**: "3 habits saved me 2 hours", "I stayed a night on a volcano".
+- **A before and after**: the room, the desk, the chart, the body, the cover itself.
+- **Two choices without the winner**: ¥15 versus ¥150 ramen, the cheap tool versus the expensive one.
+- **The stakes**: a price, a deadline, a distance, a day count (`$10,000`, `DAY 7`, `50 米`).
+- **One thing to look at**: an object in a photo nobody would notice without a circle around it.
+- **A mood**: when the picture itself is the reason to open (travel, food, a place), words get out of the way.
 
-`risograph_editorial` is the fallback style when the choice is uncertain. `luminous_impasto` needs a scene with depth: a landscape or street, not a desk still life.
+The gap must be true. Platforms judge the cover by what happens after the click: YouTube's thumbnail test picks the winner by watch time, not clicks. Never promise what the piece does not deliver.
 
-## Pick the platforms
+Read [docs/packaging.md](../../docs/packaging.md) for how the cover, the title, and the description split the promise between them.
+
+## 2. Pick the platforms
 
 `--preset` takes one platform, a comma list such as `wechat,x,douyin`, or `all`. Ask which platforms the user publishes to when it is not obvious, then make them all in one command. Several presets write `<name>-<platform>.png` next to each other.
 
@@ -47,151 +49,120 @@ beastcover gen "<headline>" --style luminous_impasto --preset youtube
 | `og` | 1200×630 | The Open Graph image of a web page or article, shown when the link is shared |
 | `github` | 1280×640 | A GitHub repository social preview, uploaded in the repository settings |
 
-Platforms with close ratios share one master and are cropped from it: WeChat from the middle of the X banner, Xiaohongshu and Instagram from the middle of the Douyin frame, YouTube from the Bilibili frame. The CLI keeps the headline inside the area every platform in the group shows and sizes it as large as that area allows. The table above is only for choosing platforms and judging the result.
+Platforms with close ratios share one master and are cropped from it. The CLI keeps every headline, label, and figure inside the area all platforms in the group show, and sizes the words as large as that area allows.
 
-Add `--guides` to draw the headline area (green), the focus area (orange), and app UI (red) on each cover when the user wants to check a layout. Do not hand guided covers over as finished files.
+## 3. Pick the cover type
 
-When the output has a `Thumbnail:` line, the headline will be hard to read in that platform's feed. Offer a shorter headline. A `Headline:` line means the text is long for a YouTube thumbnail or a Bilibili cover: offer a hook of a few words (about 10 Chinese characters at most on Bilibili) for the cover and keep the full line for the video title. On Bilibili only about one in five breakout covers repeats the title word for word; most rewrite it shorter and louder. A `Cover:` line means a YouTube thumbnail has only text: offer to add the user's photo with `--subject`, a stock photo, or a product shot, because breakout thumbnails almost always show a subject.
+`--template` picks the cover type. Without it the CLI picks from the inputs: a person and a photo make `face-stakes`, a person alone makes `face-text`, one photo makes `scene-title`, two make `before-after`, three or four make `collage`, and nothing makes `big-type`. The output always names the type it used.
 
-Old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone. The CLI names the replacement if one is used.
+| Type | Shows | Inputs | Best on |
+| :-- | :-- | :-- | :-- |
+| `big-type` | The words are the picture: heavy type on a plain or gradient ground | headline, optional `--tag` | Xiaohongshu, WeChat, knowledge posts |
+| `number` | One huge figure beside a short line | `--number 3` (or `90%`, `10x`) | Every platform |
+| `face-text` | A cut-out person on one side, 2 to 4 big words on the other | `--subject`, optional `--tag` | YouTube, Bilibili, Douyin |
+| `face-stakes` | The person inside the scene of the story, the stakes on a tilted sign | `--subject`, one `--photo` or `--scene`, optional `--number` | YouTube challenges, vlogs |
+| `versus` | Two equal halves, a price tag on each, a VS badge in the seam | two `--photo`, `--labels "¥15,¥150"` | YouTube, Bilibili, Xiaohongshu reviews |
+| `before-after` | Before on the left (top on portrait), after on the right, an arrow between | two `--photo`, optional `--labels "改前,改后"` | Xiaohongshu, Douyin, makeovers |
+| `scene-title` | A full-bleed scene with an outlined title in its quiet part | one `--photo` or `--scene` | Bilibili, travel, documentary |
+| `callout` | A red circle and arrow on the photo's subject, with a short question | one `--photo` with a small, clear subject | YouTube science, Bilibili knowledge |
+| `collage` | Two to four photos in a grid with the title on a colour band | 2 to 4 `--photo` | Xiaohongshu lists, food, trips |
+| `mood` | One strong photo with a small, quiet line | one `--photo` or `--scene` | Xiaohongshu, WeChat |
 
-## Choose the source
+Options that belong to another type fail with a message naming the types that take them, so pick the type first.
 
-| Output | Source |
-| :-- | :-- |
-| A real photo carries the mood and the headline sits on it | `stock` |
-| The headline is the whole cover, or the wording will change often | `render` |
-| A painted cover in the project style, and the user has an agent CLI | `agent` |
-| A painted cover in the project style, and the user has an image API key | `model` |
+```bash
+beastcover gen "3个错误*毁了*我的频道" --template big-type --tag "新手必看" --preset xiaohongshu,wechat
+beastcover gen "个习惯救了我的时间" --template number --number 3 --preset all
+beastcover gen "我看*傻*了" --subject /abs/me.jpg --preset youtube,bilibili,douyin
+beastcover gen "在火山口*住*了一晚" --subject /abs/me.jpg --photo openverse:<id> --number "50米" --preset youtube
+beastcover gen "15元和150元的拉面" --template versus --photo /abs/cheap.jpg --photo /abs/fancy.jpg --labels "¥15,¥150" --preset youtube,xiaohongshu
+beastcover gen "桌面*改造*" --photo /abs/before.jpg --photo /abs/after.jpg --labels "改前,改后" --preset xiaohongshu
+beastcover gen "这是什么？" --template callout --photo openverse:<id> --preset youtube
+beastcover gen "东京吃了*7天*" --photo a.jpg --photo b.jpg --photo c.jpg --photo d.jpg --preset xiaohongshu
+```
 
-`stock` and `render` are free and need nothing beyond Node and Chromium. `agent` needs the user's own Codex or agy CLI, and `model` needs the user's own API key in the config. Do not silently substitute one source for another. If a requested agent backend or API key is missing, stop and name the CLI to install or the config key to set. Do not switch to stock, render, or a different backend.
+## 4. Write the words
 
-## Photo cover from free stock
+- **The cover carries a label, not the title.** The title sits right next to the cover in every feed, so repeating it wastes half the space. YouTube covers carry a few words at most (`DAY 6`, `How?`, a figure). Chinese platforms take more words (Bilibili breakout covers carry about 8 characters, 10 at most), but still a rewrite, shorter and louder than the title.
+- **Mark one keyword with `*asterisks*`.** It gets the accent colour, a marker stroke, or a colour block, depending on the type. Without a mark, figures (`3`, `90%`, `¥150`) are highlighted automatically. Mark one word, not three.
+- **`--hook` for mixed runs.** WeChat and X article cards show the title beside the cover, so a full line is fine there. When one run covers both, pass the full line as the headline and the short label as `--hook`: video and note covers get the hook, WeChat and X keep the headline.
+- **`--tag`** is a small label above the headline (`新手必看`, `干货`, `2026`), for `big-type`, `number`, and `face-text`.
+- Also write the title and the first line of the description when the user publishes: they carry the searchable phrase and confirm the promise (see packaging.md).
 
-Search first. Openverse needs no key and returns only cc0 and public-domain photos. Pexels is used automatically when `stock.pexels.apiKey` is set, or when asked for with `--provider pexels`.
+When the output has a `Headline:` line, the text is long for a YouTube or Bilibili cover: offer a shorter hook. A `Thumbnail:` line means the words shrink too far in that platform's feed.
+
+## 5. Colour
+
+`--scheme` picks one of six colour schemes, each one main colour and one accent with strong contrast. Keep one scheme for every platform version of the same piece.
+
+| Scheme | Looks like | Suits |
+| :-- | :-- | :-- |
+| `cream` | Cream paper, near-black type, yellow marker | `big-type` default. Knowledge, calm explainers |
+| `lemon` | Bright yellow, black type, red block | Xiaohongshu lifestyle, `collage` default |
+| `orange` | Warm orange, white type, yellow figure | `number` default. Food, fitness, vlogs |
+| `teal` | Teal, white type, yellow accent | `face-text` default. Reviews, travel, tutorials: cool ground makes warm skin stand out |
+| `navy` | Deep navy, white type, yellow accent | Tech, finance, education. Dark: QC warns it reads dark in feeds |
+| `night` | Near black, white type, lime accent | `versus` and `before-after` bands. Commentary, gaming |
+
+Bright beats dark in feeds. Photo types take their headline colours from the scheme too.
+
+## 6. Pictures
+
+### Free stock photos
+
+Openverse needs no key and returns only cc0 and public-domain photos. Pexels is used when `stock.pexels.apiKey` is set.
 
 ```bash
 beastcover stock search "harbour dawn" --orientation landscape
 ```
 
-The output lists one photo per line: ref, size, license, creator, thumbnail URL. Do not take the first result by default. Pick by the text you can read: the source page title and creator hint at the subject. The listed size can be optimistic: some Openverse sources only serve a 1024px copy. `stock fetch` and `gen` report the size that was actually served, and `gen` prints a `Photo: ... is stretched` line when a platform needs the photo blown up more than 1.5x. Offer a larger photo when you see it. When the harness can show images, fetch a thumbnail URL and look for one strong subject and a calm area where the headline can sit. Then render:
+Pick by the title and creator in each line, not the first result. When the harness can show images, fetch the thumbnail URL and look for one strong subject and a calm area for the words. Pass the ref straight to `gen --photo openverse:<id>`. The photo lands in the temp staging area. Repeat the `Credit` line to the user when it is printed. Use a short concrete English query of two to four words.
+
+`--photo` also takes a local path, and repeats for `versus`, `before-after`, and `collage`. Photos are framed around their own subject (faces first on macOS) and kept clear of the headline. `--look mono|duotone|punch` grades every photo the same way, which keeps a collage or a comparison looking like one set. `--fit extend` keeps a whole photo on a full-bleed type and fills the rest with a blurred copy. Use it when the output says `Photo: the subject falls outside the ... crop`.
+
+### Painted scenes
+
+When a scene type (`scene-title`, `mood`, `face-stakes`) has no photo, `--scene "<what the picture shows>"` paints one:
 
 ```bash
-beastcover gen "<headline>" --source stock --photo openverse:<id> --preset wechat,x,xiaohongshu
+beastcover gen "在火山口*住*了一晚" --subject /abs/me.jpg --scene "an active volcano crater at dusk, a small tent on the rim" --number "50米" --preset youtube,xiaohongshu
 ```
 
-`--photo` also accepts a local image path. A fetched photo and its provenance sidecar land in the temp staging area, and the `Photo:` line prints the saved path. The command prints `License`, `Credit`, and `Source` lines. Repeat the `Credit` line to the user when it is present. cc0 and pdm photos print no credit because none is required.
+The CLI uses what this machine has, in order: the user's image model key (`model.openai.apiKey`, `model.gemini.apiKey`), then their `codex` or `agy` CLI. `--via` names one and nothing else is tried. With neither, the scene is a plain colour gradient and a `Scene:` line says what to install. Tell the user when that happens: the cover no longer shows the story. Describe one concrete picture in English: the place, the subject, the light. The model is told not to draw any text.
 
-Use a short concrete English query of two to four words. Keep mood words and negatives out of it.
+### People
 
-The photo is framed around its own subject (faces first on macOS, the most striking area elsewhere) and moved clear of the headline, which keeps to the lower part of the cover. Three options change the photo itself, all on the machine:
+A face helps when there is one, but a product close-up or a striking object also tops the charts. Prefer the user's own photo over stock for people. `--subject` takes a transparent PNG as is. On macOS 14 or newer a normal photo is cut out on the machine. Other systems ask for a transparent PNG: tell the user to cut the photo out first (iPhone or macOS "Copy Subject", remove.bg). Never pass the photo to a model to remove the background: it redraws the face. When the photo has several people close together, crop it to one person first.
 
-- `--look mono|duotone|punch` grades it: black and white, the palette's dark and accent colours, or more saturation and contrast. The default `natural` keeps the palette wash.
-- `--fit extend` keeps the whole photo and fills the rest with a blurred copy. Use it when the output says `Photo: the subject does not fit the ... crop`, typically a portrait photo on the X or WeChat banner.
-- `--callout` circles the photo's subject in red and points an arrow at it from the empty side, the way science and tech channels mark the thing to look at. The headline band shrinks to what is left below the circle, so keep the line short: a long line reads smaller in the feed and the `Thumbnail:` warning shows up sooner. It needs one small, clear subject, and it fails before rendering anything when the subject fills most of the frame, when the circle would be cut by a requested platform, would leave no room for the headline, or would sit under the app's buttons. Drop those platforms or pick another photo. It does not combine with `--subject` or `--fit extend`.
+## 7. Check every cover before you hand it over
 
-## Put a person on the cover
+QC is part of the job, not an option. After rendering, the CLI checks each cover and prints:
 
-A face often helps, but it is not required: product close-ups, a striking object, or a single big word also top the charts. When there is a face, make it big and the expression real. Calm or a closed-mouth smile has beaten the screaming face in creators' own A/B tests. Prefer the user's own photo over stock for people. When the user has a photo of themselves, a guest, or a character, add it with `--subject`:
+- `QC FAIL <platforms>: ...` in red: the headline covers a face, a person, text already in the picture, or the main subject. The files are written anyway. **Do not hand a failing cover over.** Fix it: pick another photo, another type, a shorter line, or drop the platform, then render again.
+- `QC WARN`: the headline sits on a busy area, or the cover is dark. Fix it when you can, or tell the user why it stays.
+- `Layout: the headline moved ...`: the first placement covered the picture, so the CLI used the other spot. Look at the result.
+- `Font: ...`: no heavy Chinese font was found and the headline uses synthetic weight. Tell the user which font to install for the full look.
+- `Preview: <path>`: every cover at its feed size on one sheet. **Open it and look.** Can you tell at a glance what the cover shows and why to click? Is anything cut off, covered, or unreadable? The machine cannot see everything: a person Vision missed, a subject that reads wrong at feed size, an idea that does not land.
 
-```bash
-beastcover gen "<1 to 6 words>" --source render --subject /absolute/me.jpg --preset youtube,xiaohongshu
-beastcover gen "<headline>" --source stock --photo openverse:<id> --subject /absolute/me.png --preset all
-```
+On systems without macOS Vision the picture check is skipped and the output says so. Then your own look is the only check.
 
-- A transparent PNG is used as is. On macOS 14 or newer a normal photo is cut out on the machine with the system cutout, and the output says `cut out on this machine with macOS Vision`. The first cutout compiles a small tool, which takes a few seconds.
-- Other systems fail with a message asking for a transparent PNG. Tell the user to cut the photo out first (iPhone or macOS "Copy Subject", remove.bg, Photoshop). Never pass the photo to a agent CLI to remove the background: the model redraws the face.
-- The person stands on one side (the bottom on portrait covers) with a white outline, and the headline takes the other side. Keep that headline short: three to six characters, or a few words.
-- The cutout keeps everything that stands out in the foreground. When the photo has several people or things close together, crop it to the one person first, or ask for a PNG that is already cut out.
-- `--subject` works with `render` and `stock`, not with `agent`.
+YouTube tests up to three thumbnails. When the user wants to test, make versions that differ clearly (another type, face or no face, another photo), not a new outline colour, and give each run its own `--output`.
 
-## Render a text cover
+## Paint the whole cover with an agent or model
 
-`--source render` has four templates. Pick the one that matches the hook:
-
-| Template | Use it when | Extra options |
-| :-- | :-- | :-- |
-| `text` (default) | A headline on a calm paper background | `--subject` |
-| `poster` | Loud and flat: a full-bleed palette colour, huge type | `--tag "<2 to 6 words>"`, `--subject` |
-| `number` | The hook is a figure: 3 habits, 90%, 10x | `--number <figure>` (required) |
-| `compare` | Before and after, this versus that | `--before <path> --after <path>` (required), `--labels "<first>,<second>"` |
+The ten types above render the words on the machine. When the user wants a painted cover in a catalog style instead, use `agent` (their Codex or agy CLI) or `model` (their image API key). The words are part of the painting then, so none of the type options apply.
 
 ```bash
-beastcover gen "<headline>" --source render --preset xiaohongshu
-beastcover gen "封面没人点" --source render --template poster --tag "新手必看" --preset all
-beastcover gen "个习惯多出两小时" --source render --template number --number 3 --preset all
-beastcover gen "三个月后" --source render --template compare --before /abs/old.jpg --after /abs/new.jpg --labels "之前,之后" --preset all
-```
-
-Options that belong to another template fail with a message, so pick the template first. With `number` and `compare` the headline sits in a smaller area: keep it to a few words, or the `Thumbnail:` warning will ask for it.
-
-```bash
-npx --yes --package @liustack/beastcover@0.7.2 beastcover gen "<headline>" --source render --preset youtube --output <path>.png
-```
-
-Omit `--output` and the PNG lands in the current directory as `beastcover.png` (several presets add the platform name). Use `--output` when the user names a path. Use `--width`, `--height`, and `--scale` only when the requested output needs an explicit override.
-
-After the command finishes, verify that the PNG exists at the reported path. Tell the user that render content stayed on the machine.
-
-## Paint with an agent CLI
-
-`agent` runs anywhere. `--style` picks the style, the fallback style otherwise.
-
-Copy the selected style prompt in full, then append one subject description (`主体：...`). Do not assemble extra style, palette, or discipline layers.
-
-```bash
-beastcover gen "<subject>" --source agent --via codex --preset youtube
-beastcover gen "<subject>" --source agent --via agy --ref /absolute/a.png --preset xiaohongshu,douyin
-```
-
-The model runs once per group of platforms, stages its image in the temp dir, and each platform is cropped from that image. `xiaohongshu,douyin` is one model call. `wechat,youtube` is two.
-
-`--via` chooses `codex` or `agy`. It is only valid with `--source agent`. `--ref` names files only. Do not glob. Do not pass a directory.
-
-### Redraw or combine images
-
-Only when the user asks for it, `--remix` hands their images to the model:
-
-```bash
-beastcover gen "<subject>" --source agent --via codex --remix /abs/me.jpg --preset youtube
-beastcover gen "<subject>" --source agent --via codex --remix /abs/me.jpg --remix /abs/scene.jpg --preset douyin
-```
-
-- One image: redrawn in the project style, keeping the composition, pose, and face.
-- Two images: the person from the first is put into the scene from the second.
-- Only the user's own images or cc0/pdm photos go to the model. A photo fetched from Pexels is refused.
-- The model redraws the face and invents what the photo does not show, like the rest of a body. When the face must stay exact, use `--subject` on a render or stock cover instead.
-
-After the command finishes, verify the image at the reported path. Tell the user: `Privacy: agent used your own CLI. We did not handle the data.`
-
-## Paint through an image API
-
-`model` paints the same style prompt through the user's own image model API key: GPT Image (`openai`) or Nano Banana (`gemini`). It needs a key in the config:
-
-```bash
-beastcover config set model.openai.apiKey <key>
-beastcover config set model.gemini.apiKey <key>
-beastcover gen "<subject>" --source model --preset youtube,xiaohongshu
+beastcover styles
+beastcover gen "<subject>" --source agent --via codex --style luminous_impasto --preset youtube
 beastcover gen "<subject>" --source model --via gemini --preset xiaohongshu
 ```
 
-- `--via` picks `openai` or `gemini`. Without it, the first provider with a configured key is used, `openai` first. A named provider without a key fails with the config key to set. Never put a key on the command line or in a file the user did not name.
-- Like `agent`, the model runs once per group of platforms and each platform is cropped from that image.
-- `--ref` and `--remix` do not work with `model` yet. When the user wants reference images, use `--source agent`.
-- The default model per provider can be replaced with `beastcover config set model.<provider>.model <id>` when a newer one ships.
-
-After the command finishes, verify the image at the reported path. Tell the user: `Privacy: the prompt went to <provider> with your API key. No local file left this machine.`
-
-## Make it land
-
-- One subject, one headline. Cut the headline to the fewest words that still make someone curious. On YouTube the cover carries a hook of a few words (`DAY 6`, `How?`, a figure), not the title. WeChat and X article cards show the title next to the cover, so a full line is fine there. When one run covers both, pass the full line as the headline and the short one as `--hook`: video and note covers get the hook, WeChat and X keep the headline.
-- Bright and colourful beats dark and grey. Pick a palette with a strong accent.
-- Covers are judged by what people watch or read after the click. Never promise on the cover what the piece does not deliver.
-- YouTube tests up to three thumbnails. When the user wants to test, run `gen` two or three times with versions that differ clearly (face or no face, another template, `--hook` or not, another photo), not a new outline colour. Give each run its own `--output` name so versions never overwrite each other.
-- For a 4K YouTube thumbnail (the current recommendation is 3840×2160), add `--scale 3` to a `render` or `stock` cover. `agent` output is sized by the model and rejects `--scale`. Keep the default for uploads from a phone, where the limit is 2 MB.
-- Check the cover at thumbnail size. The CLI already warns when the headline gets too small in a feed. If the subject is hard to make out there, pick another photo.
-- Lock one style and one palette for every platform version of the same piece.
-- Treat every style prompt as self-contained source text. Never assemble a prompt from global style, palette, and discipline fragments.
+- Copy a style prompt in full. Never rewrite, shorten, or restyle the catalog text, and never assemble a prompt from style, palette, and discipline fragments. `risograph_editorial` is the fallback style.
+- The model runs once per group of platforms and each platform is cropped from that image.
+- `--ref` names reference files for `agent`. `--remix` redraws the user's image or puts the person from one image into another scene. Only the user's own images or cc0/pdm photos go to the model.
+- Do not silently substitute one source for another. If a requested backend or key is missing, stop and name the CLI to install or the config key to set.
+- After it finishes, tell the user: `Privacy: agent used your own CLI. We did not handle the data.` or `Privacy: the prompt went to <provider> with your API key.`
 
 ## Configuration
 
@@ -200,11 +171,12 @@ beastcover config init
 beastcover config set render.preset wechat,x,xiaohongshu
 beastcover config set render.scale 2
 beastcover config set stock.pexels.apiKey <key>
+beastcover config set model.openai.apiKey <key>
 beastcover config show
 ```
 
-`stock.openverse.clientId` and `stock.openverse.clientSecret` are optional and only raise the Openverse rate limit.
+Settings resolve in this order: command flags, `~/.beastcover/config.json`, built-in defaults. `config show` masks every credential. Never put a key on the command line or in a file the user did not name. `beastcover doctor` performs offline checks only, including which backend `--scene` would paint with.
 
-Settings resolve in this order: command flags, `~/.beastcover/config.json`, built-in defaults. The default preset is `youtube`. `config show` masks every stock credential. `beastcover doctor` performs offline checks only.
+For a 4K YouTube thumbnail add `--scale 3`. `--width` and `--height` make one custom canvas instead of platform presets. `--guides` draws the safe areas on each cover for checking a layout. Never hand guided covers over.
 
 Stock downloads connect directly to the photo host. A system-wide proxy set only through `HTTPS_PROXY` is not used. Proxies that take over DNS (fake-ip mode) work.
