@@ -381,6 +381,146 @@ export function checkSubjects(
     });
 }
 
+// 标题和它背后的对比度（WCAG）：大字至少 3:1，建议 4.5:1（research.md 第 4.1 节）。
+const CONTRAST_FAIL = 3;
+const CONTRAST_WARN = 4.5;
+// 标题区里的字迹少于这么多像素，就当没有标题，不量对比度。
+const MIN_INK_PIXELS = 200;
+
+/** WCAG 相对亮度，sRGB 0-255 */
+function relativeLuminance(r: number, g: number, b: number): number {
+    const linear = (value: number) => {
+        const c = value / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+}
+
+function contrastRatio(a: number, b: number): number {
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/**
+ * 标题读不读得出来：只看标题区里的字迹。字迹里最亮的一成和最暗的一成，只要有一头和字背后
+ * 的平均亮度拉得开就算读得出。白字黑描边两头都有，压在什么上都过；单色字（亮底深字、照片上的
+ * 软投影白字）就要看它背后够不够反差。
+ */
+export async function checkContrast(input: {
+    target: QcTarget;
+    withText: Buffer;
+    background: Buffer;
+    /** 标题区，母版坐标 */
+    area: Rect;
+    crop: Rect;
+}): Promise<QcFinding[]> {
+    const text = await sharp(input.withText)
+        .removeAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    const back = await sharp(input.background).removeAlpha().raw().toBuffer();
+    const { width, height, channels } = text.info;
+    const region = intersect(input.area, input.crop);
+    if (region === undefined) {
+        return [];
+    }
+    const x0 = Math.max(0, Math.floor(region.x));
+    const y0 = Math.max(0, Math.floor(region.y));
+    const x1 = Math.min(width, Math.ceil(region.x + region.width));
+    const y1 = Math.min(height, Math.ceil(region.y + region.height));
+    const ink: number[] = [];
+    let behind = 0;
+    for (let y = y0; y < y1; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+            const i = (y * width + x) * channels;
+            let diff = 0;
+            for (let c = 0; c < 3; c += 1) {
+                diff = Math.max(diff, Math.abs((text.data[i + c] ?? 0) - (back[i + c] ?? 0)));
+            }
+            if (diff <= INK_DIFF) {
+                continue;
+            }
+            ink.push(
+                relativeLuminance(text.data[i] ?? 0, text.data[i + 1] ?? 0, text.data[i + 2] ?? 0),
+            );
+            behind += relativeLuminance(back[i] ?? 0, back[i + 1] ?? 0, back[i + 2] ?? 0);
+        }
+    }
+    if (ink.length < MIN_INK_PIXELS) {
+        return [];
+    }
+    ink.sort((a, b) => a - b);
+    const dark = ink[Math.floor(ink.length * 0.1)] ?? 0;
+    const bright = ink[Math.floor(ink.length * 0.9)] ?? 0;
+    const back0 = behind / ink.length;
+    const ratio = Math.max(contrastRatio(dark, back0), contrastRatio(bright, back0));
+    const shown = `${ratio.toFixed(1)}:1`;
+    if (ratio < CONTRAST_FAIL) {
+        return [
+            {
+                level: 'fail',
+                platform: input.target,
+                message: `the headline blends into what is behind it (contrast ${shown}, at least 3:1 needed). Darken or blur under it, or pick a darker or lighter part of the picture.`,
+            },
+        ];
+    }
+    if (ratio < CONTRAST_WARN) {
+        return [
+            {
+                level: 'warn',
+                platform: input.target,
+                message: `the headline is weak against what is behind it (contrast ${shown}, 4.5:1 reads well). Darken or blur under it.`,
+            },
+        ];
+    }
+    return [];
+}
+
+// 彩度（Hasler-Süsstrunk）：爆款缩略图大多在 50 到 80，只有字的旧模板量出来 9 到 15。
+// 低于这个值画面发灰，提醒一句。
+const DULL_COLOURFULNESS = 25;
+
+/** 成品的彩度，Hasler-Süsstrunk 公式，缩到 640 宽再算 */
+export async function colourfulness(png: Buffer): Promise<number> {
+    const { data, info } = await sharp(png)
+        .removeAlpha()
+        .resize({ width: 640 })
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    let n = 0;
+    let sumRg = 0;
+    let sumYb = 0;
+    let sumRg2 = 0;
+    let sumYb2 = 0;
+    for (let i = 0; i < data.length; i += info.channels) {
+        const r = data[i] ?? 0;
+        const g = data[i + 1] ?? 0;
+        const b = data[i + 2] ?? 0;
+        const rg = r - g;
+        const yb = 0.5 * (r + g) - b;
+        sumRg += rg;
+        sumYb += yb;
+        sumRg2 += rg * rg;
+        sumYb2 += yb * yb;
+        n += 1;
+    }
+    const meanRg = sumRg / n;
+    const meanYb = sumYb / n;
+    const spread = Math.sqrt(sumRg2 / n - meanRg * meanRg + (sumYb2 / n - meanYb * meanYb));
+    return spread + 0.3 * Math.sqrt(meanRg * meanRg + meanYb * meanYb);
+}
+
+export function checkColourfulness(target: QcTarget, value: number): QcFinding[] {
+    return value < DULL_COLOURFULNESS
+        ? [
+              {
+                  level: 'warn',
+                  platform: target,
+                  message: `the cover is nearly grey (colourfulness ${Math.round(value)}, breakout thumbnails sit around 50 to 80). Add one strong colour: another --scheme, --look punch, or a more colourful photo.`,
+              },
+          ]
+        : [];
+}
+
 // 贴着成品四边查这么宽的一条（像素）。字块掩膜已经往外膨胀了约 1% 短边，
 // 字离边还有十来个像素就会碰到这条带，那已经近到会被裁掉或贴边难看。
 const EDGE_BAND = 2;

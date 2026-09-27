@@ -22,7 +22,7 @@ import {
 import { type CoverRenderer, openRenderer } from '../render/index.ts';
 import { familyLayout } from '../render/layout.ts';
 import type { SubjectLayer } from '../subject/index.ts';
-import { faceLayout } from './face.ts';
+import { faceLayout, litSubject } from './face.ts';
 import {
     checkGenreInputs,
     defaultGenre,
@@ -165,6 +165,49 @@ describe('cover type registry', () => {
         expect(() =>
             checkGenreInputs('mood', { photos: 1, subject: false, options: { tag: 'x' } }),
         ).toThrow('--tag works with --template big-type, number, face-text.');
+    });
+});
+
+describe('face lighting', () => {
+    const face = { x: 0.5, y: 0.3, width: 0.5, height: 0.3 };
+    const person = async (colour: string): Promise<SubjectLayer> => {
+        const png = await sharp({
+            create: { width: 100, height: 150, channels: 4, background: colour },
+        })
+            .png()
+            .toBuffer();
+        return {
+            dataUri: `data:image/png;base64,${png.toString('base64')}`,
+            width: 100,
+            height: 150,
+            method: 'transparent',
+            bust: true,
+            face,
+        };
+    };
+    const lumaOf = async (subject: SubjectLayer) => {
+        const bytes = Buffer.from(
+            subject.dataUri.slice(subject.dataUri.indexOf(',') + 1),
+            'base64',
+        );
+        const { channels } = await sharp(bytes).removeAlpha().stats();
+        const [r, g, b] = channels.map((channel) => channel.mean) as [number, number, number];
+        return 0.299 * r + 0.587 * g + 0.114 * b;
+    };
+
+    it('brightens a face darker than what is behind it, by at most a third', async () => {
+        const dark = await person('#503c32');
+        const lit = await litSubject(dark, 180);
+        expect(lit.dataUri).not.toBe(dark.dataUri);
+        const before = await lumaOf(dark);
+        const after = await lumaOf(lit);
+        expect(after).toBeGreaterThan(before);
+        expect(after).toBeLessThanOrEqual(before * 1.4);
+    });
+
+    it('leaves a face that already stands out alone', async () => {
+        const bright = await person('#e6c3aa');
+        expect(await litSubject(bright, 60)).toBe(bright);
     });
 });
 

@@ -359,7 +359,7 @@ describe('cover composition', () => {
 });
 
 describe('placement fallback', () => {
-    /** 红底，标题区涂绿；withText 为 false 时只有红底，等于不带字的背景 */
+    /** 红底，标题区涂白；withText 为 false 时只有红底，等于不带字的背景 */
     function draw(page: RenderPage, withText: boolean): Promise<Buffer> {
         const { layout } = JSON.parse(page.html) as FakeLayoutPage;
         const area = layout.textArea;
@@ -381,7 +381,7 @@ describe('placement fallback', () => {
                                       width: Math.round(area.width * s),
                                       height: Math.round(area.height * s),
                                       channels: 3,
-                                      background: { r: 0, g: 255, b: 0 },
+                                      background: { r: 255, g: 255, b: 255 },
                                   },
                               },
                               left: Math.round(area.x * s),
@@ -438,10 +438,10 @@ describe('placement fallback', () => {
         expect(screenshots).toHaveLength(2);
         expect(cover?.moved).toBe(true);
         expect(cover?.findings.filter((finding) => finding.level === 'fail')).toEqual([]);
-        // 成品里的绿色标题区在上半截。
+        // 成品里的白色标题区在上半截。
         const crop = getPlatform('youtube').crop;
         const factor = getPlatform('youtube').width / crop.width;
-        expect(await pixel(output, 640, (300 - crop.y) * factor)).toEqual([0, 255, 0]);
+        expect(await pixel(output, 640, (300 - crop.y) * factor)).toEqual([255, 255, 255]);
         expect(await pixel(output, 640, (850 - crop.y) * factor)).toEqual([255, 0, 0]);
     });
 

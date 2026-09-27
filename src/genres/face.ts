@@ -8,7 +8,13 @@ import type { CoverTemplate, RenderedPage } from '../compose/index.ts';
 import type { Rect } from '../platforms/index.ts';
 import type { PictureSubject } from '../qc/index.ts';
 import type { FontChoice } from '../render/fonts.ts';
-import { type CoverLayout, escapeHtml, type Headline, withSubjectArea } from '../render/layout.ts';
+import {
+    type CoverLayout,
+    escapeHtml,
+    type Headline,
+    placeSubject,
+    withSubjectArea,
+} from '../render/layout.ts';
 import {
     framingFraction,
     type PhotoFit,
@@ -38,6 +44,67 @@ import { SCHEMES, type SchemeName, schemeGradient } from './schemes.ts';
 const FACE_TEXT_SHARE = 0.42;
 const FACE_STAKES_SHARE = 0.38;
 
+// 脸要比身后至少亮两成，第一眼才落在脸上（research.md 第 2.4 节、第 7.2 节）。
+// 提亮最多三成五，再多皮肤就发白发假。
+const FACE_LIFT = 1.2;
+const MAX_LIFT = 1.35;
+
+function pngBytes(dataUri: string): Buffer {
+    return Buffer.from(dataUri.slice(dataUri.indexOf(',') + 1), 'base64');
+}
+
+/** BT.601 亮度，0-255 */
+function lumaOf(hex: string): number {
+    const value = Number.parseInt(hex.slice(1), 16);
+    return 0.299 * ((value >> 16) & 255) + 0.587 * ((value >> 8) & 255) + 0.114 * (value & 255);
+}
+
+/** 人物图里脸那一块（不透明的像素）的平均亮度。没找到脸就没有 */
+async function faceLuma(subject: SubjectLayer): Promise<number | undefined> {
+    const face = subject.face;
+    if (face === undefined) {
+        return undefined;
+    }
+    const { data, info } = await sharp(pngBytes(subject.dataUri))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    const x0 = Math.max(0, Math.floor((face.x - face.width / 2) * info.width));
+    const y0 = Math.max(0, Math.floor((face.y - face.height / 2) * info.height));
+    const x1 = Math.min(info.width, Math.ceil((face.x + face.width / 2) * info.width));
+    const y1 = Math.min(info.height, Math.ceil((face.y + face.height / 2) * info.height));
+    let sum = 0;
+    let count = 0;
+    for (let y = y0; y < y1; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+            const i = (y * info.width + x) * info.channels;
+            if ((data[i + 3] ?? 0) < 128) {
+                continue;
+            }
+            sum += 0.299 * (data[i] ?? 0) + 0.587 * (data[i + 1] ?? 0) + 0.114 * (data[i + 2] ?? 0);
+            count += 1;
+        }
+    }
+    return count === 0 ? undefined : sum / count;
+}
+
+/**
+ * 脸比身后暗时把人整体提亮，直到脸比背景亮两成（最多提三成五）。抠出来的人常常偏暗，
+ * 压在亮底或亮场景前面就被背景抢了第一眼。
+ */
+export async function litSubject(subject: SubjectLayer, behindLuma: number): Promise<SubjectLayer> {
+    const face = await faceLuma(subject);
+    if (face === undefined || face <= 0 || face >= behindLuma * FACE_LIFT) {
+        return subject;
+    }
+    const factor = Math.min(MAX_LIFT, (behindLuma * FACE_LIFT) / face);
+    const lifted = await sharp(pngBytes(subject.dataUri))
+        .modulate({ brightness: factor })
+        .png()
+        .toBuffer();
+    return { ...subject, dataUri: `data:image/png;base64,${lifted.toString('base64')}` };
+}
+
 export interface FaceTextRequest {
     text: string;
     fonts: FontKit;
@@ -55,13 +122,15 @@ export function faceTextTemplate(request: FaceTextRequest): CoverTemplate {
         highlight: 'color',
     };
     const tag = eyebrow(request.tag, { background: scheme.type.accent, ink: scheme.type.stroke });
-    const page = (layout: CoverLayout, headline: Headline, measure: boolean) => {
-        const person = measure
-            ? { css: '', html: '' }
-            : subjectMarkup(layout, request.subject, {
-                  outline: 'clean',
-                  faceShare: FACE_TEXT_SHARE,
-              });
+    const page = (layout: CoverLayout, headline: Headline, subject: SubjectLayer | undefined) => {
+        const measure = subject === undefined;
+        const person =
+            subject === undefined
+                ? { css: '', html: '' }
+                : subjectMarkup(layout, subject, {
+                      outline: 'clean',
+                      faceShare: FACE_TEXT_SHARE,
+                  });
         // 渐变从字那一侧亮到人那一侧深：人身后暗，脸就比背景亮。
         const angle = layout.subjectArea && layout.subjectArea.y > layout.textArea.y ? 180 : 90;
         return genrePage({
@@ -78,9 +147,17 @@ export function faceTextTemplate(request: FaceTextRequest): CoverTemplate {
     };
     return {
         layoutFor: faceLayout,
-        measureHtml: (layout, headline) => page(layout, headline, true),
+        measureHtml: (layout, headline) => page(layout, headline, undefined),
         renderHtml: async (layout, headline) => ({
-            html: page(layout, headline, false),
+            // 身后是底色渐变的两档，取它们的平均亮度。
+            html: page(
+                layout,
+                headline,
+                await litSubject(
+                    request.subject,
+                    (lumaOf(scheme.base) + lumaOf(scheme.baseDeep)) / 2,
+                ),
+            ),
             subjects: faceSubject(layout, request.subject, FACE_TEXT_SHARE),
         }),
     };
@@ -253,10 +330,26 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                 ),
                 localScrim(layout, portrait ? 'top' : 'left'),
             );
-            person = subjectMarkup(layout, request.subject, {
-                outline: 'sticker',
-                faceShare: FACE_STAKES_SHARE,
-            });
+            // 身后是人站的那块场景（已经虚化），量它的平均亮度。
+            const rect = placeSubject(layout, request.subject, FACE_STAKES_SHARE);
+            const k = pixels.width / layout.width;
+            // 人可以伸出画布（有脸时贴边放大），只量画布里的那一截。
+            const clampTo = (value: number, low: number, high: number) =>
+                Math.min(Math.max(value, low), high);
+            const x0 = clampTo(Math.round(rect.x * k), 0, pixels.width - 1);
+            const y0 = clampTo(Math.round(rect.y * k), 0, pixels.height - 1);
+            const x1 = clampTo(Math.round((rect.x + rect.width) * k), x0 + 1, pixels.width);
+            const y1 = clampTo(Math.round((rect.y + rect.height) * k), y0 + 1, pixels.height);
+            const behind = await sharp(blurred)
+                .extract({ left: x0, top: y0, width: x1 - x0, height: y1 - y0 })
+                .toBuffer();
+            const { channels } = await sharp(behind).stats();
+            const [r, g, b] = channels.map((channel) => channel.mean) as [number, number, number];
+            person = subjectMarkup(
+                layout,
+                await litSubject(request.subject, 0.299 * r + 0.587 * g + 0.114 * b),
+                { outline: 'sticker', faceShare: FACE_STAKES_SHARE },
+            );
         }
         return {
             html: genrePage({

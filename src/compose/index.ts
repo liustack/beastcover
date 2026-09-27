@@ -13,11 +13,14 @@ import {
 } from '../platforms/index.ts';
 import {
     checkBrightness,
+    checkColourfulness,
+    checkContrast,
     checkEdges,
     checkOverlaps,
     checkQuietZone,
     checkSubjects,
     clearCrop,
+    colourfulness,
     detailUnder,
     type PictureSubject,
     type QcFinding,
@@ -100,6 +103,7 @@ async function meanLuma(png: Buffer): Promise<number> {
 /** 质检要的材料：不带字的背景、字迹、只压在照片上的字迹、画面分析（本机能看才有） */
 interface MasterInspection {
     background: Buffer;
+    withText: Buffer;
     text: TextMask;
     pictureText: TextMask;
     contents?: ImageContents;
@@ -115,6 +119,7 @@ async function inspectMaster(
     const text = await textMaskFrom(inspected.withText, inspected.background);
     const inspection: MasterInspection = {
         background: inspected.background,
+        withText: inspected.withText,
         text,
         pictureText: await textOnPicture(text, inspected.background),
     };
@@ -133,11 +138,20 @@ async function findingsFor(
     target: QcTarget,
     crop: Rect,
     covered: readonly Rect[],
+    /** 标题区：对比度只量标题 */
+    textArea: Rect,
     page: RenderedPage,
     qc: MasterInspection,
     png: Buffer,
 ): Promise<QcFinding[]> {
     return [
+        ...(await checkContrast({
+            target,
+            withText: qc.withText,
+            background: qc.background,
+            area: textArea,
+            crop,
+        })),
         ...checkSubjects(target, page.subjects, crop, covered),
         ...(qc.contents === undefined
             ? []
@@ -151,6 +165,7 @@ async function findingsFor(
         ...checkEdges(target, qc.text, crop),
         ...checkQuietZone(target, await detailUnder(qc.background, qc.text, crop)),
         ...checkBrightness(target, await meanLuma(png)),
+        ...checkColourfulness(target, await colourfulness(png)),
     ];
 }
 
@@ -461,6 +476,7 @@ export async function composeCovers(input: {
                               platform.name,
                               platform.crop,
                               platform.covered,
+                              layout.textArea,
                               page,
                               qc,
                               png,
@@ -534,6 +550,7 @@ export async function composeCustomCover(input: {
                       'canvas',
                       canvas,
                       [],
+                      layout.textArea,
                       page,
                       await inspectMaster(input.renderer, input.qc, {
                           html,

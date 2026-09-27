@@ -2,10 +2,13 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import {
     checkBrightness,
+    checkColourfulness,
+    checkContrast,
     checkEdges,
     checkOverlaps,
     checkSubjects,
     clearCrop,
+    colourfulness,
     formatFindings,
     maskFromRects,
     type QcFinding,
@@ -246,6 +249,87 @@ describe('subjects', () => {
 
     it('works out the clear part of a crop from full-width bars only', () => {
         expect(clearCrop(douyin, bars)).toEqual({ x: 0, y: 220, width: 1080, height: 1320 });
+    });
+});
+
+describe('contrast', () => {
+    const area = { x: 0, y: 0, width: 200, height: 100 };
+    const solid = (colour: string) =>
+        sharp({ create: { width: 200, height: 100, channels: 3, background: colour } })
+            .png()
+            .toBuffer();
+    const withBlock = async (base: string, blocks: { colour: string; left: number }[]) =>
+        sharp(await solid(base))
+            .composite(
+                await Promise.all(
+                    blocks.map(async ({ colour, left }) => ({
+                        input: await sharp({
+                            create: { width: 40, height: 40, channels: 3, background: colour },
+                        })
+                            .png()
+                            .toBuffer(),
+                        left,
+                        top: 30,
+                    })),
+                ),
+            )
+            .png()
+            .toBuffer();
+
+    it('fails a single-tone headline that blends into what is behind it', async () => {
+        const background = await solid('#d8d8d8');
+        const findings = await checkContrast({
+            target: 'youtube',
+            withText: await withBlock('#d8d8d8', [{ colour: '#ffffff', left: 20 }]),
+            background,
+            area,
+            crop: area,
+        });
+        expect(findings.map((finding) => finding.level)).toEqual(['fail']);
+    });
+
+    it('passes dark type on a light ground and outlined type on anything', async () => {
+        const cream = await solid('#f5eedc');
+        expect(
+            await checkContrast({
+                target: 'youtube',
+                withText: await withBlock('#f5eedc', [{ colour: '#121212', left: 20 }]),
+                background: cream,
+                area,
+                crop: area,
+            }),
+        ).toEqual([]);
+        // 白字黑描边压在中灰上：白的一头拉不开，黑的一头拉得开。
+        const grey = await solid('#8a8a8a');
+        expect(
+            await checkContrast({
+                target: 'youtube',
+                withText: await withBlock('#8a8a8a', [
+                    { colour: '#ffffff', left: 20 },
+                    { colour: '#000000', left: 80 },
+                ]),
+                background: grey,
+                area,
+                crop: area,
+            }),
+        ).toEqual([]);
+    });
+});
+
+describe('colourfulness', () => {
+    it('warns on a nearly grey cover and passes a colourful one', async () => {
+        const grey = await sharp({
+            create: { width: 320, height: 180, channels: 3, background: '#9a9a96' },
+        })
+            .png()
+            .toBuffer();
+        const orange = await sharp({
+            create: { width: 320, height: 180, channels: 3, background: '#ff7a1a' },
+        })
+            .png()
+            .toBuffer();
+        expect(checkColourfulness('youtube', await colourfulness(grey))).toHaveLength(1);
+        expect(checkColourfulness('youtube', await colourfulness(orange))).toEqual([]);
     });
 });
 
