@@ -2,7 +2,7 @@ import { renameSync, writeFileSync } from 'node:fs';
 import sharp from 'sharp';
 import type { AgentCanvasPlan } from './canvas.ts';
 
-async function assertGenerateSize(sourcePath: string, plan: AgentCanvasPlan): Promise<void> {
+async function normalizeGenerateSize(sourcePath: string, plan: AgentCanvasPlan): Promise<void> {
     const image = sharp(sourcePath, { failOn: 'error' });
     const meta = await image.metadata();
     if (meta.width === undefined || meta.height === undefined) {
@@ -10,11 +10,16 @@ async function assertGenerateSize(sourcePath: string, plan: AgentCanvasPlan): Pr
             `agent image size is missing, expected ${plan.generateWidth}x${plan.generateHeight}.`,
         );
     }
-    if (meta.width !== plan.generateWidth || meta.height !== plan.generateHeight) {
-        throw new Error(
-            `agent image is ${meta.width}x${meta.height}, expected ${plan.generateWidth}x${plan.generateHeight}.`,
-        );
+    if (meta.width === plan.generateWidth && meta.height === plan.generateHeight) {
+        return;
     }
+    // 模型不总按提示词给尺寸（agy 常给同比例小图）。和 model 源一致：归一到生成计划
+    // 尺寸再裁，比例偏差由 cover 裁掉，别在模型跑完之后才把图扔掉。
+    const normalized = await sharp(sourcePath, { failOn: 'error' })
+        .resize(plan.generateWidth, plan.generateHeight, { fit: 'cover' })
+        .png()
+        .toBuffer();
+    writeFileSync(sourcePath, normalized);
 }
 
 function writeFinishedPng(outputPath: string, bytes: Buffer, sourcePath: string): void {
@@ -28,7 +33,7 @@ function writeFinishedPng(outputPath: string, bytes: Buffer, sourcePath: string)
 }
 
 export async function cropAgentImage(sourcePath: string, plan: AgentCanvasPlan): Promise<Buffer> {
-    await assertGenerateSize(sourcePath, plan);
+    await normalizeGenerateSize(sourcePath, plan);
     return sharp(sourcePath)
         .extract({
             left: plan.cropLeft,

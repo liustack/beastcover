@@ -57,7 +57,7 @@ import {
 import { type DoctorReport, lookupCommandOnPath, renderDoctorReport, runDoctor } from './doctor.ts';
 import { runModelApi as defaultRunModelApi, selectModelProvider } from './model/index.ts';
 import { buildModelPrompt } from './model/prompt.ts';
-import { tempCacheDir, tempRefsDir } from './paths.ts';
+import { newRunDir, tempCacheDir, tempRefsDir } from './paths.ts';
 import {
     type FamilyName,
     getPlatform,
@@ -138,14 +138,17 @@ export type CliRuntimeOverrides = Partial<CliRuntime>;
 
 function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
     const configPath = overrides.configPath ?? CONFIG_PATH;
+    const stderr = overrides.stderr ?? process.stderr;
     const vision = {
         platform: process.platform,
         binDir: join(dirname(configPath), 'bin'),
         lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
+        // 沙箱写不进 home 时降级临时目录，这行提示教 agent 怎么替用户申请持久权限。
+        note: (line: string) => stderr.write(`${line}\n`),
     };
     return {
         stdout: overrides.stdout ?? process.stdout,
-        stderr: overrides.stderr ?? process.stderr,
+        stderr,
         cwd: overrides.cwd ?? process.cwd(),
         configPath,
         openRenderer: overrides.openRenderer ?? openRenderer,
@@ -513,7 +516,7 @@ function subjectLine(subject: LoadedSubject | undefined): string[] {
     const how =
         subject.layer.method === 'transparent'
             ? 'used as a transparent PNG'
-            : 'cut out on this machine with macOS Vision';
+            : `cut out on this machine with macOS Vision, saved at ${subject.layer.cutoutPath}`;
     return [`Subject: ${subject.path} (${how})`];
 }
 
@@ -944,9 +947,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         byFamily.set(family, [...(byFamily.get(family) ?? []), target]);
                     }
                     const stem = basename(outputPath, extname(outputPath));
+                    const runDir = newRunDir();
                     const lines: string[] = [];
                     for (const [family, targets] of byFamily) {
-                        const generatedPath = join(tempCacheDir(), `${stem}-${family}.png`);
+                        const generatedPath = join(runDir, `${stem}-${family}.png`);
                         const prompt = buildEnvelopePrompt({
                             style,
                             subject: text,
@@ -977,6 +981,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
                             );
                         }
+                        // 原图路径打印给调用方：值得留就拷走，临时目录会被系统清。
+                        lines.push(`Original: ${generatedPath}`);
                     }
 
                     runtime.stdout.write(
@@ -1034,9 +1040,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         byFamily.set(family, [...(byFamily.get(family) ?? []), target]);
                     }
                     const stem = basename(outputPath, extname(outputPath));
+                    const runDir = newRunDir();
                     const lines: string[] = [];
                     for (const [family, targets] of byFamily) {
-                        const generatedPath = join(tempCacheDir(), `${stem}-${family}.png`);
+                        const generatedPath = join(runDir, `${stem}-${family}.png`);
                         const prompt = buildModelPrompt({
                             style,
                             subject: text,
@@ -1062,6 +1069,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                 `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
                             );
                         }
+                        // 原图路径打印给调用方：值得留就拷走，临时目录会被系统清。
+                        lines.push(`Original: ${generatedPath}`);
                     }
 
                     runtime.stdout.write(

@@ -17,6 +17,8 @@ export interface SubjectLayer {
     bust: boolean;
     /** 找到的脸在这张图里的位置。有脸时版式按脸定大小 */
     face?: FaceBox;
+    /** 抠图结果在暂存区的路径，透明 PNG 直接用时没有。打印给调用方，值得留就拷走 */
+    cutoutPath?: string;
 }
 
 /** 人脸框，0 到 1，原点在左上角，x、y 是中心 */
@@ -177,6 +179,7 @@ export async function prepareSubject(
         method,
         bust: shaped.bust,
         ...(shaped.face === undefined ? {} : { face: shaped.face }),
+        ...(method === 'transparent' ? {} : { cutoutPath: sourcePath }),
     };
 }
 

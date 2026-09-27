@@ -8,7 +8,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentRunInput } from './agent/index.ts';
@@ -624,10 +624,10 @@ describe('BeastCover CLI', () => {
 
         expect(exitCode).toBe(0);
         expect(runAgent).toHaveBeenCalledOnce();
-        // 原图暂存进系统临时目录，项目目录里只有成品路径（mock 不落盘）。
-        expect(runAgent.mock.calls[0]?.[0]?.generatedPath).toBe(
-            join(tmpdir(), 'beastcover', 'cache', 'beastcover-landscape.png'),
-        );
+        // 原图暂存进每次运行独立的临时子目录：并发的两个任务不会互相覆盖。
+        const generated = runAgent.mock.calls[0]?.[0]?.generatedPath ?? '';
+        expect(generated.startsWith(join(tmpdir(), 'beastcover', 'cache', 'run-'))).toBe(true);
+        expect(generated.endsWith(`${sep}beastcover-landscape.png`)).toBe(true);
         expect(runAgent.mock.calls[0]?.[0]?.prompt).toContain('孔版'); // fallback 风格
         expect(existsSync(join(cwd, '.beastcover'))).toBe(false);
     });
@@ -711,14 +711,16 @@ describe('BeastCover CLI', () => {
         if (localInput === undefined) {
             throw new Error('runAgent was not called.');
         }
-        const generatedPath = join(tmpdir(), 'beastcover', 'cache', 'beastcover-ultrawide.png');
+        const generatedPath = localInput.generatedPath;
+        expect(generatedPath.startsWith(join(tmpdir(), 'beastcover', 'cache', 'run-'))).toBe(true);
+        expect(generatedPath.endsWith(`${sep}beastcover-ultrawide.png`)).toBe(true);
         expect(localInput).toMatchObject({
             provider: 'codex',
             commandPath: '/fake/codex',
-            generatedPath,
             targets: [{ preset: 'wechat', outputPath }],
             verbose: false,
         });
+        expect(printed).toContain(`Original: ${generatedPath}`);
         expect(localInput.prompt).toContain(`save it to ${generatedPath}. `);
         expect(localInput.prompt).toContain(
             '主体集中在画面正中，上下边缘和左右两侧只放背景. Landscape 1536x1024',
@@ -1344,16 +1346,21 @@ describe('BeastCover CLI', () => {
         );
 
         expect(exitCode).toBe(0);
-        const cacheDir = join(tmpdir(), 'beastcover', 'cache');
+        const paths = runAgent.mock.calls.map(([input]) => input.generatedPath);
         expect(
             runAgent.mock.calls.map(([input]) => [
-                input.generatedPath,
+                basename(input.generatedPath),
                 input.targets.map((target) => target.preset),
             ]),
         ).toEqual([
-            [join(cacheDir, 'beastcover-ultrawide.png'), ['wechat', 'x']],
-            [join(cacheDir, 'beastcover-portrait.png'), ['xiaohongshu', 'douyin']],
+            ['beastcover-ultrawide.png', ['wechat', 'x']],
+            ['beastcover-portrait.png', ['xiaohongshu', 'douyin']],
         ]);
+        // 同一次运行的两个族共用一个 run 目录，族内复用、跨运行隔离。
+        expect(dirname(paths[0] ?? '')).toBe(dirname(paths[1] ?? ''));
+        expect(
+            dirname(paths[0] ?? '').startsWith(join(tmpdir(), 'beastcover', 'cache', 'run-')),
+        ).toBe(true);
         const printed = stdout.chunks.join('');
         expect(printed).toContain(
             `Created ${join(cwd, 'beastcover-douyin.png')}\nCanvas: 1080x1920`,
@@ -1571,7 +1578,9 @@ describe('BeastCover CLI', () => {
         expect(cutout.mock.calls[0]?.[1].startsWith(join(tmpdir(), 'beastcover', 'cache'))).toBe(
             true,
         );
-        expect(stdout.chunks.join('')).toContain('(cut out on this machine with macOS Vision)');
+        expect(stdout.chunks.join('')).toContain(
+            'cut out on this machine with macOS Vision, saved at ',
+        );
     });
 
     it('rejects a missing subject and a subject with agent', async () => {

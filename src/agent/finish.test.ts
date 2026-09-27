@@ -127,45 +127,26 @@ describe('agent finish', () => {
         });
     }
 
-    it('rejects a source whose pixels are not the generate size', async () => {
+    it('normalizes a source that is not the generate size before cropping', async () => {
         const plan = getAgentCanvasPlan('youtube');
         const directory = tempDir('beastcover-finish-size-');
-        const sourcePath = join(directory, 'wrong.png');
+        const sourcePath = join(directory, 'small.png');
+        // agy 这类后端常给同比例的小图（如 1264x848）。和 model 源一致：归一到生成
+        // 计划尺寸再裁，不再白等一次模型后硬拒。
         await sharp({
-            create: {
-                width: 100,
-                height: 100,
-                channels: 3,
-                background: MID_GREEN,
-            },
+            create: { width: 1264, height: 848, channels: 3, background: MID_GREEN },
         })
             .png()
             .toFile(sourcePath);
 
-        let cropThrown: unknown;
-        try {
-            await cropAgentImage(sourcePath, plan);
-        } catch (error) {
-            cropThrown = error;
-        }
-        const cropMessage = cropThrown instanceof Error ? cropThrown.message : String(cropThrown);
-        expect(cropMessage).toContain('100x100');
-        expect(cropMessage).toContain('1536x1024');
-
-        let finishThrown: unknown;
-        try {
-            await finishAgentImage({
-                sourcePath,
-                outputPath: join(directory, 'out.png'),
-                plan,
-            });
-        } catch (error) {
-            finishThrown = error;
-        }
-        const finishMessage =
-            finishThrown instanceof Error ? finishThrown.message : String(finishThrown);
-        expect(finishMessage).toContain('100x100');
-        expect(finishMessage).toContain('1536x1024');
+        const result = await finishAgentImage({
+            sourcePath,
+            outputPath: join(directory, 'out.png'),
+            plan,
+        });
+        expect([result.outputWidth, result.outputHeight]).toEqual([1280, 720]);
+        const meta = await sharp(join(directory, 'out.png')).metadata();
+        expect([meta.width, meta.height]).toEqual([1280, 720]);
     });
 
     it('rejects a source that is not an image', async () => {

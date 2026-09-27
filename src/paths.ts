@@ -1,3 +1,4 @@
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -16,4 +17,13 @@ export function tempRefsDir(): string {
 
 export function tempCacheDir(): string {
     return join(tempRoot(), 'cache');
+}
+
+/**
+ * 每次运行一个独立暂存子目录。不同目录同时出图时各写各的，
+ * 全局同名文件会互相覆盖（两个任务的封面都变成后写的那张）。
+ */
+export function newRunDir(): string {
+    mkdirSync(tempCacheDir(), { recursive: true });
+    return mkdtempSync(join(tempCacheDir(), 'run-'));
 }
