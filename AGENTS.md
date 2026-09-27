@@ -6,21 +6,22 @@ Provide the `beastcover` CLI and its agent distribution surfaces. BeastCover mak
 
 The name plays on Beauty and the Beast: a cover needs that kind of contrast and impact, because people see the title and the cover first and skip anything that does not grab them. The product contract is covers that get the click, with every platform version of one piece in the same style and palette.
 
+A cover is the promise of the content, not its decoration: it wins on an idea (a conflict, a before and after, the stakes, a surprising result), not on putting the title on a wall. Every platform has several cover types that keep winning, so the product is a set of cover types, and every cover is checked after rendering before it counts as done.
+
 ## Scope
 
 Phase one currently ships these working surfaces:
 
-- `render` turns the built-in HTML template and a headline into a local PNG cover
+- `gen --template <type>` renders one of ten cover types locally: `big-type`, `number`, `face-text`, `face-stakes`, `versus`, `before-after`, `scene-title`, `callout`, `collage`, `mood`. Without `--template` the type is picked from the inputs (person, photo count). Retired names (`text`, `poster`, `compare`) and flags (`--before`, `--after`, `--callout`) fail pointing at the new spelling
+- `--photo` (repeatable) takes stock refs or local paths, `--subject` a person (transparent PNG, or a photo cut out on macOS 14+ with Vision), `--scheme` one of six colour schemes, `--tag`, `--number`, `--labels`, `--look`, `--fit` per type. A `*keyword*` in the headline gets the accent treatment
+- `--scene "<description>"` paints the picture for `scene-title`, `mood`, and `face-stakes` when there is no photo: the user's image model key first, then their codex or agy CLI, else a colour gradient with a printed note. `--via` names one painter and nothing else is tried
+- Every render is checked after rendering (QC): failures print in red and the files are still written, a template's other placement is tried when the first fails, and a feed preview sheet is saved and printed
 - `stock search` and `stock fetch` find and download free photos from Openverse (cc0 and pdm only, no key) or Pexels (needs `stock.pexels.apiKey`)
-- `gen --source stock --photo <ref-or-path>` composes a photo cover: the photo is inlined as a data URI, the project palette tints it, and the headline sits on a scrim
-- `gen --source render --template text|poster|number|compare` picks the text cover: a calm headline, a loud full-bleed poster with an optional `--tag`, a huge `--number` beside a short line, or a `--before`/`--after` split with an arrow
-- `gen --subject <path>` puts a person or object on a render or stock cover: a transparent PNG as is, or a photo cut out on macOS 14+ with Vision
-- `gen --source stock` frames the photo around its subject (Vision faces and saliency on macOS, sharp attention elsewhere), and takes `--look natural|mono|duotone|punch` and `--fit cover|extend`
 - `agent` calls the user's own Codex or agy CLI to paint a cover, and `--remix` redraws one image or puts the person from one image into the scene of another
 - `gen --source model` paints the same styles through the user's own image API key: GPT Image (`openai`) or Nano Banana (`gemini`), keys in `model.<provider>.apiKey`. No refs or remix yet
 - The default path is completely free (free stock photos plus local HTML rendering). agent and model are opt-ins the user already pays for elsewhere
-- `styles` lists the four self-contained catalog styles
-- No workspace and no project state: the tool finishes and leaves. `--style <name>` picks a catalog style per run (fallback style otherwise), and the removed `new`/`project` commands fail pointing at `gen`
+- `styles` lists the four self-contained catalog styles, used only by `agent` and `model`. Render and stock covers take `--scheme`, and `--style` with them fails saying so
+- No workspace and no project state: the tool finishes and leaves. The removed `new`/`project` commands fail pointing at `gen`
 
 Do not add:
 
@@ -46,9 +47,13 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - Size presets are named after platforms and hold production pixels. Old ratio names fail with a message naming the replacement. `scale` controls Chromium device scale and therefore output pixel density.
 - Platforms belong to three families (landscape, portrait, ultrawide). Each family has one master size, a text area, and a focus area, all in master coordinates, and each platform has a crop box in that master plus the rectangles its app UI covers. `src/platforms/index.test.ts` proves the text and focus areas sit inside every member crop and outside every covered rectangle. Change the geometry only together with that test.
 - `gen` renders one master per family at 2x or more, then crops and scales every requested platform from it with `sharp`. The renderer finds the largest font that keeps the headline inside the text area, keeps Latin words whole, and keeps punctuated clauses together when that costs under 30% of the size. Headline size is never set by fixed CSS ratios.
+- Cover types live in `src/genres/`, one file per family of recipes, all built on `genrePage` (`page.ts`): background, layers under and over the headline, and the typed headline. A type supplies `layoutFor`, optional `placements` (other spots tried when QC fails), `measureHtml`, `measureAccentHtml` for a second fitted text (the number figure, the stakes sign), and `renderHtml`. The registry (`index.ts`) declares each type's photo count, person, and accepted options; options that belong to another type fail instead of being ignored. `src/genres/genres.test.ts` renders every type on every family in real Chromium and checks the headline stays inside its text area, and that every text and figure area sits inside each platform crop and outside its covered rectangles. Change a type's geometry only together with that test.
+- Headline type (`src/render/type.ts`) stacks identical markup: outline layer, optional ring layer, fill layer on top, so outlines and synthetic weight never fight. Effects are sized in em and counted as padding when fitting, so they stay inside the safe area.
+- Fonts are never bundled. `src/render/fonts.ts` probes candidate families in the same Chromium (coverage, installed, 900-weight ink density) and picks per role (heavy, condensed, brush, round, serif). Without a heavy enough Chinese font it uses the heaviest available plus synthetic weight and prints a `Font:` note; display roles without a Chinese font degrade to heavy.
+- QC lives in `src/qc/`: the master is rendered with and without text, the pixel difference is the ink mask, macOS Vision analyses the text-free background (faces, people and body poses, text, objectness), and each platform crop is checked for the headline covering them, for busy detail under the words, and for darkness. Subject objects only count against ink on picture pixels, not on flat design bands. Without Vision the picture check is skipped with a printed note. A FAIL writes the files and marks them red; the skill says not to ship them.
+- Scene painting lives in `src/scene/`. It asks for a real photograph with no text in it, paints once per orientation (landscape serves landscape and ultrawide), and passes the per-family pictures to the type through `GenrePhoto.byFamily`.
 - agent and model run once per family, stage the raw image in the system temp dir (`$TMPDIR/beastcover/cache/`), and crop each platform from it.
 - Subject cutout lives in `src/subject/`. A PNG with at least 2% transparent pixels is used as is. Otherwise the Swift source in `vision.ts` is compiled once into `~/.beastcover/bin/vision-tool-<hash>` and run on the image, and the result is cached in `$TMPDIR/beastcover/cache/` by image hash. The compiled tool prefers `~/.beastcover/bin/` and falls back to the temp dir with a printed note when a sandbox (codex workspace-write) blocks home writes; the Swift source lives in `skills/beastcover/scripts/vision-tool.swift` and is inlined at build time via vite `?raw`. Non-macOS or macOS before 14 fails with a request for a transparent PNG. The person sits in its own subject area, above the headline, and the subject area never overlaps the text area (`src/render/layout.test.ts`).
-- Templates live in `src/render/` (`template.ts`, `poster.ts`, `number.ts`, `compare.ts`, `photo-cover.ts`) and are assembled into a `CoverTemplate` by `src/compose/templates.ts`. A template may change the layout (`layoutFor`) and may fit a second big text (`measureAccentHtml` into `accentArea`, the number figure). Options that belong to another template fail instead of being ignored.
 - Photo framing lives in `src/subject/focus.ts` (where the subject is) and `src/render/photo-cover.ts` (`placeWindow`, `photoFocusTarget`, `photoTextLayout`). The crop window keeps the whole subject box when it fits and moves its centre toward a target clear of the headline. When the subject cannot fit a family crop, `gen` suggests `--fit extend` instead of switching by itself.
 - `--remix` images go first in the model reference list, the instruction joins the subject line, and `src/agent/remix.ts` refuses images whose stock sidecar is not openverse cc0 or pdm.
 - Stock downloads are measured with sharp. The sidecar keeps the served size and, when different, the listed size. `gen` warns when a photo is stretched more than 1.5x on a platform.
@@ -72,9 +77,27 @@ src/
 │   ├── index.ts            # Platform presets, families, crops, safe areas, retired ratio names
 │   └── index.test.ts
 ├── compose/
-│   ├── index.ts            # Family masters, crops, custom canvas, thumbnail check
-│   ├── templates.ts        # --template name and options to a CoverTemplate
+│   ├── index.ts            # Family masters, crops, placements, QC per platform, custom canvas
 │   ├── guides.ts           # --guides overlay for text, focus, subject, figure, and covered areas
+│   └── index.test.ts
+├── genres/
+│   ├── index.ts            # Cover type registry, defaults from inputs, option checks
+│   ├── page.ts             # Shared page: layers, typed headline, photos, scrims, chips, font kit
+│   ├── schemes.ts          # Six colour schemes
+│   ├── options.ts          # --hook, --tag, --number parsing
+│   ├── big-type.ts         # Big type
+│   ├── number.ts           # Number hook: figure sized to its length
+│   ├── face.ts             # Face with big words, face with stakes
+│   ├── split.ts            # Versus and before-after: panels, band, labels, seam badge
+│   ├── photo.ts            # Scene title, callout, mood, and their other placements
+│   ├── collage.ts          # Two to four photos with a colour band
+│   └── genres.test.ts
+├── qc/
+│   ├── index.ts            # Ink mask, picture-only ink, overlap, busy, and brightness checks, report
+│   ├── preview.ts          # Feed preview sheet
+│   └── index.test.ts
+├── scene/
+│   ├── index.ts            # --scene painter discovery, photo prompt, gradient fallback
 │   └── index.test.ts
 ├── subject/
 │   ├── index.ts            # Transparent PNG or cutout, cache by image hash, trim
@@ -102,15 +125,12 @@ src/
 │   ├── layout.ts           # Cover layouts, subject split, headline markup, measuring probes
 │   ├── layout.test.ts
 │   ├── index.test.ts
-│   ├── poster.ts           # Poster template: full-bleed colour, dot texture, tag
-│   ├── number.ts           # Number template: fitted figure beside a short line
-│   ├── compare.ts          # Compare template: split panels, seam arrow, labels
-│   ├── templates.test.ts
-│   ├── photo-cover.ts      # Photo cover template, subject framing, looks, extend fit
+│   ├── fonts.ts            # Installed-font probe and per-role choice with degrade notes
+│   ├── type.ts             # Headline type: outline, ring, shadow, keyword highlight, tilt
+│   ├── photo-cover.ts      # Photo framing, extend fit, callout geometry
 │   ├── photo-framing.test.ts
 │   ├── photo-cover.test.ts
-│   ├── template.ts         # Built-in text-led cover template
-│   └── template.test.ts
+│   └── template.ts         # Page skeleton, headline CSS, subject layer with outline
 ├── stock/
 │   ├── index.ts            # Provider selection, search, fetch, file stems
 │   ├── types.ts            # StockHit, StockPhoto, providers, orientations
@@ -148,12 +168,13 @@ cordis.patch.yml            # DSH bundle mount
 ```bash
 beastcover styles
 beastcover gen "One headline, every platform" --preset all
-beastcover gen "封面没人点" --template poster --tag "新手必看" --style luminous_impasto
+beastcover gen "3个错误*毁了*我的频道" --template big-type --tag "新手必看" --preset xiaohongshu
 beastcover stock search "harbour dawn" --orientation landscape
-beastcover gen "The tide comes back" --source stock --photo openverse:<id> --preset wechat,x --guides
-beastcover gen "别再乱剪了" --source render --subject me.jpg --preset youtube,xiaohongshu
-beastcover gen "封面没人点" --source render --template poster --tag "新手必看" --preset all
-beastcover gen "个习惯多出两小时" --source render --template number --number 3 --preset all
+beastcover gen "The tide comes back" --photo openverse:<id> --preset wechat,x --guides
+beastcover gen "别再乱剪了" --subject me.jpg --preset youtube,xiaohongshu
+beastcover gen "15元和150元的拉面" --template versus --photo a.jpg --photo b.jpg --labels "¥15,¥150"
+beastcover gen "个习惯多出两小时" --template number --number 3 --preset all
+beastcover gen "在火山口住了一晚" --subject me.jpg --scene "a volcano crater at dusk" --number "50米"
 beastcover gen "A figure on a shore" --source agent --via codex --preset xiaohongshu
 beastcover gen "A figure on a shore" --source model --via gemini --preset xiaohongshu
 beastcover config init
@@ -168,5 +189,5 @@ beastcover doctor
 - Run `pnpm check` for type checking, Biome, and all Vitest suites.
 - Run `pnpm build` and confirm it produces `dist/main.js`.
 - Run the built CLI against the real local Chromium and inspect the generated PNG dimensions and appearance.
-- UI-facing template changes require a newly rendered PNG and visual inspection on every platform preset.
-- After template or layout changes, run `pnpm examples` and compare the regenerated covers in `examples/` against git by eye. Looks cannot be asserted in tests; this folder is the baseline. The agent examples are repainted by hand.
+- UI-facing cover type changes require newly rendered PNGs, a clean QC report, and visual inspection on every platform family.
+- After cover type or layout changes, run `pnpm examples` and compare the regenerated covers in `examples/` against git by eye. The script stops on any QC failure. Looks cannot be asserted in tests, so this folder is the baseline. The painted-scene and agent examples are repainted by hand.
