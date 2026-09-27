@@ -7,7 +7,8 @@
 <p align="center">
   <a href="https://liustack.dev">liustack.dev</a> ·
   <a href="./README.zh-CN.md">简体中文</a> ·
-  <a href="./skills/beastcover/SKILL.md">Agent skill</a>
+  <a href="./skills/beastcover/SKILL.md">Agent skill</a> ·
+  <a href="./examples/">Examples</a>
 </p>
 
 <p align="center">
@@ -18,79 +19,101 @@
   <img src="https://img.shields.io/badge/no%20API%20key-needed-4c1?style=flat-square" alt="No API key needed">
 </p>
 
+Nobody reads your best work because nobody clicks it. In the feed your content is one thumbnail among thirty, and it wins or loses in a third of a second. A designer charges $50 a cover. Thumbnail SaaS wants $20–80 a month and only does YouTube. Canva wants forty minutes of dragging, once per platform.
+
+Or: one sentence to the agent you already write with, and the cover is done. Every platform, sized right, nothing to set up, nothing to pay.
+
+<p align="center"><img src="examples/compare-youtube.jpg" alt="Before: a plain grey headline cover. After: a shocked face on hot pink with a four-character hook" width="720"></p>
+
 ## Install
 
 ```bash
 npx -y skills add liustack/beastcover -g
 ```
 
-Works with Claude Code, Codex, and any agent that reads a skill folder. Then tell it: "make a cover for this post."
+Works with Claude Code, Codex, and any agent that reads a skill folder. Then tell it: **"make a cover for this post."** The agent picks the hook, the photo, and the platforms from your content, and runs the CLI. No agent? The [CLI works on its own](#commands).
 
-## Talk to us
+## What it makes
 
-Issues are welcome any time. [Open one](https://github.com/liustack/beastcover/issues/new), or follow **[@liustack](https://x.com/liustack)** on X. Show the covers you made and tell us what the next release should fix. New releases land there first.
+<p align="center">
+  <img src="examples/subject-poster-youtube.png" alt="Shocked face on hot pink, four huge characters" width="49%">
+  <img src="examples/photo-lava-youtube.jpg" alt="Helicopter in front of erupting lava, huge white headline with a number" width="49%">
+</p>
+<p align="center">
+  <img src="examples/photo-callout-youtube.jpg" alt="A small airplane circled in red with an arrow" width="49%">
+  <img src="examples/agent-impasto-youtube.jpg" alt="Oil-painting style cover of a person coding at night" width="49%">
+</p>
 
-## Highlights
+Every one is a single command, collected with the commands that made them in [examples/](examples/).
 
-**🖼️ One sentence, one cover.** Your agent finds a photo you can use for free, lays the post's headline and palette over it, and renders a PNG on your machine.
+## Why these get clicked
 
-**🆓 Free, and no API key.** Openverse is the default source, and it only returns CC0 and public domain photos, so there is nothing to credit. Add a Pexels key and Pexels goes first.
+The formulas are measured, not guessed, from breakout covers (90 top YouTube thumbnails measured pixel by pixel, 136 trending Bilibili covers, and the public 300k-video studies):
 
-**📐 One command, every platform.** `--preset all` makes covers for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, and TikTok at once, plus the Open Graph image for your page and a GitHub social preview, with the headline as big as each safe area allows.
+- **A face that carries the frame.** Breakout thumbnails put the face at a median 27% of frame height. BeastCover cuts your photo to head and shoulders on the machine and sizes it so the face is about 30%, with a white outline that separates it from any background.
+- **A hook, not a title.** Covers with fewer words win. The CLI warns when your headline is long for a YouTube thumbnail or a Bilibili cover, and `--hook` puts the short line on video covers while WeChat and X keep the full title.
+- **Bright and loud.** Dark thumbnails consistently lag. Poster backgrounds are full-bleed accent colours, and `--look punch` grades photos toward saturation and contrast.
+- **Nothing lands under app UI.** Douyin's buttons, YouTube's duration badge, Bilibili's bottom bar, WeChat's forward crop: the headline and the subject are fitted inside what every requested platform actually shows, and the geometry is locked by tests.
+- **Readable at 160 pixels.** After rendering, the CLI checks how big your headline is in each platform's feed thumbnail and warns when it drops below legibility.
 
-**🔒 Your draft stays home.** Rendering happens in a local Chromium. The only network calls are the photo search and the photo download.
+## One command, every platform
 
-**🎨 Painted covers when you bring your own model.** The default path costs nothing: free photos plus local rendering. When you want a painted cover in one of four bold styles, bring what you already pay for: the Codex or agy CLI on your subscription (`--source agent`), or a GPT Image or Nano Banana API key (`--source model`).
+```bash
+beastcover gen "3个错误毁了我" --preset all
+```
 
-Real covers with the commands that made them are in [examples/](examples/).
+| Preset | Pixels | Use |
+| :-- | :-- | :-- |
+| `youtube` | 1280×720 | YouTube thumbnail |
+| `bilibili` | 1146×717 | Bilibili video cover |
+| `wechat` | 900×383 | WeChat article cover |
+| `x` | 1600×640 | X article cover |
+| `xiaohongshu` / `instagram` | 1080×1440 | Note and post covers |
+| `instagram-reels` / `douyin` / `tiktok` | 1080×1920 | Vertical video covers |
+| `og` | 1200×630 | Open Graph link preview |
+| `github` | 1280×640 | GitHub social preview |
+
+Platforms with close ratios share one master and are cropped from it; across shapes the cover is laid out again, so the subject never gets amputated. `--preset` takes one name, a comma list, or `all`.
+
+## Free by default, yours to upgrade
+
+| Path | Cost | What happens |
+| :-- | :-- | :-- |
+| Text covers (`--template text/poster/number/compare`) | Free | Rendered in a local Chromium, nothing leaves your machine |
+| Photo covers (`--source stock`) | Free | CC0 and public-domain photos from Openverse, nothing to credit; a Pexels key is optional |
+| Painted covers (`--source agent`) | Your existing subscription | Your Codex or agy CLI paints one of four catalog styles |
+| Painted covers (`--source model`) | Your API key | GPT Image or Nano Banana, key in your config |
+
+No accounts, no credits, no watermarks, no upsell. There is nothing to set up and nothing left behind: the cover lands in the directory you run from, downloaded photos and their license records stage in the system temp folder with their paths printed, and your project and your git stay untouched.
 
 ## Commands
-
-Your agent runs these for you. You can also run them yourself:
 
 ```bash
 npm i -g @liustack/beastcover
 npx --yes --package @liustack/beastcover playwright install chromium
 
-beastcover stock search "harbour night" --orientation landscape
-beastcover gen "You can't catch the traffic you don't understand" --source stock --photo openverse:<id> --preset all
+beastcover gen "我看傻了" --template poster --subject me.jpg --preset youtube,xiaohongshu
+beastcover stock search "volcano helicopter" --orientation landscape
+beastcover gen "离岩浆50米" --source stock --photo openverse:<id> --look punch --preset all
+beastcover gen "深夜写代码的人" --source agent --via codex --style luminous_impasto
+beastcover styles
 ```
 
-Install Chromium through the Playwright that ships with beastcover. A bare `npx playwright` can pick up an older copy from the npx cache and download a browser that does not match.
+Install Chromium through the Playwright that ships with beastcover: a bare `npx playwright` can pick up an older copy and download a browser that does not match.
 
-`stock search` prints one photo per line: ref, size, license, creator, thumbnail URL. Pick one and pass its ref to `--photo`. `--photo` also takes a local image path.
+`--subject` takes your photo: a transparent PNG is used as is, and on macOS 14+ a normal photo is cut out on your machine with the system's own segmentation, so nothing is uploaded and your face is never redrawn by a model. `--guides` draws every safe area on the cover when you want to check a layout. `--scale 3` renders a 4K YouTube thumbnail.
 
-There is nothing to set up and nothing left behind: the cover lands in the directory you run from, downloaded photos and their license records stage in the system temp folder with their paths printed, and your project and your git stay untouched. `--style` picks one of the four catalog styles per run.
+## Network and privacy
 
-Photo covers are framed around the photo's own subject and keep it clear of the headline. `--look mono|duotone|punch` grades the photo, `--fit extend` keeps a photo whole when its shape does not suit the platform, filling the rest with a blurred copy, and `--callout` circles the subject in red with an arrow pointing at it. With an agent CLI, `--source agent --remix me.jpg` redraws your image in the project style, and a second `--remix scene.jpg` puts you into that scene.
+| Source | What leaves your machine |
+| :-- | :-- |
+| `render` | Nothing |
+| `stock` | The search words, and the request that downloads the chosen photo |
+| `--subject` | Nothing. The cutout runs on your Mac |
+| `agent` | Goes through your own CLI and subscription. BeastCover never sees it |
+| `model` | The style prompt and your subject line go to OpenAI or Gemini with your API key. No local file is uploaded |
 
-Add `--subject me.jpg` to put a person on the cover: they stand on one side with a white outline, and the headline moves to the other side. A transparent PNG is used as is. On macOS 14 or newer, a normal photo is cut out on your machine with the system's own subject cutout, so nothing is uploaded and your face is not redrawn. Elsewhere, cut the photo out first (iPhone and macOS "Copy Subject", remove.bg, Photoshop) and pass the PNG.
-
-Without a photo, `--source render` makes a text-only cover. `--template poster` makes it loud: a full-bleed palette colour, huge type, and an optional `--tag`. `--template number --number 3` puts a huge figure beside a short line. `--template compare --before old.jpg --after new.jpg` splits two images with an arrow on the seam. Every template is fitted to every platform's safe area. A video thumbnail wants a hook of a few words, while WeChat and X article cards show the title next to the cover, so `--hook "It fails"` puts the short line on the video and note covers and keeps the full headline on WeChat and X. With an agent CLI, `--source agent --via codex` paints a cover in the project style, and `beastcover styles` lists all four. With an API key configured, `--source model` paints the same styles through GPT Image (`--via openai`) or Nano Banana (`--via gemini`).
-
-## Sizes
-
-| Preset | Pixels | Use | Shares a master with |
-| :-- | :-- | :-- | :-- |
-| `youtube` | 1280×720 | YouTube thumbnail | `bilibili`, `og`, `github` |
-| `bilibili` | 1146×717 | Bilibili video cover | `youtube`, `og`, `github` |
-| `wechat` | 900×383 | WeChat article cover | `x` |
-| `x` | 1600×640 | X article cover | `wechat` |
-| `xiaohongshu` | 1080×1440 | Xiaohongshu note cover | the other portrait presets |
-| `instagram` | 1080×1440 | Instagram post | the other portrait presets |
-| `instagram-reels` | 1080×1920 | Instagram Reels cover | the other portrait presets |
-| `douyin` | 1080×1920 | Douyin video cover | the other portrait presets |
-| `tiktok` | 1080×1920 | TikTok video cover | the other portrait presets |
-| `og` | 1200×630 | Open Graph link preview for a web page | `youtube`, `bilibili`, `github` |
-| `github` | 1280×640 | GitHub repository social preview | `youtube`, `bilibili`, `og` |
-
-`--preset` takes one name, a comma list such as `wechat,x,douyin`, or `all`. Several presets write `<name>-<platform>.png`. The default is `youtube`.
-
-Platforms with close ratios share one master, and each cover is cropped from it. The WeChat cover is the middle of the X banner, and the Xiaohongshu cover is the middle of the Douyin frame. The headline sits in the area every platform in the group shows and no app UI covers: the Douyin buttons, the YouTube duration badge, the Bilibili stats bar. Add `--guides` to draw that area on each cover and check the layout.
-
-After rendering, BeastCover works out how big the headline will be in each platform's feed thumbnail and warns when it drops below 10px. A shorter headline reads bigger.
-
-For a canvas no platform uses, set `--width` and `--height`. The old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone, and using one tells you which preset replaces it.
+Photo downloads connect straight to the image host, over https only, with private addresses blocked and a 40 MB cap per photo.
 
 ## Configuration
 
@@ -98,23 +121,10 @@ For a canvas no platform uses, set `--width` and `--height`. The old ratio names
 beastcover config set stock.pexels.apiKey <key>
 beastcover config set model.openai.apiKey <key>
 beastcover config set model.gemini.apiKey <key>
-beastcover config set render.preset xiaohongshu
 beastcover config show
 ```
 
-Settings live in `~/.beastcover/config.json` with file mode 0600, and `config show` masks every key. The Openverse `stock.openverse.clientId` and `clientSecret` are optional and only raise the rate limit.
-
-## Network and privacy
-
-| Source | What leaves your machine |
-| :-- | :-- |
-| `stock` | The search words, and the request that downloads the chosen photo |
-| `render` | Nothing |
-| `--subject` | Nothing. The cutout runs on your Mac |
-| `agent` | Goes through your own CLI and subscription. BeastCover never sees it |
-| `model` | The style prompt and your subject line go to OpenAI or Gemini with your API key. No local file is uploaded |
-
-Photo downloads connect straight to the image host, over https only, with private addresses blocked and a 40 MB cap per photo. A proxy set only through `HTTPS_PROXY` is not used. Proxies that take over DNS (fake-ip mode) work.
+Settings live in `~/.beastcover/config.json` with file mode 0600, and `config show` masks every key.
 
 ## Diagnosis
 
@@ -124,12 +134,17 @@ beastcover doctor
 
 Runs offline and checks the Node.js version, Chromium, config file permissions, and whether `codex` or `agy` is on your PATH.
 
+## Talk to us
+
+Issues are welcome any time. [Open one](https://github.com/liustack/beastcover/issues/new), or follow **[@liustack](https://x.com/liustack)** on X. Show the covers you made and tell us what the next release should fix.
+
 ## Development
 
 ```bash
 pnpm install
 pnpm check
 pnpm build
+pnpm examples   # regenerate the example covers, then compare against git by eye
 ```
 
 ## License
