@@ -2,7 +2,7 @@
 
 <h1 align="center">BeastCover</h1>
 
-<p align="center"><b>Write the post. The cover comes free.</b></p>
+<p align="center"><b>The beast-mode generator for covers that get the click</b></p>
 
 <p align="center">
   <a href="https://liustack.dev">liustack.dev</a> ·

@@ -2,7 +2,7 @@
 
 <h1 align="center">BeastCover</h1>
 
-<p align="center"><b>文章写完，封面顺手就有</b></p>
+<p align="center"><b>全网最强爆款封面生成器</b></p>
 
 <p align="center">
   <a href="https://liustack.dev">liustack.dev</a> ·
