@@ -1,0 +1,2 @@
+# Windows checkouts must keep LF, or Biome flags every line as reformatted.
+* text=auto eol=lf
