@@ -38,7 +38,7 @@ import {
     photoSubject,
     rectCss,
 } from './page.ts';
-import { SCHEMES, type SchemeName, schemeGradient } from './schemes.ts';
+import { isLightScheme, SCHEMES, type SchemeName, schemeGradient } from './schemes.ts';
 
 // 脸高占无遮挡区高度的比例。爆款要求脸高至少三分之一，四到五成更好（research.md 第 2.1 节）。
 const FACE_TEXT_SHARE = 0.42;
@@ -115,12 +115,12 @@ export interface FaceTextRequest {
 
 export function faceTextTemplate(request: FaceTextRequest): CoverTemplate {
     // 青底：冷底不用边缘光就能把暖色的脸分开，又比海军蓝亮，信息流里不显暗。
-    const scheme = SCHEMES[request.scheme ?? 'teal'];
-    const type: TypeSpec = {
-        style: 'outline',
-        font: request.fonts.choose('heavy'),
-        highlight: 'color',
-    };
+    const schemeName = request.scheme ?? 'teal';
+    const scheme = SCHEMES[schemeName];
+    // 浅底方案是深色字直接压底，描边和字同色会糊成一团，改用荧光笔标重点。
+    const type: TypeSpec = isLightScheme(schemeName)
+        ? { style: 'ink', font: request.fonts.choose('heavy'), highlight: 'marker' }
+        : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
     const tag = eyebrow(request.tag, { background: scheme.type.accent, ink: scheme.type.stroke });
     const page = (layout: CoverLayout, headline: Headline, subject: SubjectLayer | undefined) => {
         const measure = subject === undefined;

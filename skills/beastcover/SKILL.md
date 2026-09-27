@@ -95,6 +95,8 @@ When the output has a `Headline:` line, the text is long for a YouTube or Bilibi
 
 `--scheme` picks one of six colour schemes, each one main colour and one accent with strong contrast. Keep one scheme for every platform version of the same piece.
 
+`cream` and `lemon` put dark type straight on a light ground, so they only work where the words sit on flat colour: `big-type`, `number`, `face-text`, `versus`, `before-after`, `collage`. The types that put words on the picture refuse them.
+
 | Scheme | Looks like | Suits |
 | :-- | :-- | :-- |
 | `cream` | Cream paper, near-black type, yellow marker | `big-type` default. Knowledge, calm explainers |

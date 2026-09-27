@@ -10,7 +10,7 @@ import { faceStakesTemplate, faceTextTemplate } from './face.ts';
 import { numberGenreTemplate } from './number.ts';
 import type { FontKit, GenrePhoto } from './page.ts';
 import { calloutTemplate, moodTemplate, sceneTitleTemplate } from './photo.ts';
-import type { SchemeName } from './schemes.ts';
+import { isLightScheme, type SchemeName } from './schemes.ts';
 import { beforeAfterTemplate, versusTemplate } from './split.ts';
 
 export const GENRE_NAMES = [
@@ -46,6 +46,8 @@ interface GenreSpec {
     options: readonly GenreOption[];
     /** 必须给的选项，和缺了时怎么说 */
     requires?: Partial<Record<GenreOption, string>>;
+    /** 字压在纯色上（不是照片上）：只有这样浅底方案 cream、lemon 的深色字才读得出 */
+    flatGround: boolean;
     /** 一句话说这个类型是什么，放进帮助和报错 */
     summary: string;
 }
@@ -55,6 +57,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
         photos: [0, 0],
         subject: false,
         options: ['tag'],
+        flatGround: true,
         summary: 'the headline is the picture: heavy type on a plain or gradient background',
     },
     number: {
@@ -62,18 +65,21 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
         subject: false,
         options: ['tag', 'number'],
         requires: { number: '--template number needs --number <figure>, like --number 3.' },
+        flatGround: true,
         summary: 'one huge figure beside a short line',
     },
     'face-text': {
         photos: [0, 0],
         subject: true,
         options: ['tag'],
+        flatGround: true,
         summary: 'a cut-out person on one side, two to four big words on the other',
     },
     'face-stakes': {
         photos: [1, 1],
         subject: true,
         options: ['number', 'look', 'fit'],
+        flatGround: false,
         summary:
             'a person inside the scene of the story, with the stakes on a tilted sign (--number)',
     },
@@ -84,36 +90,42 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
         requires: {
             labels: '--template versus needs --labels for the two price tags, like --labels "¥15,¥1500".',
         },
+        flatGround: true,
         summary: 'two equal halves with a price tag each and a VS badge in the seam',
     },
     'before-after': {
         photos: [2, 2],
         subject: false,
         options: ['labels', 'look'],
+        flatGround: true,
         summary: 'before on the left (or top), after on the right (or bottom), an arrow between',
     },
     'scene-title': {
         photos: [1, 1],
         subject: false,
         options: ['look', 'fit'],
+        flatGround: false,
         summary: 'a full-bleed scene with an outlined title in its quiet part',
     },
     callout: {
         photos: [1, 1],
         subject: false,
         options: ['look'],
+        flatGround: false,
         summary: 'a red circle and an arrow on the photo subject, with a short question',
     },
     collage: {
         photos: [COLLAGE_MIN, COLLAGE_MAX],
         subject: false,
         options: ['look'],
+        flatGround: true,
         summary: 'two to four photos in a grid with the title on a colour band',
     },
     mood: {
         photos: [1, 1],
         subject: false,
         options: ['look', 'fit'],
+        flatGround: false,
         summary: 'one strong photo with a small, quiet line',
     },
 };
@@ -143,9 +155,16 @@ export function checkGenreInputs(
         photos: number;
         subject: boolean;
         options: Readonly<Partial<Record<GenreOption, unknown>>>;
+        scheme?: SchemeName;
     },
 ): void {
     const spec = GENRES[name];
+    if (inputs.scheme !== undefined && isLightScheme(inputs.scheme) && !spec.flatGround) {
+        const flat = GENRE_NAMES.filter((genre) => GENRES[genre].flatGround);
+        throw new Error(
+            `--scheme ${inputs.scheme} is dark type for words on flat colour (${flat.join(', ')}). ${name} puts its words on the picture: use navy, night, orange, or teal.`,
+        );
+    }
     const [min, max] = spec.photos;
     if (inputs.photos < min || inputs.photos > max) {
         if (max === 0) {

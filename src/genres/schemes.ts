@@ -55,7 +55,8 @@ const SCHEME_TABLE = {
             fill: '#121212',
             stroke: '#121212',
             ring: '#FFFFFF',
-            accent: '#FF3B30',
+            // 白字压红块要到 4.5:1，#FF3B30 只有 3.5:1。
+            accent: '#E0241B',
             accentInk: '#FFFFFF',
         },
     },

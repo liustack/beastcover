@@ -32,6 +32,7 @@ import {
     parseGenre,
 } from './index.ts';
 import { fontKit, type GenrePhoto } from './page.ts';
+import { isLightScheme, SCHEME_NAMES, SCHEMES } from './schemes.ts';
 import { splitLabelRects } from './split.ts';
 
 function inside(inner: Rect, outer: Rect): boolean {
@@ -165,6 +166,70 @@ describe('cover type registry', () => {
         expect(() =>
             checkGenreInputs('mood', { photos: 1, subject: false, options: { tag: 'x' } }),
         ).toThrow('--tag works with --template big-type, number, face-text.');
+        // 浅底方案的深色字只能压纯色，压照片的类型直接拒绝。
+        expect(() =>
+            checkGenreInputs('scene-title', {
+                photos: 1,
+                subject: false,
+                options: {},
+                scheme: 'cream',
+            }),
+        ).toThrow('scene-title puts its words on the picture');
+        expect(() =>
+            checkGenreInputs('face-text', {
+                photos: 0,
+                subject: true,
+                options: {},
+                scheme: 'lemon',
+            }),
+        ).not.toThrow();
+    });
+});
+
+describe('schemes', () => {
+    const luminance = (hex: string) => {
+        const [r, g, b] = [1, 3, 5].map((at) => {
+            const c = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+            return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        }) as [number, number, number];
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (a: string, b: string) => {
+        const [x, y] = [luminance(a), luminance(b)];
+        return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    };
+
+    it('puts every pair of colours that touch at 4.5:1 or more', () => {
+        for (const name of SCHEME_NAMES) {
+            const { base, baseDeep, type } = SCHEMES[name];
+            const pairs: [string, string, string][] = [
+                // 高亮色块上的字
+                ['block highlight', type.accentInk ?? type.stroke, type.accent],
+            ];
+            if (isLightScheme(name)) {
+                // 浅底：深色字直接压底，荧光笔高亮压在强调色上
+                pairs.push(
+                    ['type on base', type.fill, base],
+                    ['type on deep base', type.fill, baseDeep],
+                );
+            } else {
+                // 深底：字和强调色都靠描边
+                pairs.push(
+                    ['type on outline', type.fill, type.stroke],
+                    ['accent on outline', type.accent, type.stroke],
+                );
+            }
+            for (const [what, a, b] of pairs) {
+                expect(contrast(a, b), `${name} ${what}`).toBeGreaterThanOrEqual(4.5);
+            }
+            // 荧光笔只垫在字的下三分之一，字的其余部分压在底色上。强调色同时要托白字（色块）
+            // 和黑字（荧光笔），两头都到 4.5:1 的颜色不存在，荧光笔按大字的底线 3:1 算。
+            if (isLightScheme(name)) {
+                expect(contrast(type.fill, type.accent), `${name} marker`).toBeGreaterThanOrEqual(
+                    3,
+                );
+            }
+        }
     });
 });
 

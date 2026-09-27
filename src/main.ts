@@ -740,6 +740,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         `--scene paints the picture for --template ${[...SCENE_GENRES].join(', ')}. ${genre} needs real photos.`,
                     );
                 }
+                const scheme: SchemeName | undefined =
+                    options.scheme === undefined ? undefined : parseScheme(options.scheme);
                 checkGenreInputs(genre, {
                     photos: pictures,
                     subject: hasSubject,
@@ -750,14 +752,13 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         look: options.look,
                         fit: options.fit,
                     },
+                    ...(scheme === undefined ? {} : { scheme }),
                 });
                 parseEmphasis(text);
                 const hook = options.hook === undefined ? undefined : parseHook(options.hook);
                 if (hook !== undefined) {
                     parseEmphasis(hook);
                 }
-                const scheme: SchemeName | undefined =
-                    options.scheme === undefined ? undefined : parseScheme(options.scheme);
                 const tag = options.tag === undefined ? undefined : parseTag(options.tag);
                 const figure =
                     options.number === undefined ? undefined : parseFigure(options.number);
