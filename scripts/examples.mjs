@@ -59,12 +59,19 @@ run(['gen', 'The tide comes back', '--source', 'stock', '--photo', PHOTOS.sailbo
 run(['gen', '看这里', '--source', 'stock', '--photo', PHOTOS.plane, '--callout', '--preset', 'youtube', '--output', out('photo-callout-youtube.png')]);
 
 // 改前改后：左边平庸排版，右边人脸海报，产品价值一张图讲完。
-const plain = join(staging, 'plain.png');
-run(['gen', '封面不狠，没人点开', '--source', 'render', '--preset', 'youtube', '--output', plain]);
-run(['gen', '就差这一步', '--source', 'render', '--template', 'compare', '--before', plain, '--after', out('subject-poster-youtube.png'), '--labels', '改前,改后', '--preset', 'youtube', '--output', out('compare-youtube.png')]);
+// 人脸海报依赖上面的抠图步骤，抠图跳过且没有旧图时这张也跳过，别拿缺失文件当输入。
+const jpegs = ['photo-lava-youtube', 'photo-x', 'photo-callout-youtube'];
+if (existsSync(out('subject-poster-youtube.png'))) {
+    const plain = join(staging, 'plain.png');
+    run(['gen', '封面不狠，没人点开', '--source', 'render', '--preset', 'youtube', '--output', plain]);
+    run(['gen', '就差这一步', '--source', 'render', '--template', 'compare', '--before', plain, '--after', out('subject-poster-youtube.png'), '--labels', '改前,改后', '--preset', 'youtube', '--output', out('compare-youtube.png')]);
+    jpegs.push('compare-youtube');
+} else {
+    console.error('compare example skipped: it needs the face poster from the cutout step.');
+}
 
 // 照片封面的 PNG 动辄 1-2MB，展示和目检用 jpeg 足够，别让仓库背无损照片。
-for (const name of ['photo-lava-youtube', 'photo-x', 'photo-callout-youtube', 'compare-youtube']) {
+for (const name of jpegs) {
     await sharp(out(`${name}.png`)).jpeg({ quality: 90 }).toFile(out(`${name}.jpg`));
     unlinkSync(out(`${name}.png`));
 }
