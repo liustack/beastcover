@@ -24,6 +24,11 @@ export interface CoverRenderer {
     /** 在 [minPx, maxPx] 里找标题放得进 box 的最大整数字号，最小字号也放不下时抛错 */
     fitText(request: FitTextRequest): Promise<number>;
     screenshot(page: RenderPage): Promise<Buffer>;
+    /**
+     * 质检用：按 1 倍各截一张带字的和把字全部隐藏的，两张一比就是字迹。
+     * 隐藏用 visibility，不改排版。
+     */
+    inspect(page: RenderPage): Promise<{ background: Buffer; withText: Buffer }>;
     /** 探测候选字体装没装、覆不覆盖这句标题、多粗，结果和截图用的是同一个 Chromium */
     probeFonts(text: string, families: Record<FontScript, string[]>): Promise<FontProbeResult[]>;
     close(): Promise<void>;
@@ -46,6 +51,10 @@ function validateScale(value: number): void {
         throw new Error('Scale must be a number from 1 to 4.');
     }
 }
+
+/** 封面上的字：标题填色层、描边层、数字、标签，以及模板显式标出的 .qc-text */
+export const TEXT_SELECTOR = '.copy:not(.probe), .figure, .label, .qc-text';
+const HIDE_TEXT_SELECTOR = `${TEXT_SELECTOR}, .copy-layer, .headline-stack`;
 
 // 半个像素的余量吸收亚像素排版误差。
 const FIT_TOLERANCE = 0.5;
@@ -139,6 +148,29 @@ export async function openRenderer(): Promise<CoverRenderer> {
                     caret: 'hide',
                     fullPage: false,
                 });
+            });
+        },
+
+        async inspect(request) {
+            validateDimension('Width', request.width);
+            validateDimension('Height', request.height);
+            const hide = `<style>${HIDE_TEXT_SELECTOR} { visibility: hidden !important; }</style>`;
+            const html = request.html.includes('</head>')
+                ? request.html.replace('</head>', `${hide}</head>`)
+                : `${hide}${request.html}`;
+            const shot = (page: Page) =>
+                page.screenshot({
+                    type: 'png',
+                    animations: 'disabled',
+                    caret: 'hide',
+                    fullPage: false,
+                });
+            return withPage(browser, { ...request, scale: 1 }, async (page) => {
+                await page.setContent(request.html, { waitUntil: 'load' });
+                const withText = await shot(page);
+                await page.setContent(html, { waitUntil: 'load' });
+                const background = await shot(page);
+                return { background, withText };
             });
         },
 

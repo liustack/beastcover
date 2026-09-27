@@ -97,11 +97,59 @@ func cutout(_ inputPath: String, _ outputPath: String) {
     }
 }
 
+func boxJson(_ box: CGRect) -> String {
+    // 左上角原点的 0 到 1 坐标，x、y 是框的左上角。
+    let x = box.minX
+    let y = 1 - box.maxY
+    return "{\"x\":\(x),\"y\":\(y),\"width\":\(box.width),\"height\":\(box.height)}"
+}
+
+// 质检用：一次找出人脸、人体、文字、显著物体，打印 {"faces":[...],"people":[...],"text":[...],"objects":[...]}。
+func analyze(_ path: String) {
+    let handler = VNImageRequestHandler(cgImage: loadImage(path), options: [:])
+    let faces = VNDetectFaceRectanglesRequest()
+    let people = VNDetectHumanRectanglesRequest()
+    people.upperBodyOnly = false
+    // 中文只有 accurate 模式认得出，fast 只认拉丁字母。
+    let text = VNRecognizeTextRequest()
+    text.recognitionLevel = .accurate
+    text.usesLanguageCorrection = false
+    text.recognitionLanguages = ["zh-Hans", "en-US"]
+    let objects = VNGenerateObjectnessBasedSaliencyImageRequest()
+    // 人体框检测器会漏掉小的、侧身的人，姿态检测找关节，能补上一部分。
+    let poses = VNDetectHumanBodyPoseRequest()
+    do {
+        try handler.perform([faces, people, text, objects, poses])
+    } catch {
+        fail("vision failed: \(error)", 4)
+    }
+    let faceBoxes = (faces.results ?? []).map { boxJson($0.boundingBox) }
+    var peopleRects = (people.results ?? []).map { $0.boundingBox }
+    for pose in poses.results ?? [] {
+        let joints = ((try? pose.recognizedPoints(.all)) ?? [:]).values.filter { $0.confidence > 0.3 }
+        guard joints.count >= 4,
+              let minX = joints.map({ $0.location.x }).min(), let maxX = joints.map({ $0.location.x }).max(),
+              let minY = joints.map({ $0.location.y }).min(), let maxY = joints.map({ $0.location.y }).max() else { continue }
+        // 关节框比人窄，四周各放大两成才包住头和手脚。
+        let w = maxX - minX, h = maxY - minY
+        peopleRects.append(CGRect(x: minX - w * 0.2, y: minY - h * 0.2, width: w * 1.4, height: h * 1.4))
+    }
+    let peopleBoxes = peopleRects.map { boxJson($0) }
+    // 置信度太低的「字」多半是纹理，不算。
+    let textBoxes = (text.results ?? [])
+        .filter { ($0.topCandidates(1).first?.confidence ?? 0) >= 0.5 }
+        .map { boxJson($0.boundingBox) }
+    let objectBoxes = (objects.results?.first?.salientObjects ?? []).map { boxJson($0.boundingBox) }
+    print("{\"faces\":[\(faceBoxes.joined(separator: ","))],\"people\":[\(peopleBoxes.joined(separator: ","))],\"text\":[\(textBoxes.joined(separator: ","))],\"objects\":[\(objectBoxes.joined(separator: ","))]}")
+}
+
 if args.count == 4 && args[1] == "cutout" {
     cutout(args[2], args[3])
 } else if args.count == 3 && args[1] == "focus" {
     focus(args[2])
+} else if args.count == 3 && args[1] == "analyze" {
+    analyze(args[2])
 } else {
-    fail("usage: vision cutout <input> <output.png> | vision focus <input>", 2)
+    fail("usage: vision cutout <input> <output.png> | vision focus <input> | vision analyze <input>", 2)
 }
 

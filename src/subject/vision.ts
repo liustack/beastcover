@@ -189,6 +189,60 @@ export interface PhotoFocus {
     source: 'faces' | 'saliency' | 'attention';
 }
 
+/** 0 到 1 的框，原点左上角，x、y 是框的左上角 */
+export interface UnitBox {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+export interface ImageContents {
+    faces: UnitBox[];
+    people: UnitBox[];
+    text: UnitBox[];
+    /** 显著物体：照片的主体（船、飞机、产品） */
+    objects: UnitBox[];
+}
+
+function parseBoxes(value: unknown, stdout: string): UnitBox[] {
+    if (!Array.isArray(value)) {
+        throw new Error(`Unexpected analyze output: ${stdout.trim()}`);
+    }
+    return value.map((box) => {
+        const numbers = ['x', 'y', 'width', 'height'].map(
+            (key) => (box as Record<string, unknown>)[key],
+        );
+        if (numbers.some((n) => typeof n !== 'number' || !Number.isFinite(n))) {
+            throw new Error(`Unexpected analyze output: ${stdout.trim()}`);
+        }
+        const [x, y, width, height] = numbers as [number, number, number, number];
+        return { x, y, width, height };
+    });
+}
+
+/** 质检用：找出图里的人脸、人体、文字框。图是自己渲染的 PNG，没有 EXIF 方向问题 */
+export async function visionAnalyze(
+    inputPath: string,
+    runtime: VisionCutoutRuntime,
+): Promise<ImageContents> {
+    const unavailable = visionCutoutUnavailable(runtime);
+    if (unavailable !== undefined) {
+        throw new Error(`Vision analysis is unavailable: ${unavailable}.`);
+    }
+    const tool = await ensureTool(runtime);
+    const { stdout } = await execFileAsync(tool, ['analyze', inputPath], {
+        timeout: CUTOUT_TIMEOUT_MS,
+    });
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    return {
+        faces: parseBoxes(parsed.faces, stdout),
+        people: parseBoxes(parsed.people, stdout),
+        text: parseBoxes(parsed.text, stdout),
+        objects: parseBoxes(parsed.objects, stdout),
+    };
+}
+
 /** 用 Vision 找照片主体：有人脸按人脸，没有按显著区域，坐标按转正后的照片算。什么都没找到返回 undefined */
 export async function visionFocus(
     inputPath: string,

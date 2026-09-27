@@ -93,6 +93,7 @@ function fakeRenderer(fontFor: (request: FitTextRequest, keepClauses: boolean) =
         }),
         close: vi.fn(async () => undefined),
         probeFonts: vi.fn(async () => []),
+        inspect: vi.fn(async () => ({ background: Buffer.alloc(0), withText: Buffer.alloc(0) })),
     };
     return { renderer, screenshots, fits };
 }
@@ -226,6 +227,7 @@ describe('cover composition', () => {
             screenshot: vi.fn(),
             close: async () => undefined,
             probeFonts: async () => [],
+            inspect: async () => ({ background: Buffer.alloc(0), withText: Buffer.alloc(0) }),
         };
         const directory = tempDir();
 
@@ -373,6 +375,7 @@ describe('thumbnail check', () => {
                 pixelWidth: 1080,
                 pixelHeight: 1440,
                 feedHeadlinePx: 9.1,
+                findings: [],
             },
             {
                 platform: 'youtube',
@@ -380,6 +383,7 @@ describe('thumbnail check', () => {
                 pixelWidth: 1280,
                 pixelHeight: 720,
                 feedHeadlinePx: 18,
+                findings: [],
             },
         ]);
         expect(warnings).toEqual([

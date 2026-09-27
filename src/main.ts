@@ -2,7 +2,7 @@
 
 declare const __APP_VERSION__: string;
 
-import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -28,6 +28,7 @@ import {
     headlineLengthWarnings,
     MAX_PHOTO_STRETCH,
     photoStretchWarnings,
+    type QcRuntime,
     textOnlyWarnings,
     thumbnailWarnings,
 } from './compose/index.ts';
@@ -66,6 +67,8 @@ import {
     parsePlatformList,
     type Rect,
 } from './platforms/index.ts';
+import { formatFindings } from './qc/index.ts';
+import { feedPreview } from './qc/preview.ts';
 import { parseLabels } from './render/compare.ts';
 import { type CoverRenderer, openRenderer } from './render/index.ts';
 import type { CoverLayout } from './render/layout.ts';
@@ -106,7 +109,12 @@ import {
     visionCutoutUnavailable,
     visionSubjectCutout,
 } from './subject/index.ts';
-import { type PhotoFocus, visionFocus } from './subject/vision.ts';
+import {
+    type PhotoFocus,
+    type VisionCutoutRuntime,
+    visionAnalyze,
+    visionFocus,
+} from './subject/vision.ts';
 
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0-dev';
 const DEFAULT_RENDER_TEXT = 'Your headline here';
@@ -127,6 +135,8 @@ export interface CliRuntime {
     lookupCommand: (name: string) => string | undefined;
     runAgent: typeof defaultRunAgent;
     runModelApi: typeof defaultRunModelApi;
+    /** 质检的画面分析，本机没有 Vision 或被关掉时为 undefined。键始终存在，二次组装运行时不会又打开 */
+    qc: QcRuntime | undefined;
     stock: Pick<StockRuntime, 'fetch' | 'sleep' | 'download'>;
     /** 把普通照片里的主体抠成透明 PNG，默认用 macOS Vision */
     cutout: (inputPath: string, outputPath: string) => Promise<void>;
@@ -164,6 +174,7 @@ function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
         lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
         runAgent: overrides.runAgent ?? defaultRunAgent,
         runModelApi: overrides.runModelApi ?? defaultRunModelApi,
+        qc: qcRuntimeFor(overrides, vision),
         stock: overrides.stock ?? {},
         cutout: overrides.cutout ?? visionSubjectCutout(vision),
         photoFocus:
@@ -174,6 +185,38 @@ function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
                         ? { vision: (path: string) => visionFocus(path, vision) }
                         : {}),
                 })),
+    };
+}
+
+const QC_PICTURE_SKIPPED =
+    'QC: the picture check (faces, people, and text under the headline) needs macOS 14+ Vision, so it was skipped. Look at every cover before you ship.';
+
+function isTerminal(writer: OutputWriter): boolean {
+    return (writer as { isTTY?: boolean }).isTTY === true;
+}
+
+/** 质检的画面分析：测试里可以注入或关掉（qc: undefined），真跑时有 Vision 才开 */
+function qcRuntimeFor(
+    overrides: CliRuntimeOverrides,
+    vision: VisionCutoutRuntime,
+): QcRuntime | undefined {
+    if ('qc' in overrides) {
+        return overrides.qc;
+    }
+    if (visionCutoutUnavailable(vision) !== undefined) {
+        return {};
+    }
+    return {
+        async analyze(background) {
+            const dir = newRunDir();
+            const path = join(dir, 'qc-background.png');
+            writeFileSync(path, background);
+            try {
+                return await visionAnalyze(path, vision);
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        },
     };
 }
 
@@ -390,6 +433,7 @@ async function writeCovers(
                 ),
                 scale: render.scale,
                 guides,
+                ...(runtime.qc === undefined ? {} : { qc: runtime.qc }),
             });
             for (const cover of group) {
                 byPlatform.set(cover.platform, cover);
@@ -415,6 +459,18 @@ async function writeCovers(
             warnings: [
                 ...headlineLengthWarnings(coverLine('youtube', text, hook), render.presets),
                 ...thumbnailWarnings(composed),
+                ...formatFindings(
+                    composed.flatMap((cover) => cover.findings),
+                    isTerminal(runtime.stdout),
+                ),
+                ...(runtime.qc !== undefined && runtime.qc.analyze === undefined
+                    ? [QC_PICTURE_SKIPPED]
+                    : []),
+                ...(runtime.qc === undefined
+                    ? []
+                    : [
+                          `Preview: ${await feedPreview(composed)} (every cover at its feed size; look at each one before you ship)`,
+                      ]),
             ],
         };
     } finally {

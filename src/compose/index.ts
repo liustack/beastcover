@@ -11,6 +11,16 @@ import {
     type PlatformName,
     type Rect,
 } from '../platforms/index.ts';
+import {
+    checkBrightness,
+    checkOverlaps,
+    checkQuietZone,
+    detailUnder,
+    type QcFinding,
+    realObjects,
+    type TextMask,
+    textMaskFrom,
+} from '../qc/index.ts';
 import { type CoverRenderer, TextDoesNotFitError } from '../render/index.ts';
 import {
     type CoverLayout,
@@ -21,7 +31,7 @@ import {
     unbreakableRuns,
 } from '../render/layout.ts';
 import { calloutGeometry, calloutLayout, framedFocusBox } from '../render/photo-cover.ts';
-import type { PhotoFocus } from '../subject/vision.ts';
+import type { ImageContents, PhotoFocus } from '../subject/vision.ts';
 import { guidesOverlay } from './guides.ts';
 
 export interface CoverTemplate {
@@ -52,6 +62,20 @@ export interface ComposedCover {
     pixelHeight: number;
     /** 标题在该平台信息流缩略图里的字号 */
     feedHeadlinePx: number;
+    /** 这张成品的质检结果，文件照写，问题标出来 */
+    findings: QcFinding[];
+}
+
+/** 质检：画面分析找人脸、人、自带文字、主体物。本机没有 Vision 时 analyze 为 undefined，只跳过这一项 */
+export interface QcRuntime {
+    analyze?(background: Buffer): Promise<ImageContents>;
+}
+
+/** 成品的平均亮度（BT.601，0-255） */
+async function meanLuma(png: Buffer): Promise<number> {
+    const { channels } = await sharp(png).removeAlpha().stats();
+    const [r, g, b] = channels.map((channel) => channel.mean) as [number, number, number];
+    return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
 export const MIN_HEADLINE_PX = 16;
@@ -246,6 +270,7 @@ export async function composeCovers(input: {
     targets: readonly CoverTarget[];
     scale: number;
     guides?: boolean;
+    qc?: QcRuntime;
 }): Promise<ComposedCover[]> {
     const masterScale = Math.max(MIN_MASTER_SCALE, input.scale);
     const byFamily = new Map<FamilyName, { platform: Platform; outputPath: string }[]>();
@@ -276,17 +301,39 @@ export async function composeCovers(input: {
             input.text,
             `the ${members.map((member) => member.platform.name).join(', ')} safe area`,
         );
+        const masterHtml = await input.template.renderHtml(
+            layout,
+            headline,
+            Math.round(family.masterWidth * masterScale),
+            Math.round(family.masterHeight * masterScale),
+        );
         const master = await input.renderer.screenshot({
-            html: await input.template.renderHtml(
-                layout,
-                headline,
-                Math.round(family.masterWidth * masterScale),
-                Math.round(family.masterHeight * masterScale),
-            ),
+            html: masterHtml,
             width: family.masterWidth,
             height: family.masterHeight,
             scale: masterScale,
         });
+        // 质检：带字和不带字各渲一张比出字迹，不带字的交给画面分析，再按每个平台的裁切框比对。
+        let qc: { background: Buffer; text: TextMask; contents?: ImageContents } | undefined;
+        if (input.qc !== undefined) {
+            const inspected = await input.renderer.inspect({
+                html: masterHtml,
+                width: family.masterWidth,
+                height: family.masterHeight,
+                scale: 1,
+            });
+            qc = {
+                background: inspected.background,
+                text: await textMaskFrom(inspected.withText, inspected.background),
+            };
+            if (input.qc.analyze !== undefined) {
+                const contents = await input.qc.analyze(inspected.background);
+                qc.contents = {
+                    ...contents,
+                    objects: await realObjects(inspected.background, contents.objects),
+                };
+            }
+        }
 
         for (const { platform, outputPath } of members) {
             const pixelWidth = Math.round(platform.width * input.scale);
@@ -315,12 +362,32 @@ export async function composeCovers(input: {
                     },
                 ]);
             }
+            const png = await image.png().toBuffer();
+            const findings =
+                qc === undefined
+                    ? []
+                    : [
+                          ...(qc.contents === undefined
+                              ? []
+                              : checkOverlaps({
+                                    platform: platform.name,
+                                    crop: platform.crop,
+                                    text: qc.text,
+                                    contents: qc.contents,
+                                })),
+                          ...checkQuietZone(
+                              platform.name,
+                              await detailUnder(qc.background, qc.text, platform.crop),
+                          ),
+                          ...checkBrightness(platform.name, await meanLuma(png)),
+                      ];
             composed.set(platform.name, {
                 platform: platform.name,
-                outputPath: writePng(outputPath, await image.png().toBuffer()),
+                outputPath: writePng(outputPath, png),
                 pixelWidth,
                 pixelHeight,
                 feedHeadlinePx: (headline.fontPx * platform.feedWidth) / platform.crop.width,
+                findings,
             });
         }
     }
