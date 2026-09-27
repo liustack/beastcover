@@ -8,7 +8,8 @@
   <a href="https://liustack.dev">liustack.dev</a> ·
   <a href="./README.md">English</a> ·
   <a href="./skills/beastcover/SKILL.md">Agent skill</a> ·
-  <a href="./examples/">案例</a>
+  <a href="./examples/">案例</a> ·
+  <a href="./docs/packaging.zh-CN.md">包装</a>
 </p>
 
 <p align="center">
