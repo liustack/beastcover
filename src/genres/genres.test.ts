@@ -670,6 +670,66 @@ describe('cover type rendering', () => {
         }
     }, 120_000);
 
+    it('frames both halves of a same-size before-after pair with one window', async () => {
+        const pair = [join(directory, 'pair-0.png'), join(directory, 'pair-1.png')] as const;
+        for (const path of pair) {
+            await sharp({
+                create: { width: 1536, height: 1024, channels: 3, background: '#998877' },
+            })
+                .png()
+                .toFile(path);
+        }
+        // 乱的碗碟在左边，整洁以后主体换成右边的水槽：各自构图会取到不同的两块。
+        const photos: [GenrePhoto, GenrePhoto] = [
+            {
+                path: pair[0],
+                width: 1536,
+                height: 1024,
+                focus: { x: 0.3, y: 0.6, width: 0.3, height: 0.4, source: 'saliency' },
+            },
+            {
+                path: pair[1],
+                width: 1536,
+                height: 1024,
+                focus: { x: 0.72, y: 0.62, width: 0.3, height: 0.4, source: 'saliency' },
+            },
+        ];
+        const relative = (subject: { box: Rect; frame: Rect }) => ({
+            x: Math.round(subject.box.x - subject.frame.x),
+            y: Math.round(subject.box.y - subject.frame.y),
+            width: Math.round(subject.box.width),
+            height: Math.round(subject.box.height),
+        });
+        for (const [kind, same] of [
+            ['before-after', true],
+            ['versus', false],
+        ] as const) {
+            const template = genreTemplate(kind, {
+                text: '厨房改造',
+                fonts: FONTS,
+                photos,
+                labels: ['改前', '改后'],
+            });
+            const base = familyLayout('landscape');
+            const layout = template.layoutFor === undefined ? base : template.layoutFor(base);
+            const page = await template.renderHtml(
+                layout,
+                { fontPx: 80, keepClauses: false },
+                layout.width,
+                layout.height,
+            );
+            const [a, b] = page.subjects;
+            if (a === undefined || b === undefined) {
+                throw new Error(`${kind} reported no subjects`);
+            }
+            if (same) {
+                expect(relative(a), kind).toEqual(relative(b));
+            } else {
+                expect(relative(a), kind).not.toEqual(relative(b));
+            }
+        }
+    }, 60_000);
+
     it('checks the scene subject of face-stakes, and finds none in a gradient scene', async () => {
         // 竖版照片正好铺满母版，主体在 y 1450-1600，抖音底栏从 1540 起：主体被挡。
         const tall = join(directory, 'tall.png');

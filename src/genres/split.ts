@@ -9,6 +9,7 @@ import type { PictureSubject } from '../qc/index.ts';
 import type { CoverLayout, Headline } from '../render/layout.ts';
 import { type PhotoLook, preparePhotoLayer } from '../render/photo-cover.ts';
 import type { TypeSpec } from '../render/type.ts';
+import type { PhotoFocus } from '../subject/vision.ts';
 import {
     type ChipSpec,
     chips,
@@ -366,20 +367,46 @@ async function meanLuma(jpeg: Buffer): Promise<number> {
     return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
+/** 两个主体框合成一个框（中心加宽高，0 到 1）。只有一个有框时就用它 */
+function unionFocus(a: PhotoFocus | undefined, b: PhotoFocus | undefined): PhotoFocus | undefined {
+    if (a === undefined || b === undefined) {
+        return a ?? b;
+    }
+    const x0 = Math.min(a.x - a.width / 2, b.x - b.width / 2);
+    const x1 = Math.max(a.x + a.width / 2, b.x + b.width / 2);
+    const y0 = Math.min(a.y - a.height / 2, b.y - b.height / 2);
+    const y1 = Math.max(a.y + a.height / 2, b.y + b.height / 2);
+    return {
+        x: (x0 + x1) / 2,
+        y: (y0 + y1) / 2,
+        width: x1 - x0,
+        height: y1 - y0,
+        source: a.source === b.source ? a.source : 'saliency',
+    };
+}
+
 /**
- * 两张照片按各自面板构图，再把亮度拉到两者的平均：一半更亮等于替观众下了结论（research.md 第 3.5 节）。
- * 主体放进面板里平台看得见、又不被标签挡住的那一截。
+ * 两张照片构图，再把亮度拉到两者的平均：一半更亮等于替观众下了结论（research.md 第 3.5 节）。
+ * 主体放进面板里平台看得见、又不被标签挡住的那一截。前后对比的两张一样大时是同一个机位拍的
+ * 一对，两半用同一个取景（框住两边的主体），看的是同一处的变化；对比两样东西时各自构图。
  */
 async function panelPhotos(
     layout: CoverLayout,
     geometry: SplitGeometry,
     photos: readonly [GenrePhoto, GenrePhoto],
     scale: number,
+    kind: 'versus' | 'before-after',
 ): Promise<{ dataUri: string; rect: Rect; brightness: number; focusBox?: Rect }[]> {
+    // 现画的场景每个族一张，取这一族的。
+    const shown = photos.map((photo) => photoForLayout(photo, layout));
+    const [first, second] = shown as [GenrePhoto, GenrePhoto];
+    const pair =
+        kind === 'before-after' && first.width === second.width && first.height === second.height;
+    const shared = pair ? unionFocus(first.focus, second.focus) : undefined;
     const prepared = await Promise.all(
         geometry.panels.map(async (panel, index) => {
-            // 现画的场景每个族一张（半边偏竖画竖图，偏横画横图），取这一族的。
-            const photo = photoForLayout(photos[index] as GenrePhoto, layout);
+            const photo = shown[index] as GenrePhoto;
+            const focus = pair ? shared : photo.focus;
             const seen = seenPart(panel, layout);
             // 标签挂在这一截上边时，主体往下让开标签那一段。
             const label = geometry.labels[index] as ChipAnchor;
@@ -393,7 +420,7 @@ async function panelPhotos(
                 Math.round(seen.width * scale),
                 Math.round(seen.height * scale),
                 {
-                    ...(photo.focus === undefined ? {} : { focus: photo.focus }),
+                    ...(focus === undefined ? {} : { focus }),
                     target: { x: 0.5, y: labelShare + (1 - labelShare) / 2 },
                     visible: { x: 0, y: labelShare, width: 1, height: 1 - labelShare },
                 },
@@ -556,7 +583,7 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
         let under: Layers = band;
         let subjects: PictureSubject[] = [];
         if (scale !== undefined) {
-            const photos = await panelPhotos(layout, geometry, request.photos, scale);
+            const photos = await panelPhotos(layout, geometry, request.photos, scale, kind);
             const names =
                 kind === 'versus'
                     ? ["the first photo's subject", "the second photo's subject"]
