@@ -48,6 +48,11 @@ const FACE_STAKES_SHARE = 0.38;
 // 提亮最多三成五，再多皮肤就发白发假。
 const FACE_LIFT = 1.2;
 const MAX_LIFT = 1.35;
+// 提亮后脸上最亮那一小块（95% 分位的最亮通道）不超过这个值，否则高光糊成一片白。
+// 身后本来就很亮时提不到比它亮两成，提到这里为止。
+const HIGHLIGHT_CEILING = 245;
+// 算出来只提这么一点，就不动图了。
+const MIN_LIFT = 1.02;
 
 function pngBytes(dataUri: string): Buffer {
     return Buffer.from(dataUri.slice(dataUri.indexOf(',') + 1), 'base64');
@@ -59,8 +64,10 @@ function lumaOf(hex: string): number {
     return 0.299 * ((value >> 16) & 255) + 0.587 * ((value >> 8) & 255) + 0.114 * (value & 255);
 }
 
-/** 人物图里脸那一块（不透明的像素）的平均亮度。没找到脸就没有 */
-async function faceLuma(subject: SubjectLayer): Promise<number | undefined> {
+/** 人物图里脸那一块（不透明的像素）的平均亮度和高光（最亮通道的 95% 分位）。没找到脸就没有 */
+async function faceLight(
+    subject: SubjectLayer,
+): Promise<{ luma: number; highlight: number } | undefined> {
     const face = subject.face;
     if (face === undefined) {
         return undefined;
@@ -74,32 +81,51 @@ async function faceLuma(subject: SubjectLayer): Promise<number | undefined> {
     const x1 = Math.min(info.width, Math.ceil((face.x + face.width / 2) * info.width));
     const y1 = Math.min(info.height, Math.ceil((face.y + face.height / 2) * info.height));
     let sum = 0;
-    let count = 0;
+    const peaks: number[] = [];
     for (let y = y0; y < y1; y += 1) {
         for (let x = x0; x < x1; x += 1) {
             const i = (y * info.width + x) * info.channels;
             if ((data[i + 3] ?? 0) < 128) {
                 continue;
             }
-            sum += 0.299 * (data[i] ?? 0) + 0.587 * (data[i + 1] ?? 0) + 0.114 * (data[i + 2] ?? 0);
-            count += 1;
+            const r = data[i] ?? 0;
+            const g = data[i + 1] ?? 0;
+            const b = data[i + 2] ?? 0;
+            sum += 0.299 * r + 0.587 * g + 0.114 * b;
+            peaks.push(Math.max(r, g, b));
         }
     }
-    return count === 0 ? undefined : sum / count;
+    if (peaks.length === 0) {
+        return undefined;
+    }
+    peaks.sort((a, b) => a - b);
+    return {
+        luma: sum / peaks.length,
+        highlight: peaks[Math.floor(peaks.length * 0.95)] ?? 255,
+    };
 }
 
 /**
- * 脸比身后暗时把人整体提亮，直到脸比背景亮两成（最多提三成五）。抠出来的人常常偏暗，
- * 压在亮底或亮场景前面就被背景抢了第一眼。
+ * 脸比身后暗时把人整体提亮，目标是脸比背景亮两成。最多提三成五，而且脸上的高光不提到过曝：
+ * 抠出来的人常常偏暗，压在亮底或亮场景前面就被背景抢了第一眼，但提成一片白更糟。
  */
 export async function litSubject(subject: SubjectLayer, behindLuma: number): Promise<SubjectLayer> {
-    const face = await faceLuma(subject);
-    if (face === undefined || face <= 0 || face >= behindLuma * FACE_LIFT) {
+    const light = await faceLight(subject);
+    if (light === undefined || light.luma <= 0 || light.luma >= behindLuma * FACE_LIFT) {
         return subject;
     }
-    const factor = Math.min(MAX_LIFT, (behindLuma * FACE_LIFT) / face);
+    const factor = Math.min(
+        MAX_LIFT,
+        (behindLuma * FACE_LIFT) / light.luma,
+        HIGHLIGHT_CEILING / Math.max(1, light.highlight),
+    );
+    if (factor < MIN_LIFT) {
+        return subject;
+    }
+    // 只乘颜色通道，透明度原样保留。
     const lifted = await sharp(pngBytes(subject.dataUri))
-        .modulate({ brightness: factor })
+        .ensureAlpha()
+        .linear([factor, factor, factor, 1], [0, 0, 0, 0])
         .png()
         .toBuffer();
     return { ...subject, dataUri: `data:image/png;base64,${lifted.toString('base64')}` };

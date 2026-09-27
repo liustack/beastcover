@@ -270,6 +270,50 @@ describe('face lighting', () => {
         expect(after).toBeLessThanOrEqual(before * 1.4);
     });
 
+    it('never pushes a light face on a light ground into blown-out white', async () => {
+        const light = await person('#e6c3aa');
+        const lit = await litSubject(light, 230);
+        const bytes = Buffer.from(lit.dataUri.slice(lit.dataUri.indexOf(',') + 1), 'base64');
+        const { data } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+        expect(Math.max(data[0] ?? 0, data[1] ?? 0, data[2] ?? 0)).toBeLessThanOrEqual(245);
+        // 透明度原样保留。
+        expect(data[3]).toBe(255);
+    });
+
+    it('keeps transparent pixels transparent when it brightens', async () => {
+        const half = await sharp({
+            create: { width: 100, height: 150, channels: 4, background: '#503c32' },
+        })
+            .composite([
+                {
+                    input: {
+                        create: {
+                            width: 100,
+                            height: 60,
+                            channels: 4,
+                            background: { r: 0, g: 0, b: 0, alpha: 1 },
+                        },
+                    },
+                    left: 0,
+                    top: 90,
+                    // 下面 60 行挖成全透明。
+                    blend: 'dest-out',
+                },
+            ])
+            .png()
+            .toBuffer();
+        const subject: SubjectLayer = {
+            ...(await person('#503c32')),
+            dataUri: `data:image/png;base64,${half.toString('base64')}`,
+        };
+        const lit = await litSubject(subject, 180);
+        expect(lit.dataUri).not.toBe(subject.dataUri);
+        const bytes = Buffer.from(lit.dataUri.slice(lit.dataUri.indexOf(',') + 1), 'base64');
+        const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+        expect(data[(120 * info.width + 50) * info.channels + 3]).toBe(0);
+        expect(data[(10 * info.width + 50) * info.channels + 3]).toBe(255);
+    });
+
     it('leaves a face that already stands out alone', async () => {
         const bright = await person('#e6c3aa');
         expect(await litSubject(bright, 60)).toBe(bright);
