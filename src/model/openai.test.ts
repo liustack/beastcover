@@ -64,6 +64,20 @@ describe('openai image generation', () => {
         ).rejects.not.toThrowError(/sk-secret/);
     });
 
+    it('redacts a key that straddles the truncation boundary', async () => {
+        // key 从第 280 个字符开始，截断点 300 落在 key 中间：先截断再脱敏会留下 key 前缀。
+        const body = `${'x'.repeat(280)}sk-straddle-key-1234567890 tail`;
+        const attempt = generateOpenAiImage({
+            apiKey: 'sk-straddle-key-1234567890',
+            model: 'm',
+            prompt: 'p',
+            width: 1536,
+            height: 1024,
+            fetch: vi.fn(async () => new Response(body, { status: 401 })),
+        });
+        await expect(attempt).rejects.not.toThrowError(/sk-straddle/);
+    });
+
     it('reports the status and body on failure without the key', async () => {
         const failing = vi.fn(async () => jsonResponse(401, { error: { message: 'bad key' } }));
         const attempt = generateOpenAiImage({

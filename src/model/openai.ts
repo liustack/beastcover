@@ -9,7 +9,8 @@ const OPENAI_IMAGES_URL = 'https://api.openai.com/v1/images/generations';
 export async function failureText(response: Response, apiKey: string): Promise<string> {
     let body: string;
     try {
-        body = redactSecrets((await response.text()).slice(0, 300), [apiKey]);
+        // 先脱敏再截断：反过来会在截断点留下替换不掉的 key 前缀。
+        body = redactSecrets(await response.text(), [apiKey]).slice(0, 300);
     } catch {
         body = '';
     }
