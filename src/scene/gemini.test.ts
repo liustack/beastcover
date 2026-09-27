@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { generateGeminiImage } from './index.ts';
+import { generateGeminiImage } from './gemini.ts';
 
 function jsonResponse(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), {

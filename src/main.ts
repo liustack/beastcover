@@ -3,21 +3,12 @@
 declare const __APP_VERSION__: string;
 
 import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Command, CommanderError, Option } from 'commander';
+import { Command, CommanderError } from 'commander';
 import sharp from 'sharp';
 import {
-    buildEnvelopePrompt,
-    runAgent as defaultRunAgent,
-    getAgentCanvasPlan,
-    resolveNamedRefFiles,
-    selectAgentProvider,
-} from './agent/index.ts';
-import { assertRedrawable, remixModeFor } from './agent/remix.ts';
-import {
     type ComposedCover,
-    type CoverTarget,
     type CoverTemplate,
     checkCallout,
     composeCovers,
@@ -32,17 +23,13 @@ import {
     thumbnailWarnings,
 } from './compose/index.ts';
 import {
-    AGENT_PROVIDERS,
-    type AgentProvider,
     CONFIG_PATH,
     type ConfigFlags,
     type EffectiveConfig,
-    IMAGE_SOURCES,
-    type ImageSource,
     initConfigFile,
     loadConfigFile,
-    MODEL_PROVIDERS,
-    type ModelProvider,
+    PAINTERS,
+    parsePainter,
     renderConfigShow,
     resolveEffectiveConfig,
     setConfigValue,
@@ -61,12 +48,9 @@ import { parseFigure, parseHook, parseTag } from './genres/options.ts';
 import { type FontKit, fontKit, type GenrePhoto } from './genres/page.ts';
 import { parseScheme, SCHEME_NAMES, SCHEMES, type SchemeName } from './genres/schemes.ts';
 import { parseLabels } from './genres/split.ts';
-import { runModelApi as defaultRunModelApi, selectModelProvider } from './model/index.ts';
-import { buildModelPrompt } from './model/prompt.ts';
 import { newRunDir, tempCacheDir, tempRefsDir } from './paths.ts';
 import {
     FAMILY_NAMES,
-    type FamilyName,
     getPlatform,
     PLATFORM_NAMES,
     type PlatformName,
@@ -106,9 +90,6 @@ import {
     searchStock,
     stockFileStem,
 } from './stock/index.ts';
-import { listStyles, loadStyle } from './styles/loader.ts';
-import { mergedPalette, packFor } from './styles/pack.ts';
-import type { StyleDefinition } from './styles/schema.ts';
 import { findPhotoFocus } from './subject/focus.ts';
 import {
     prepareSubject,
@@ -140,8 +121,8 @@ export interface CliRuntime {
     now: () => Date;
     setExitCode: (code: number) => void;
     lookupCommand: (name: string) => string | undefined;
-    runAgent: typeof defaultRunAgent;
-    runModelApi: typeof defaultRunModelApi;
+    /** 画 --scene 的场景，测试里换成不发请求、不起进程的假画家 */
+    paintScene: typeof paintScene;
     /** 质检的画面分析，本机没有 Vision 或被关掉时为 undefined。键始终存在，二次组装运行时不会又打开 */
     qc: QcRuntime | undefined;
     stock: Pick<StockRuntime, 'fetch' | 'sleep' | 'download'>;
@@ -179,8 +160,7 @@ function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
         now: overrides.now ?? (() => new Date()),
         setExitCode: overrides.setExitCode ?? (() => undefined),
         lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
-        runAgent: overrides.runAgent ?? defaultRunAgent,
-        runModelApi: overrides.runModelApi ?? defaultRunModelApi,
+        paintScene: overrides.paintScene ?? paintScene,
         qc: qcRuntimeFor(overrides, vision),
         stock: overrides.stock ?? {},
         cutout: overrides.cutout ?? visionSubjectCutout(vision),
@@ -276,33 +256,6 @@ function sizeLine(fetched: { width: number; height: number; photo: StockHit }): 
         : `${size} (the host served a smaller copy than the listed ${fetched.photo.width}x${fetched.photo.height})`;
 }
 
-function parseImageSource(value: string): ImageSource {
-    if (value === 'local-model') {
-        throw new Error('Source "local-model" is now "agent".');
-    }
-    if (!IMAGE_SOURCES.includes(value as ImageSource)) {
-        throw new Error(`Unknown source "${value}". Use ${IMAGE_SOURCES.join(', ')}.`);
-    }
-    return value as ImageSource;
-}
-
-function parseVia(value: string): AgentProvider | ModelProvider {
-    if (value === 'grok' || value === 'claude') {
-        throw new Error(
-            `via "${value}" was removed: the ${value} CLI has no image generation. Use codex or agy.`,
-        );
-    }
-    if (
-        !AGENT_PROVIDERS.includes(value as AgentProvider) &&
-        !MODEL_PROVIDERS.includes(value as ModelProvider)
-    ) {
-        throw new Error(
-            `Unknown via "${value}". Use ${AGENT_PROVIDERS.join(', ')} with --source agent, or ${MODEL_PROVIDERS.join(', ')} with --source model.`,
-        );
-    }
-    return value as AgentProvider | ModelProvider;
-}
-
 function collectRefs(value: string, previous: string[]): string[] {
     return [...previous, value];
 }
@@ -324,51 +277,19 @@ function parseScaleOption(value: string): number {
 }
 
 function flagsFromOptions(options: {
-    source?: string;
     output?: string;
     preset?: string;
     width?: string;
     height?: string;
     scale?: string;
-    via?: string;
 }): ConfigFlags {
     return {
-        ...(options.source ? { source: parseImageSource(options.source) } : {}),
         ...(options.output ? { output: options.output } : {}),
         ...(options.preset ? { presets: parsePlatformList(options.preset) } : {}),
         ...(options.width ? { width: parseIntegerOption('--width', options.width) } : {}),
         ...(options.height ? { height: parseIntegerOption('--height', options.height) } : {}),
         ...(options.scale ? { scale: parseScaleOption(options.scale) } : {}),
-        ...(options.via ? { via: parseVia(options.via) } : {}),
     };
-}
-
-function formatStyleListLine(style: StyleDefinition): string {
-    const tags: string[] = [];
-    if (style.isFallback) {
-        tags.push('fallback');
-    }
-    if (style.requiresScene) {
-        tags.push('needs-scene');
-    }
-    return `${style.name.padEnd(32)}${tags.join(' ').padEnd(22)}${style.scenarios.join('、')}`;
-}
-
-function formatStyleDetail(style: StyleDefinition): string {
-    return [
-        `name: ${style.name}`,
-        `displayName: ${style.displayName}`,
-        `fallback: ${style.isFallback ? 'yes' : 'no'}`,
-        `requiresScene: ${style.requiresScene ? 'yes' : 'no'}`,
-        `scenarios: ${style.scenarios.join('、')}`,
-        `avoid: ${style.avoid.join('、')}`,
-        `composition: ${style.composition}`,
-        'palette:',
-        ...style.paletteSlots.map((slot) => `  ${slot.name}: ${slot.prompt} / ${slot.css}`),
-        'prompt:',
-        style.prompt,
-        '',
-    ].join('\n');
 }
 
 type EffectiveRender = EffectiveConfig['render'];
@@ -711,12 +632,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
     program
         .command('gen')
         .description('Generate covers from a headline')
-        .argument(
-            '[text]',
-            'Headline for the cover, or the subject for agent and model',
-            DEFAULT_RENDER_TEXT,
-        )
-        .option('--source <source>', 'Image source: render, stock, agent, or model')
+        .argument('[text]', 'Headline for the cover', DEFAULT_RENDER_TEXT)
         .option(
             '-o, --output <path>',
             'Output PNG path. With several presets, each file gets the platform name',
@@ -729,15 +645,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         .option('--height <pixels>', 'Custom canvas height instead of a platform preset')
         .option('--scale <factor>', 'Device scale factor from 1 to 4')
         .option('--guides', 'Draw the safe areas on each cover for checking the layout')
-        .option('--via <provider>', 'Backend: codex or agy for agent, openai or gemini for model')
-        .option('--style <name>', 'Catalog style for this run (see beastcover styles)')
-        .option('--ref <path>', 'Named reference image (repeatable)', collectRefs, [])
-        .option(
-            '--remix <path>',
-            'agent: one image to redraw in the project style, or two (person, then scene) to combine',
-            collectRefs,
-            [],
-        )
         .option(
             '--photo <ref-or-path>',
             'Stock photo ref (pexels:<id>, openverse:<id>) or a local image (repeatable for versus, before-after, collage)',
@@ -752,6 +659,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             '--scene <description>',
             'scene-title, mood, face-stakes with no --photo: the picture to paint with your image model key or agent CLI',
         )
+        .option('--via <painter>', `Who paints --scene: ${PAINTERS.join(', ')}`)
         .option('--template <name>', `Cover type: ${GENRE_NAMES.join(', ')}`)
         .option('--scheme <name>', `Colour scheme: ${SCHEME_NAMES.join(', ')}`)
         .option('--tag <text>', 'big-type, number, face-text: a short label above the headline')
@@ -772,15 +680,11 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             '--hook <text>',
             'A short line for the video and note covers. WeChat and X article covers keep the headline',
         )
-        .addOption(new Option('--callout').hideHelp())
-        .addOption(new Option('--before <path>').hideHelp())
-        .addOption(new Option('--after <path>').hideHelp())
-        .option('--verbose', 'Print backend CLI output')
+        .option('--verbose', 'Print the output of the CLI that paints --scene')
         .action(
             async (
                 text: string,
                 options: {
-                    source?: string;
                     output?: string;
                     preset?: string;
                     width?: string;
@@ -788,277 +692,32 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     scale?: string;
                     guides?: boolean;
                     via?: string;
-                    style?: string;
-                    ref?: string[];
-                    remix?: string[];
                     photo?: string[];
                     scene?: string;
                     subject?: string;
                     template?: string;
                     scheme?: string;
                     hook?: string;
-                    callout?: boolean;
                     look?: string;
                     fit?: string;
                     tag?: string;
                     number?: string;
-                    before?: string;
-                    after?: string;
                     labels?: string;
                     verbose?: boolean;
                 },
             ) => {
-                // 换掉的旗标报错时指到新写法。
-                if (options.callout === true) {
-                    throw new Error(
-                        '--callout is now a template. Use --template callout --photo <photo>.',
-                    );
-                }
-                if (options.before !== undefined || options.after !== undefined) {
-                    throw new Error(
-                        '--before and --after were replaced. Use --template before-after --photo <before> --photo <after>.',
-                    );
-                }
                 const flags = flagsFromOptions(options);
                 const fileConfig = loadConfigFile(runtime.configPath);
                 const effective = resolveEffectiveConfig(fileConfig, flags);
                 const guides = Boolean(options.guides);
-                const rendered = effective.source === 'render' || effective.source === 'stock';
-
-                // --via 在 render 和 stock 里只用来点名画场景的后端。
-                if (flags.via !== undefined && rendered && options.scene === undefined) {
-                    throw new Error(
-                        '--via is only valid with --source agent or model, or with --scene to name the painter.',
-                    );
+                if (options.via !== undefined && options.scene === undefined) {
+                    throw new Error('--via names who paints --scene. Add --scene or drop --via.');
                 }
-                if ((options.remix ?? []).length > 0 && effective.source !== 'agent') {
-                    throw new Error('--remix works with --source agent.');
-                }
-                if (!rendered) {
-                    const renderOnly: [string, unknown][] = [
-                        ['--photo', (options.photo ?? []).length > 0 ? true : undefined],
-                        ['--scene', options.scene],
-                        ['--template', options.template],
-                        ['--scheme', options.scheme],
-                        ['--tag', options.tag],
-                        ['--number', options.number],
-                        ['--labels', options.labels],
-                        ['--look', options.look],
-                        ['--fit', options.fit],
-                        ['--hook', options.hook],
-                        ['--scale', options.scale],
-                    ];
-                    const used = renderOnly.find(([, value]) => value !== undefined);
-                    if (used !== undefined) {
-                        throw new Error(
-                            used[0] === '--scale'
-                                ? `--scale works with --source render or stock. ${effective.source} output size comes from the model.`
-                                : `${used[0]} works with --source render or stock.`,
-                        );
-                    }
-                }
-                if (rendered && options.style !== undefined) {
-                    throw new Error(
-                        '--style picks the painting style for --source agent and model. Render and stock covers take --scheme.',
-                    );
-                }
+                const via =
+                    options.via === undefined ? effective.scene?.via : parsePainter(options.via);
 
-                if (effective.source === 'agent') {
-                    if (effective.render.canvas) {
-                        throw new Error('agent uses preset sizes. Omit --width and --height.');
-                    }
-                    if (guides) {
-                        throw new Error('--guides works with --source render or stock.');
-                    }
-                    if (options.subject !== undefined) {
-                        throw new Error('--subject works with --source render or stock.');
-                    }
-                    const pack = packFor(options.style);
-                    const style = loadStyle(pack.style);
-                    const palette = mergedPalette(pack);
-                    if (
-                        flags.via !== undefined &&
-                        !AGENT_PROVIDERS.includes(flags.via as AgentProvider)
-                    ) {
-                        throw new Error(
-                            `--via ${flags.via} works with --source model. --source agent takes ${AGENT_PROVIDERS.join(' or ')}.`,
-                        );
-                    }
-                    const selected = selectAgentProvider({
-                        via: flags.via as AgentProvider | undefined,
-                        configVia: effective.agent?.via,
-                        lookup: runtime.lookupCommand,
-                    });
-                    // 二创的图排在最前面，提示词里的「参考图 1、2」就是它们。
-                    const remixPaths = resolveNamedRefFiles(options.remix ?? [], runtime.cwd);
-                    const remix = remixPaths.length > 0 ? remixModeFor(remixPaths) : undefined;
-                    for (const path of remixPaths) {
-                        assertRedrawable(path);
-                    }
-                    const refs = [
-                        ...remixPaths,
-                        ...resolveNamedRefFiles(options.ref ?? [], runtime.cwd),
-                    ];
-                    if (refs.length > 0) {
-                        runtime.stdout.write(
-                            `References sent to ${selected.provider}:\n${refs
-                                .map((path) => `  ${path}`)
-                                .join('\n')}\n`,
-                        );
-                    }
-
-                    const outputPath = coverOutputPath(runtime, flags, effective.output);
-                    // 一族只调一次模型：原图暂存进系统临时目录，族内各平台从同一张图裁。
-                    const byFamily = new Map<FamilyName, CoverTarget[]>();
-                    for (const target of coverOutputPaths(outputPath, effective.render.presets)) {
-                        const family = getPlatform(target.platform).family;
-                        byFamily.set(family, [...(byFamily.get(family) ?? []), target]);
-                    }
-                    const stem = basename(outputPath, extname(outputPath));
-                    const runDir = newRunDir();
-                    const lines: string[] = [];
-                    for (const [family, targets] of byFamily) {
-                        const generatedPath = join(runDir, `${stem}-${family}.png`);
-                        const prompt = buildEnvelopePrompt({
-                            style,
-                            subject: text,
-                            mergedPalette: palette,
-                            generatedPath,
-                            family,
-                            provider: selected.provider,
-                            referencePaths: refs,
-                            ...(remix ? { remix } : {}),
-                        });
-                        await runtime.runAgent({
-                            provider: selected.provider,
-                            commandPath: selected.commandPath,
-                            prompt,
-                            referencePaths: refs,
-                            generatedPath,
-                            targets: targets.map((target) => ({
-                                preset: target.platform,
-                                outputPath: target.outputPath,
-                            })),
-                            verbose: Boolean(options.verbose),
-                            backendOutput: runtime.stderr,
-                        });
-                        for (const target of targets) {
-                            const plan = getAgentCanvasPlan(target.platform);
-                            lines.push(
-                                `Created ${target.outputPath}`,
-                                `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
-                            );
-                        }
-                        // 原图路径打印给调用方：值得留就拷走，临时目录会被系统清。
-                        lines.push(`Original: ${generatedPath}`);
-                    }
-
-                    runtime.stdout.write(
-                        [
-                            ...lines,
-                            `Backend: ${selected.provider}`,
-                            ...(remix === 'restyle'
-                                ? [`Remix: redrew ${remixPaths[0]} in the project style`]
-                                : remix === 'place'
-                                  ? [
-                                        `Remix: put the person from ${remixPaths[0]} into ${remixPaths[1]}`,
-                                    ]
-                                  : []),
-                            'Privacy: agent used your own CLI. We did not handle the data.',
-                            '',
-                        ].join('\n'),
-                    );
-                    return;
-                }
-
-                if (effective.source === 'model') {
-                    if (effective.render.canvas) {
-                        throw new Error('model uses preset sizes. Omit --width and --height.');
-                    }
-                    if (guides) {
-                        throw new Error('--guides works with --source render or stock.');
-                    }
-                    if (options.subject !== undefined) {
-                        throw new Error('--subject works with --source render or stock.');
-                    }
-                    if ((options.ref ?? []).length > 0) {
-                        throw new Error('--ref works with --source agent.');
-                    }
-                    if (
-                        flags.via !== undefined &&
-                        !MODEL_PROVIDERS.includes(flags.via as ModelProvider)
-                    ) {
-                        throw new Error(
-                            `--via ${flags.via} works with --source agent. --source model takes ${MODEL_PROVIDERS.join(' or ')}.`,
-                        );
-                    }
-                    const pack = packFor(options.style);
-                    const style = loadStyle(pack.style);
-                    const palette = mergedPalette(pack);
-                    const selected = selectModelProvider({
-                        ...(flags.via !== undefined ? { via: flags.via as ModelProvider } : {}),
-                        ...(effective.model ? { config: effective.model } : {}),
-                    });
-
-                    const outputPath = coverOutputPath(runtime, flags, effective.output);
-                    // 和 agent 一样一族只生成一次：原图暂存进系统临时目录，族内各平台从同一张图裁。
-                    const byFamily = new Map<FamilyName, CoverTarget[]>();
-                    for (const target of coverOutputPaths(outputPath, effective.render.presets)) {
-                        const family = getPlatform(target.platform).family;
-                        byFamily.set(family, [...(byFamily.get(family) ?? []), target]);
-                    }
-                    const stem = basename(outputPath, extname(outputPath));
-                    const runDir = newRunDir();
-                    const lines: string[] = [];
-                    for (const [family, targets] of byFamily) {
-                        const generatedPath = join(runDir, `${stem}-${family}.png`);
-                        const prompt = buildModelPrompt({
-                            style,
-                            subject: text,
-                            mergedPalette: palette,
-                            family,
-                        });
-                        await runtime.runModelApi({
-                            provider: selected.provider,
-                            apiKey: selected.apiKey,
-                            model: selected.model,
-                            prompt,
-                            family,
-                            generatedPath,
-                            targets: targets.map((target) => ({
-                                preset: target.platform,
-                                outputPath: target.outputPath,
-                            })),
-                        });
-                        for (const target of targets) {
-                            const plan = getAgentCanvasPlan(target.platform);
-                            lines.push(
-                                `Created ${target.outputPath}`,
-                                `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
-                            );
-                        }
-                        // 原图路径打印给调用方：值得留就拷走，临时目录会被系统清。
-                        lines.push(`Original: ${generatedPath}`);
-                    }
-
-                    runtime.stdout.write(
-                        [
-                            ...lines,
-                            `Backend: ${selected.provider} ${selected.model}`,
-                            `Privacy: the prompt went to ${selected.provider} with your API key. No local file left this machine.`,
-                            '',
-                        ].join('\n'),
-                    );
-                    return;
-                }
-
-                // render 和 stock 走同一条封面类型的路：先核对类型和素材，再下载、抠图、出图。
+                // 先核对类型和素材，再下载、抠图、画场景、出图。
                 const photoValues = (options.photo ?? []).map((value) => value.trim());
-                if (effective.source === 'stock' && photoValues.length === 0) {
-                    throw new Error(
-                        'Source "stock" needs --photo <ref-or-path>. Run beastcover stock search "<query>" to pick one.',
-                    );
-                }
                 if (photoValues.some((value) => value === '')) {
                     throw new Error('--photo must not be empty.');
                 }
@@ -1123,7 +782,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 let painter: ScenePainter | undefined;
                 if (scene !== undefined) {
                     painter = findScenePainter({
-                        ...(flags.via === undefined ? {} : { via: flags.via }),
+                        ...(via === undefined ? {} : { via }),
                         ...(effective.model === undefined ? {} : { model: effective.model }),
                         lookup: runtime.lookupCommand,
                     });
@@ -1149,9 +808,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                       orientation,
                                       runDir,
                                   )
-                                : await paintScene(painter, scene, orientation, runDir, {
-                                      runModelApi: runtime.runModelApi,
-                                      runAgent: runtime.runAgent,
+                                : await runtime.paintScene(painter, scene, orientation, runDir, {
                                       verbose: Boolean(options.verbose),
                                       backendOutput: runtime.stderr,
                                   });
@@ -1289,9 +946,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 lines.push(`No ${provider} results for "${query.trim()}".`);
             } else {
                 lines.push(...hits.map(formatStockHit));
-                lines.push(
-                    'Pick one by eye, then run: beastcover gen "<text>" --source stock --photo <ref>',
-                );
+                lines.push('Pick one by eye, then run: beastcover gen "<text>" --photo <ref>');
             }
             runtime.stdout.write(`${lines.join('\n')}\n`);
         });
@@ -1318,33 +973,6 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     '',
                 ].join('\n'),
             );
-        });
-
-    // 工作区随 0.7.2 移除：做完就走，不跟项目绑定。旧命令报错指新路，不静默消失。
-    for (const [removed, hint] of [
-        ['new', 'Covers no longer need a workspace: run beastcover gen directly, anywhere.'],
-        ['project', 'Workspaces were removed. Pick a style per run with gen --style <name>.'],
-    ] as const) {
-        program
-            .command(removed, { hidden: true })
-            .allowUnknownOption()
-            .argument('[args...]')
-            .action(() => {
-                throw new Error(`beastcover ${removed} was removed. ${hint}`);
-            });
-    }
-
-    program
-        .command('styles')
-        .description('List built-in styles or print one style')
-        .argument('[name]', 'Style name')
-        .action((name?: string) => {
-            if (name) {
-                runtime.stdout.write(formatStyleDetail(loadStyle(name)));
-                return;
-            }
-
-            runtime.stdout.write(`${listStyles().map(formatStyleListLine).join('\n')}\n`);
         });
 
     const config = program
@@ -1382,7 +1010,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
 
     program
         .command('doctor')
-        .description('Run offline checks for Node.js, Chromium, and config permissions')
+        .description(
+            'Run offline checks: Node.js, Chromium, config permissions, cutout, and the scene painter',
+        )
         .action(async () => {
             const report = await runtime.doctor();
             runtime.stdout.write(`${renderDoctorReport(report)}\n`);

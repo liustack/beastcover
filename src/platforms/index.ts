@@ -204,13 +204,6 @@ const PLATFORMS: Readonly<Record<PlatformName, Platform>> = {
     },
 };
 
-const RETIRED_PRESET_HINTS: ReadonlyMap<string, string> = new Map([
-    ['16:9', 'Preset "16:9" is now "youtube".'],
-    ['5:2', 'Preset "5:2" is gone. Use "x" or "wechat" for a wide banner cover.'],
-    ['3:2', 'Preset "3:2" is gone. Use "youtube" or "bilibili" for a landscape cover.'],
-    ['3:4', 'Preset "3:4" is now "xiaohongshu" or "instagram".'],
-]);
-
 function copyPlatform(platform: Platform): Platform {
     return {
         ...platform,
@@ -253,10 +246,7 @@ export function parsePlatformList(value: string): PlatformName[] {
 
 export function getPlatform(name: string): Platform {
     if (!PLATFORM_NAMES.includes(name as PlatformName)) {
-        const hint = RETIRED_PRESET_HINTS.get(name);
-        throw new Error(
-            hint ?? `Unknown platform preset "${name}". Use ${PLATFORM_NAMES.join(', ')}.`,
-        );
+        throw new Error(`Unknown platform preset "${name}". Use ${PLATFORM_NAMES.join(', ')}.`);
     }
 
     return copyPlatform(PLATFORMS[name as PlatformName]);

@@ -29,20 +29,17 @@ describe('layered config', () => {
         expect(
             resolveEffectiveConfig(
                 {
-                    source: 'stock',
                     output: 'from-file.png',
                     render: { preset: 'x', width: 1200, scale: 2 },
                 },
-                { source: 'render', width: 800 },
+                { width: 800 },
             ),
         ).toMatchObject({
-            source: 'render',
             output: 'from-file.png',
             render: { presets: ['x'], canvas: { width: 800, height: 640 }, scale: 2 },
         });
 
         expect(resolveEffectiveConfig({}, {})).toMatchObject({
-            source: 'render',
             output: 'beastcover.png',
             render: { presets: ['youtube'], scale: 1 },
         });
@@ -82,49 +79,18 @@ describe('layered config', () => {
 
         writeFileSync(configPath, '{"render":{"preset":"16:9"}}\n', 'utf8');
         expect(() => loadConfigFile(configPath)).toThrowError(
-            `${configPath} has invalid "render.preset". Preset "16:9" is now "youtube".`,
+            `${configPath} has invalid "render.preset". Unknown platform preset "16:9".`,
         );
-    });
 
-    it('points old local-model names at the new agent names', () => {
-        const configPath = tempConfigPath();
-        initConfigFile(configPath);
-
-        writeFileSync(configPath, '{"localModel":{"via":"codex"}}\n', 'utf8');
+        writeFileSync(configPath, '{"source":"render"}\n', 'utf8');
         expect(() => loadConfigFile(configPath)).toThrowError(
-            `${configPath} uses the old "localModel" key. The section is now "agent": rename it in the file.`,
-        );
-
-        writeFileSync(configPath, '{"source":"local-model"}\n', 'utf8');
-        expect(() => loadConfigFile(configPath)).toThrowError(
-            `${configPath} has source "local-model". The source is now "agent".`,
-        );
-
-        writeFileSync(configPath, '{"agent":{"via":"grok"}}\n', 'utf8');
-        expect(() => loadConfigFile(configPath)).toThrowError(
-            `${configPath} has agent.via "grok". That backend was removed: the grok CLI has no image generation. Use codex or agy.`,
-        );
-
-        writeFileSync(configPath, '{}\n', 'utf8');
-        expect(() => setConfigValue('localModel.via', 'codex', configPath)).toThrowError(
-            'The "localModel.via" key is now "agent.via".',
-        );
-        expect(() => setConfigValue('source', 'local-model', configPath)).toThrowError(
-            'Source "local-model" is now "agent".',
-        );
-        expect(() => setConfigValue('agent.via', 'claude', configPath)).toThrowError(
-            'agent.via "claude" was removed: the claude CLI has no image generation. Use codex or agy.',
+            `${configPath} contains unknown config key "source".`,
         );
     });
 
     it('rejects unknown stock providers and non-string credentials at the config boundary', () => {
         const configPath = tempConfigPath();
         initConfigFile(configPath);
-        writeFileSync(configPath, '{"stock":{"apiKey":"k","baseUrl":"https://x"}}\n', 'utf8');
-        expect(() => loadConfigFile(configPath)).toThrowError(
-            `${configPath} uses the old "stock.apiKey" key. Stock credentials are now per provider: delete "stock.apiKey" from the file, then run beastcover config set stock.pexels.apiKey <key> if you use Pexels.`,
-        );
-
         writeFileSync(configPath, '{"stock":{"unsplash":{"apiKey":"x"}}}\n', 'utf8');
         expect(() => loadConfigFile(configPath)).toThrowError(
             `${configPath} contains unknown config key "stock.unsplash".`,
@@ -144,22 +110,20 @@ describe('layered config', () => {
     it('sets only known typed keys and keeps the file private', () => {
         const configPath = tempConfigPath();
 
-        setConfigValue('source', 'stock', configPath);
         setConfigValue('render.preset', 'bilibili', configPath);
         setConfigValue('render.scale', '2', configPath);
         setConfigValue('stock.pexels.apiKey', 'sk-private-value', configPath);
         setConfigValue('stock.openverse.clientId', 'ov-client', configPath);
         setConfigValue('stock.openverse.clientSecret', 'ov-secret', configPath);
-        setConfigValue('agent.via', 'codex', configPath);
+        setConfigValue('scene.via', 'codex', configPath);
 
         expect(loadConfigFile(configPath)).toEqual({
-            source: 'stock',
             render: { preset: 'bilibili', scale: 2 },
             stock: {
                 pexels: { apiKey: 'sk-private-value' },
                 openverse: { clientId: 'ov-client', clientSecret: 'ov-secret' },
             },
-            agent: { via: 'codex' },
+            scene: { via: 'codex' },
         });
         if (process.platform !== 'win32') {
             expect(statSync(configPath).mode & 0o777).toBe(0o600);
@@ -170,8 +134,8 @@ describe('layered config', () => {
             'wechat',
             'douyin',
         ]);
-        expect(() => setConfigValue('render.preset', '3:2', configPath)).toThrowError(
-            'Preset "3:2" is gone. Use "youtube" or "bilibili" for a landscape cover.',
+        expect(() => setConfigValue('scene.via', 'midjourney', configPath)).toThrowError(
+            'Unknown painter "midjourney". Use openai, gemini, codex, agy.',
         );
         expect(() => setConfigValue('render.unknown', '1', configPath)).toThrowError(
             'Unknown config key "render.unknown".',
@@ -191,7 +155,6 @@ describe('layered config', () => {
         expect(shown).not.toContain('ov-secret');
         expect(shown).toContain('[redacted]');
         expect(JSON.parse(shown)).toMatchObject({
-            source: 'render',
             output: 'beastcover.png',
             render: { presets: ['youtube'], scale: 1 },
         });
@@ -203,10 +166,8 @@ describe('layered config', () => {
         setConfigValue('model.openai.apiKey', 'sk-image-key', configPath);
         setConfigValue('model.gemini.apiKey', 'g-image-key', configPath);
         setConfigValue('model.gemini.model', 'gemini-3.1-flash-image', configPath);
-        setConfigValue('model.via', 'gemini', configPath);
         expect(loadConfigFile(configPath)).toEqual({
             model: {
-                via: 'gemini',
                 openai: { apiKey: 'sk-image-key' },
                 gemini: { apiKey: 'g-image-key', model: 'gemini-3.1-flash-image' },
             },
@@ -215,9 +176,6 @@ describe('layered config', () => {
             expect(statSync(configPath).mode & 0o777).toBe(0o600);
         }
 
-        expect(() => setConfigValue('model.via', 'codex', configPath)).toThrowError(
-            'model.via must be one of openai, gemini.',
-        );
         expect(() => setConfigValue('model.openai.apiKey', ' ', configPath)).toThrowError(
             'model.openai.apiKey must not be empty.',
         );
@@ -230,9 +188,9 @@ describe('layered config', () => {
         expect(() => loadConfigFile(configPath)).toThrowError(
             `${configPath} has invalid "model.openai.apiKey". Expected a string.`,
         );
-        writeFileSync(configPath, '{"model":{"via":"codex"}}\n', 'utf8');
+        writeFileSync(configPath, '{"scene":{"via":"grok"}}\n', 'utf8');
         expect(() => loadConfigFile(configPath)).toThrowError(
-            `${configPath} has invalid "model.via". Expected one of openai, gemini.`,
+            `${configPath} has invalid "scene.via". Expected one of openai, gemini, codex, agy.`,
         );
 
         const shown = renderConfigShow({

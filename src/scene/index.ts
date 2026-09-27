@@ -1,25 +1,33 @@
 // 故事画面：封面类型要一张场景照片、用户又没给 --photo 时，用 --scene 描述的画面现画一张。
 // 按本机能力分级：配了图像模型 API key 用模型，装了 agent CLI 用 agent，都没有就退到配色渐变，
-// 并打印一行说明装什么能画出来。--via 点名时只用点名的后端，没有就报错，不换家。
+// 并打印一行说明装什么能画出来。点名了后端（--via 或 scene.via）就只用它，没有就报错，不换家。
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { buildSceneEnvelopePrompt } from '../agent/prompt.ts';
-import type { AgentRunInput } from '../agent/run.ts';
 import {
     AGENT_PROVIDERS,
     type AgentProvider,
     MODEL_PROVIDERS,
     type ModelConfig,
     type ModelProvider,
+    type PainterName,
 } from '../config.ts';
-import { selectModelProvider } from '../model/provider.ts';
-import type { ModelRunInput } from '../model/run.ts';
 import type { FamilyName } from '../platforms/index.ts';
+import { type AgentSpawnRequest, paintWithAgent, sceneEnvelope } from './agent.ts';
+import { hasModelKey, type ModelPainter, modelPainter, paintWithModel } from './model.ts';
+import type { ModelFetch } from './openai.ts';
 
 export type ScenePainter =
-    | { kind: 'model'; provider: ModelProvider; apiKey: string; model: string }
+    | ({ kind: 'model' } & ModelPainter)
     | { kind: 'agent'; provider: AgentProvider; commandPath: string };
+
+export type SceneOrientation = 'landscape' | 'portrait';
+
+// 生图模型的原生尺寸：横版和超宽共用横图，竖版用竖图。
+export const SCENE_SIZE: Readonly<Record<SceneOrientation, { width: number; height: number }>> = {
+    landscape: { width: 1536, height: 1024 },
+    portrait: { width: 1024, height: 1536 },
+};
 
 export const MAX_SCENE_LENGTH = 200;
 
@@ -36,67 +44,54 @@ export function parseScene(value: string): string {
     return scene;
 }
 
+function agentPainter(
+    provider: AgentProvider,
+    lookup: (name: string) => string | undefined,
+): ScenePainter | undefined {
+    const commandPath = lookup(provider);
+    return commandPath === undefined ? undefined : { kind: 'agent', provider, commandPath };
+}
+
 /**
- * 找画场景的后端：点名了就只看点名的；没点名时先看配了 key 的图像模型，再看 PATH 上的 agent CLI。
- * 都没有返回 undefined，由调用方退到渐变并说明。
+ * 找画场景的后端。点名了就只看点名的，缺 key 或没装就报错；没点名时先看配了 key 的图像模型，
+ * 再看 PATH 上的 agent CLI。都没有返回 undefined，由调用方退到渐变并说明。
  */
 export function findScenePainter(input: {
-    via?: string;
+    via?: PainterName;
     model?: ModelConfig;
     lookup: (name: string) => string | undefined;
 }): ScenePainter | undefined {
     const { via } = input;
     if (via !== undefined) {
         if (MODEL_PROVIDERS.includes(via as ModelProvider)) {
-            return {
-                kind: 'model',
-                ...selectModelProvider({
-                    via: via as ModelProvider,
-                    ...(input.model === undefined ? {} : { config: input.model }),
-                }),
-            };
+            return { kind: 'model', ...modelPainter(via as ModelProvider, input.model) };
         }
-        if (AGENT_PROVIDERS.includes(via as AgentProvider)) {
-            const commandPath = input.lookup(via);
-            if (commandPath === undefined) {
-                throw new Error(`No installed CLI found for via "${via}". Install ${via}.`);
-            }
-            return { kind: 'agent', provider: via as AgentProvider, commandPath };
+        const painter = agentPainter(via as AgentProvider, input.lookup);
+        if (painter === undefined) {
+            throw new Error(
+                `${via} is not installed. Install it or pick another painter with --via.`,
+            );
         }
-        throw new Error(
-            `Unknown --via "${via}". Use ${[...MODEL_PROVIDERS, ...AGENT_PROVIDERS].join(', ')}.`,
-        );
+        return painter;
     }
     for (const provider of MODEL_PROVIDERS) {
-        const apiKey = input.model?.[provider]?.apiKey;
-        if (apiKey !== undefined && apiKey !== '') {
-            return {
-                kind: 'model',
-                ...selectModelProvider({
-                    via: provider,
-                    ...(input.model === undefined ? {} : { config: input.model }),
-                }),
-            };
+        if (hasModelKey(provider, input.model)) {
+            return { kind: 'model', ...modelPainter(provider, input.model) };
         }
     }
     for (const provider of AGENT_PROVIDERS) {
-        const commandPath = input.lookup(provider);
-        if (commandPath !== undefined) {
-            return { kind: 'agent', provider, commandPath };
+        const painter = agentPainter(provider, input.lookup);
+        if (painter !== undefined) {
+            return painter;
         }
     }
     return undefined;
 }
 
-/** 这一族的场景画成横的还是竖的：横版和超宽共用一张横图，竖版单画一张竖图 */
-export function sceneOrientation(family: FamilyName): 'landscape' | 'portrait' {
+/** 这一族的场景画成横的还是竖的 */
+export function sceneOrientation(family: FamilyName): SceneOrientation {
     return family === 'portrait' ? 'portrait' : 'landscape';
 }
-
-const ORIENTATION_FAMILY: Readonly<Record<'landscape' | 'portrait', FamilyName>> = {
-    landscape: 'landscape',
-    portrait: 'portrait',
-};
 
 /**
  * 场景照片的提示词：真实照片，一个清楚的主体，给标题留一块安静的地方，不要任何字。
@@ -111,47 +106,45 @@ export function scenePrompt(scene: string): string {
     ].join(' ');
 }
 
-export interface SceneRuntime {
-    runModelApi: (input: ModelRunInput) => Promise<{ outputPaths: string[] }>;
-    runAgent: (input: AgentRunInput) => Promise<{ outputPaths: string[] }>;
+export interface PaintOptions {
     verbose?: boolean;
     backendOutput?: { write(chunk: string): unknown };
+    /** 测试注入：不真的发请求、不真的起进程 */
+    fetch?: ModelFetch;
+    spawn?: (request: AgentSpawnRequest) => Promise<void>;
 }
 
 /** 画一张场景，返回原图路径。一个朝向画一次，同朝向的各族都从它构图 */
 export async function paintScene(
     painter: ScenePainter,
     scene: string,
-    orientation: 'landscape' | 'portrait',
+    orientation: SceneOrientation,
     runDir: string,
-    runtime: SceneRuntime,
+    options: PaintOptions = {},
 ): Promise<string> {
     mkdirSync(runDir, { recursive: true });
     const generatedPath = join(runDir, `scene-${orientation}.png`);
-    const family = ORIENTATION_FAMILY[orientation];
+    const size = SCENE_SIZE[orientation];
     const prompt = scenePrompt(scene);
     if (painter.kind === 'model') {
-        await runtime.runModelApi({
-            provider: painter.provider,
-            apiKey: painter.apiKey,
-            model: painter.model,
+        await paintWithModel({
+            painter,
             prompt,
-            family,
+            ...size,
             generatedPath,
-            targets: [],
+            ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
         });
     } else {
-        await runtime.runAgent({
+        await paintWithAgent({
             provider: painter.provider,
             commandPath: painter.commandPath,
-            prompt: buildSceneEnvelopePrompt({ prompt, generatedPath, family }),
-            referencePaths: [],
+            prompt: sceneEnvelope({ prompt, generatedPath, ...size }),
             generatedPath,
-            targets: [],
-            ...(runtime.verbose === undefined ? {} : { verbose: runtime.verbose }),
-            ...(runtime.backendOutput === undefined
+            ...(options.verbose === undefined ? {} : { verbose: options.verbose }),
+            ...(options.backendOutput === undefined
                 ? {}
-                : { backendOutput: runtime.backendOutput }),
+                : { backendOutput: options.backendOutput }),
+            ...(options.spawn === undefined ? {} : { spawn: options.spawn }),
         });
     }
     return generatedPath;
@@ -163,11 +156,11 @@ export async function paintScene(
  */
 export async function gradientScene(
     colors: { base: string; deep: string },
-    orientation: 'landscape' | 'portrait',
+    orientation: SceneOrientation,
     runDir: string,
 ): Promise<string> {
     mkdirSync(runDir, { recursive: true });
-    const [width, height] = orientation === 'portrait' ? [1024, 1536] : [1536, 1024];
+    const { width, height } = SCENE_SIZE[orientation];
     const path = join(runDir, `scene-${orientation}-gradient.png`);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
         <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">

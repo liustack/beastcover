@@ -58,7 +58,7 @@ describe('scene painter', () => {
             }),
         ).toMatchObject({ kind: 'agent', provider: 'agy' });
         expect(() => findScenePainter({ via: 'codex', lookup: nothing })).toThrow(
-            'No installed CLI found for via "codex". Install codex.',
+            'codex is not installed. Install it or pick another painter with --via.',
         );
         expect(() => findScenePainter({ via: 'openai', lookup: everything })).toThrow(
             'No API key for openai.',
@@ -75,19 +75,76 @@ describe('scene painter', () => {
         expect(() => parseScene('  ')).toThrow('--scene must not be empty.');
     });
 
-    it('sends the scene to the model API and keeps only the raw picture', async () => {
-        const runModelApi = vi.fn(async () => ({ outputPaths: [] }));
+    it('sends the scene to the model API and saves the picture at the native size', async () => {
+        // 模型回了一张别的尺寸（Gemini 按档位给图）：归一到竖版原生尺寸再存。
+        const returned = await sharp({
+            create: { width: 800, height: 1200, channels: 3, background: '#336699' },
+        })
+            .png()
+            .toBuffer();
+        const fetch = vi.fn(
+            async (_url: string, _init: RequestInit) =>
+                new Response(
+                    JSON.stringify({ data: [{ b64_json: returned.toString('base64') }] }),
+                    {
+                        status: 200,
+                    },
+                ),
+        );
         const path = await paintScene(
             { kind: 'model', provider: 'openai', apiKey: 'k', model: 'm' },
             'a harbour at dawn',
             'portrait',
             tempDir(),
-            { runModelApi, runAgent: vi.fn() },
+            { fetch },
         );
         expect(path.endsWith('scene-portrait.png')).toBe(true);
-        expect(runModelApi).toHaveBeenCalledWith(
-            expect.objectContaining({ family: 'portrait', targets: [], generatedPath: path }),
+        const body = JSON.parse(String(fetch.mock.calls[0]?.[1].body)) as {
+            prompt: string;
+            size: string;
+        };
+        expect(body.prompt).toContain('a harbour at dawn');
+        expect(body.size).toBe('1024x1536');
+        const meta = await sharp(path).metadata();
+        expect([meta.width, meta.height]).toEqual([1024, 1536]);
+    });
+
+    it('asks the agent for one saved picture and checks it landed', async () => {
+        const spawn = vi.fn(async (request: { args: readonly string[] }) => {
+            const envelope = request.args[2] as string;
+            const target = /save it to (\S+)\. /.exec(envelope)?.[1] as string;
+            await sharp({
+                create: { width: 1536, height: 1024, channels: 3, background: '#aa6633' },
+            })
+                .png()
+                .toFile(target);
+        });
+        const path = await paintScene(
+            { kind: 'agent', provider: 'codex', commandPath: '/fake/codex' },
+            'a harbour at dawn',
+            'landscape',
+            tempDir(),
+            { spawn },
         );
+        expect(existsSync(path)).toBe(true);
+        expect(spawn.mock.calls[0]?.[0].args[2]).toContain('Landscape 1536x1024');
+    });
+
+    it('uses the configured model id, else the default', () => {
+        expect(
+            findScenePainter({
+                via: 'gemini',
+                model: { gemini: { apiKey: 'g', model: 'g-2' } },
+                lookup: nothing,
+            }),
+        ).toMatchObject({ kind: 'model', provider: 'gemini', model: 'g-2' });
+        expect(
+            findScenePainter({
+                via: 'openai',
+                model: { openai: { apiKey: 'o' } },
+                lookup: nothing,
+            }),
+        ).toMatchObject({ model: 'gpt-image-2.5-flare' });
     });
 
     it('falls back to a gradient picture of the scheme colours', async () => {

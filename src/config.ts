@@ -5,14 +5,22 @@ import { getPlatform, type PlatformName, parsePlatformList } from './platforms/i
 
 export const CONFIG_PATH = join(homedir(), '.beastcover', 'config.json');
 
-export const IMAGE_SOURCES = ['render', 'stock', 'agent', 'model'] as const;
-export type ImageSource = (typeof IMAGE_SOURCES)[number];
+// 给 --scene 画场景的后端：用户自己的图像模型 API key，或本机的 agent CLI。
+export const MODEL_PROVIDERS = ['openai', 'gemini'] as const;
+export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
 
 export const AGENT_PROVIDERS = ['codex', 'agy'] as const;
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 
-export const MODEL_PROVIDERS = ['openai', 'gemini'] as const;
-export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
+export const PAINTERS = [...MODEL_PROVIDERS, ...AGENT_PROVIDERS] as const;
+export type PainterName = (typeof PAINTERS)[number];
+
+export function parsePainter(value: string): PainterName {
+    if (!PAINTERS.includes(value as PainterName)) {
+        throw new Error(`Unknown painter "${value}". Use ${PAINTERS.join(', ')}.`);
+    }
+    return value as PainterName;
+}
 
 // 模型代号更新很快，写错一代只需要 config set model.<provider>.model 就能改。
 export const MODEL_DEFAULTS: Record<ModelProvider, string> = {
@@ -21,7 +29,6 @@ export const MODEL_DEFAULTS: Record<ModelProvider, string> = {
 };
 
 export interface ModelConfig {
-    via?: ModelProvider;
     openai?: { apiKey?: string; model?: string };
     gemini?: { apiKey?: string; model?: string };
 }
@@ -36,8 +43,12 @@ export interface StockConfig {
     };
 }
 
+export interface SceneConfig {
+    /** 默认用哪个后端画场景，--via 可以临时换 */
+    via?: PainterName;
+}
+
 export interface BeastCoverConfigFile {
-    source?: ImageSource;
     output?: string;
     render?: {
         /** 一个平台名、逗号分隔的平台列表，或 all */
@@ -47,24 +58,19 @@ export interface BeastCoverConfigFile {
         scale?: number;
     };
     stock?: StockConfig;
-    agent?: {
-        via?: AgentProvider;
-    };
     model?: ModelConfig;
+    scene?: SceneConfig;
 }
 
 export interface ConfigFlags {
-    source?: ImageSource;
     output?: string;
     presets?: PlatformName[];
     width?: number;
     height?: number;
     scale?: number;
-    via?: AgentProvider | ModelProvider;
 }
 
 export interface EffectiveConfig {
-    source: ImageSource;
     output: string;
     render: {
         presets: PlatformName[];
@@ -73,12 +79,11 @@ export interface EffectiveConfig {
         scale: number;
     };
     stock?: BeastCoverConfigFile['stock'];
-    agent?: BeastCoverConfigFile['agent'];
     model?: BeastCoverConfigFile['model'];
+    scene?: BeastCoverConfigFile['scene'];
 }
 
 export const BUILT_IN_CONFIG = {
-    source: 'render',
     output: 'beastcover.png',
     render: {
         preset: 'youtube',
@@ -129,11 +134,6 @@ function validateStockConfig(stock: unknown, configPath: string): void {
         invalidConfig(configPath, 'stock', 'an object');
     }
     for (const key of Object.keys(stock)) {
-        if (key === 'apiKey' || key === 'baseUrl') {
-            throw new Error(
-                `${configPath} uses the old "stock.${key}" key. Stock credentials are now per provider: delete "stock.${key}" from the file, then run beastcover config set stock.pexels.apiKey <key> if you use Pexels.`,
-            );
-        }
         if (!(key in STOCK_PROVIDER_KEYS)) {
             throw new Error(`${configPath} contains unknown config key "stock.${key}".`);
         }
@@ -166,15 +166,9 @@ function validateModelConfig(model: unknown, configPath: string): void {
         invalidConfig(configPath, 'model', 'an object');
     }
     for (const key of Object.keys(model)) {
-        if (key !== 'via' && !MODEL_PROVIDERS.includes(key as ModelProvider)) {
+        if (!MODEL_PROVIDERS.includes(key as ModelProvider)) {
             throw new Error(`${configPath} contains unknown config key "model.${key}".`);
         }
-    }
-    if (
-        model.via !== undefined &&
-        (typeof model.via !== 'string' || !MODEL_PROVIDERS.includes(model.via as ModelProvider))
-    ) {
-        invalidConfig(configPath, 'model.via', `one of ${MODEL_PROVIDERS.join(', ')}`);
     }
     for (const provider of MODEL_PROVIDERS) {
         const section = model[provider];
@@ -198,27 +192,13 @@ function validateModelConfig(model: unknown, configPath: string): void {
 }
 
 function validateConfig(parsed: Record<string, unknown>, configPath: string): BeastCoverConfigFile {
-    const rootKeys = new Set(['source', 'output', 'render', 'stock', 'agent', 'model']);
+    const rootKeys = new Set(['output', 'render', 'stock', 'model', 'scene']);
     for (const key of Object.keys(parsed)) {
-        if (key === 'localModel') {
-            throw new Error(
-                `${configPath} uses the old "localModel" key. The section is now "agent": rename it in the file.`,
-            );
-        }
         if (!rootKeys.has(key)) {
             throw new Error(`${configPath} contains unknown config key "${key}".`);
         }
     }
 
-    if (parsed.source === 'local-model') {
-        throw new Error(`${configPath} has source "local-model". The source is now "agent".`);
-    }
-    if (
-        parsed.source !== undefined &&
-        (typeof parsed.source !== 'string' || !IMAGE_SOURCES.includes(parsed.source as ImageSource))
-    ) {
-        invalidConfig(configPath, 'source', `one of ${IMAGE_SOURCES.join(', ')}`);
-    }
     if (
         parsed.output !== undefined &&
         (typeof parsed.output !== 'string' || parsed.output.trim() === '')
@@ -277,26 +257,21 @@ function validateConfig(parsed: Record<string, unknown>, configPath: string): Be
         validateModelConfig(parsed.model, configPath);
     }
 
-    if (parsed.agent !== undefined) {
-        if (!isPlainObject(parsed.agent)) {
-            invalidConfig(configPath, 'agent', 'an object');
+    if (parsed.scene !== undefined) {
+        if (!isPlainObject(parsed.scene)) {
+            invalidConfig(configPath, 'scene', 'an object');
         }
-        for (const key of Object.keys(parsed.agent)) {
+        for (const key of Object.keys(parsed.scene)) {
             if (key !== 'via') {
-                throw new Error(`${configPath} contains unknown config key "agent.${key}".`);
+                throw new Error(`${configPath} contains unknown config key "scene.${key}".`);
             }
         }
-        if (parsed.agent.via === 'grok' || parsed.agent.via === 'claude') {
-            throw new Error(
-                `${configPath} has agent.via "${parsed.agent.via}". That backend was removed: the ${parsed.agent.via} CLI has no image generation. Use codex or agy.`,
-            );
-        }
+        const via = parsed.scene.via;
         if (
-            parsed.agent.via !== undefined &&
-            (typeof parsed.agent.via !== 'string' ||
-                !AGENT_PROVIDERS.includes(parsed.agent.via as AgentProvider))
+            via !== undefined &&
+            (typeof via !== 'string' || !PAINTERS.includes(via as PainterName))
         ) {
-            invalidConfig(configPath, 'agent.via', `one of ${AGENT_PROVIDERS.join(', ')}`);
+            invalidConfig(configPath, 'scene.via', `one of ${PAINTERS.join(', ')}`);
         }
     }
 
@@ -347,18 +322,6 @@ export function setConfigValue(
     const config = loadConfigFile(configPath);
 
     switch (dottedKey) {
-        case 'localModel.via':
-            throw new Error('The "localModel.via" key is now "agent.via".');
-        case 'source': {
-            if (value === 'local-model') {
-                throw new Error('Source "local-model" is now "agent".');
-            }
-            if (!IMAGE_SOURCES.includes(value as ImageSource)) {
-                throw new Error(`source must be one of ${IMAGE_SOURCES.join(', ')}.`);
-            }
-            config.source = value as ImageSource;
-            break;
-        }
         case 'output': {
             if (value === '') {
                 throw new Error('output must not be empty.');
@@ -397,14 +360,6 @@ export function setConfigValue(
             config.stock.openverse[field] = rawValue;
             break;
         }
-        case 'model.via': {
-            if (!MODEL_PROVIDERS.includes(value as ModelProvider)) {
-                throw new Error(`model.via must be one of ${MODEL_PROVIDERS.join(', ')}.`);
-            }
-            config.model ??= {};
-            config.model.via = value as ModelProvider;
-            break;
-        }
         case 'model.openai.apiKey':
         case 'model.openai.model':
         case 'model.gemini.apiKey':
@@ -422,17 +377,9 @@ export function setConfigValue(
             (config.model[provider] as Record<string, string>)[field] = rawValue.trim();
             break;
         }
-        case 'agent.via': {
-            if (value === 'grok' || value === 'claude') {
-                throw new Error(
-                    `agent.via "${value}" was removed: the ${value} CLI has no image generation. Use codex or agy.`,
-                );
-            }
-            if (!AGENT_PROVIDERS.includes(value as AgentProvider)) {
-                throw new Error(`agent.via must be one of ${AGENT_PROVIDERS.join(', ')}.`);
-            }
-            config.agent ??= {};
-            config.agent.via = value as AgentProvider;
+        case 'scene.via': {
+            config.scene ??= {};
+            config.scene.via = parsePainter(value);
             break;
         }
         default:
@@ -463,7 +410,6 @@ export function resolveEffectiveConfig(
     }
 
     return {
-        source: flags.source ?? fileConfig.source ?? BUILT_IN_CONFIG.source,
         output: flags.output ?? fileConfig.output ?? BUILT_IN_CONFIG.output,
         render: {
             presets,
@@ -471,8 +417,8 @@ export function resolveEffectiveConfig(
             scale: flags.scale ?? fileConfig.render?.scale ?? BUILT_IN_CONFIG.render.scale,
         },
         ...(fileConfig.stock ? { stock: structuredClone(fileConfig.stock) } : {}),
-        ...(fileConfig.agent ? { agent: { ...fileConfig.agent } } : {}),
         ...(fileConfig.model ? { model: structuredClone(fileConfig.model) } : {}),
+        ...(fileConfig.scene ? { scene: { ...fileConfig.scene } } : {}),
     };
 }
 

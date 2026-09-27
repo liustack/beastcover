@@ -94,19 +94,6 @@ describe('platform presets', () => {
         expect(getFamily('landscape').textArea.x).toBe(192);
     });
 
-    it('names the replacement when a retired ratio preset is used', () => {
-        expect(() => getPlatform('16:9')).toThrowError('Preset "16:9" is now "youtube".');
-        expect(() => getPlatform('5:2')).toThrowError(
-            'Preset "5:2" is gone. Use "x" or "wechat" for a wide banner cover.',
-        );
-        expect(() => getPlatform('3:2')).toThrowError(
-            'Preset "3:2" is gone. Use "youtube" or "bilibili" for a landscape cover.',
-        );
-        expect(() => getPlatform('3:4')).toThrowError(
-            'Preset "3:4" is now "xiaohongshu" or "instagram".',
-        );
-    });
-
     it('lists every preset for an unknown name, including inherited object keys', () => {
         const message =
             'Use youtube, bilibili, wechat, x, xiaohongshu, instagram, instagram-reels, douyin, tiktok, og, github.';
@@ -138,6 +125,6 @@ describe('platform lists', () => {
         expect(() => parsePlatformList('all,x')).toThrowError(
             'Preset "all" cannot be combined with other presets.',
         );
-        expect(() => parsePlatformList('x,16:9')).toThrowError('Preset "16:9" is now "youtube".');
+        expect(() => parsePlatformList('x,16:9')).toThrowError('Unknown platform preset "16:9".');
     });
 });

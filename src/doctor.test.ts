@@ -60,7 +60,7 @@ describe('offline doctor', () => {
             });
 
             expect(healthy.healthy).toBe(true);
-            expect(healthy.checks).toHaveLength(7);
+            expect(healthy.checks).toHaveLength(5);
             // 没有 swiftc 时自动抠图不可用，只是提醒，不影响健康。
             expect(healthy.checks.find((check) => check.id === 'cutout')).toEqual({
                 id: 'cutout',
@@ -83,13 +83,6 @@ describe('offline doctor', () => {
                     status: 'ok',
                 },
             );
-            for (const id of ['codex', 'agy'] as const) {
-                expect(healthy.checks.find((check) => check.id === id)).toMatchObject({
-                    id,
-                    status: 'warn',
-                });
-                expect(healthy.checks.find((check) => check.id === id)?.message).toMatch(id);
-            }
             // 没有模型 key、也没有 agent CLI：--scene 只能退到渐变，提醒但不算不健康。
             expect(healthy.checks.find((check) => check.id === 'scene')).toMatchObject({
                 id: 'scene',
@@ -109,9 +102,6 @@ describe('offline doctor', () => {
             expect(unsafe.checks.find((check) => check.id === 'config-permissions')).toMatchObject({
                 id: 'config-permissions',
                 status: 'error',
-            });
-            expect(unsafe.checks.find((check) => check.id === 'codex')).toMatchObject({
-                status: 'warn',
             });
         },
     );
@@ -146,7 +136,7 @@ describe('offline doctor', () => {
         });
     });
 
-    it('reports installed agent CLIs as ok without changing health', async () => {
+    it('names the painter --scene would use, and fails a scene.via that is not installed', async () => {
         const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-cli-'));
         tempDirectories.push(directory);
         const configPath = join(directory, 'config.json');
@@ -162,11 +152,25 @@ describe('offline doctor', () => {
         });
 
         expect(report.healthy).toBe(true);
-        for (const id of ['codex', 'agy'] as const) {
-            expect(report.checks.find((check) => check.id === id)).toMatchObject({
-                id,
-                status: 'ok',
-            });
-        }
+        expect(report.checks.find((check) => check.id === 'scene')).toEqual({
+            id: 'scene',
+            label: 'Scene painting',
+            status: 'ok',
+            message: '--scene paints with your codex CLI.',
+        });
+
+        // scene.via 点名了没装的后端：报错，不换家。
+        writeFileSync(configPath, '{"scene":{"via":"agy"}}\n', { mode: 0o600 });
+        const missing = await runDoctor({
+            nodeVersion: '22.19.0',
+            launchChromium: startsChromium,
+            configPath,
+            platform: process.platform === 'win32' ? 'win32' : 'darwin',
+            lookupCommand: (name) => (name === 'codex' ? '/usr/bin/codex' : undefined),
+        });
+        expect(missing.checks.find((check) => check.id === 'scene')).toMatchObject({
+            status: 'error',
+            message: 'agy is not installed. Install it or pick another painter with --via.',
+        });
     });
 });

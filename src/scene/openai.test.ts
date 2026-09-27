@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { generateOpenAiImage } from './index.ts';
+import { generateOpenAiImage } from './openai.ts';
 
 function jsonResponse(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), {

@@ -1,6 +1,6 @@
 import { type Stats, statSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
-import { AGENT_PROVIDERS, type AgentProvider, CONFIG_PATH, loadConfigFile } from './config.ts';
+import { CONFIG_PATH, loadConfigFile } from './config.ts';
 import { launchChromium } from './render/index.ts';
 import { findScenePainter, painterLabel } from './scene/index.ts';
 import { visionCutoutUnavailable } from './subject/vision.ts';
@@ -10,7 +10,7 @@ const MINIMUM_NODE_VERSION = { major: 22, minor: 19, patch: 0 } as const;
 export type DoctorStatus = 'ok' | 'warn' | 'error';
 
 export interface DoctorCheck {
-    id: 'node' | 'chromium' | 'config-permissions' | 'cutout' | 'scene' | AgentProvider;
+    id: 'node' | 'chromium' | 'config-permissions' | 'cutout' | 'scene';
     label: string;
     status: DoctorStatus;
     message: string;
@@ -168,28 +168,6 @@ export function lookupCommandOnPath(
     return undefined;
 }
 
-function agentCliCheck(
-    name: AgentProvider,
-    lookup: (commandName: string) => string | undefined,
-): DoctorCheck {
-    const found = lookup(name);
-    if (found === undefined) {
-        return {
-            id: name,
-            label: name,
-            status: 'warn',
-            message: `${name} is not installed.`,
-        };
-    }
-
-    return {
-        id: name,
-        label: name,
-        status: 'ok',
-        message: `${name} found at ${found}.`,
-    };
-}
-
 function cutoutCheck(
     platform: NodeJS.Platform,
     osRelease: string | undefined,
@@ -223,18 +201,22 @@ function sceneCheck(
     configPath: string,
     lookup: (commandName: string) => string | undefined,
 ): DoctorCheck {
-    let model: ReturnType<typeof loadConfigFile>['model'];
+    let painter: ReturnType<typeof findScenePainter>;
     try {
-        model = loadConfigFile(configPath).model;
+        const config = loadConfigFile(configPath);
+        painter = findScenePainter({
+            ...(config.scene?.via === undefined ? {} : { via: config.scene.via }),
+            ...(config.model === undefined ? {} : { model: config.model }),
+            lookup,
+        });
     } catch (error) {
         return {
             id: 'scene',
             label: 'Scene painting',
-            status: 'warn',
-            message: `Cannot read the model keys: ${error instanceof Error ? error.message : String(error)}`,
+            status: 'error',
+            message: error instanceof Error ? error.message : String(error),
         };
     }
-    const painter = findScenePainter({ ...(model === undefined ? {} : { model }), lookup });
     if (painter === undefined) {
         return {
             id: 'scene',
@@ -260,7 +242,6 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
         await chromiumCheck(options.launchChromium ?? launchChromium),
         configPermissionsCheck(options.configPath ?? CONFIG_PATH, platform),
         cutoutCheck(platform, options.osRelease, options.configPath ?? CONFIG_PATH, lookup),
-        ...AGENT_PROVIDERS.map((name) => agentCliCheck(name, lookup)),
         sceneCheck(options.configPath ?? CONFIG_PATH, lookup),
     ];
 

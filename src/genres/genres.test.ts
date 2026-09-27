@@ -138,11 +138,8 @@ function templateFor(name: GenreName, paths: readonly string[]): CoverTemplate {
 }
 
 describe('cover type registry', () => {
-    it('points the retired template names at their replacements', () => {
-        expect(() => parseGenre('poster')).toThrow('Use --template big-type.');
-        expect(() => parseGenre('text')).toThrow('Use --template big-type.');
-        expect(() => parseGenre('compare')).toThrow('Use --template before-after.');
-        expect(() => parseGenre('banner')).toThrow('Unknown template "banner"');
+    it('parses every type name and refuses anything else', () => {
+        expect(() => parseGenre('poster')).toThrow('Unknown template "poster"');
         expect(GENRE_NAMES.map(parseGenre)).toEqual([...GENRE_NAMES]);
     });
 

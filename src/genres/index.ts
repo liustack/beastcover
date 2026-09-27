@@ -28,18 +28,7 @@ export const GENRE_NAMES = [
 
 export type GenreName = (typeof GENRE_NAMES)[number];
 
-// 旧的模板名换成了类型名，报错时指到新名字。
-const RETIRED: Readonly<Record<string, GenreName>> = {
-    text: 'big-type',
-    poster: 'big-type',
-    compare: 'before-after',
-};
-
 export function parseGenre(value: string): GenreName {
-    const replacement = RETIRED[value];
-    if (replacement !== undefined) {
-        throw new Error(`The "${value}" template was replaced. Use --template ${replacement}.`);
-    }
     if (!GENRE_NAMES.includes(value as GenreName)) {
         throw new Error(`Unknown template "${value}". Use ${GENRE_NAMES.join(', ')}.`);
     }

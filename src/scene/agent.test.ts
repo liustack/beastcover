@@ -1,14 +1,15 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     AGENT_TIMEOUT_MS,
     type AgentSpawnRequest,
-    runAgent,
+    agentArgs,
+    paintWithAgent,
+    sceneEnvelope,
     spawnCapturedProcess,
-} from './index.ts';
+} from './agent.ts';
 
 const tempDirectories: string[] = [];
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -29,14 +30,38 @@ function baseInput(outputPath: string) {
     return {
         provider: 'codex' as const,
         commandPath: '/fake/codex',
-        prompt: 'Use your image generation capability. 主体：海岸.',
-        referencePaths: [] as string[],
+        prompt: 'Use your image generation capability. A harbour at dawn.',
         generatedPath: outputPath,
-        targets: [{ preset: 'youtube' as const, outputPath }],
     };
 }
 
-describe('agent run', () => {
+describe('agent painter', () => {
+    it('passes the whole envelope as one argument to codex and agy', () => {
+        expect(agentArgs('codex', 'Paint it.')).toEqual([
+            'exec',
+            '--skip-git-repo-check',
+            'Paint it.',
+        ]);
+        expect(agentArgs('agy', 'Paint it.')).toEqual([
+            '-p',
+            'Paint it.',
+            '--dangerously-skip-permissions',
+        ]);
+    });
+
+    it('asks for one saved image at the native size and nothing else', () => {
+        const envelope = sceneEnvelope({
+            prompt: 'A harbour at dawn.',
+            generatedPath: '/tmp/scene.png',
+            width: 1024,
+            height: 1536,
+        });
+        expect(envelope).toContain('save it to /tmp/scene.png');
+        expect(envelope).toContain('A harbour at dawn.');
+        expect(envelope).toContain('Portrait 1024x1536');
+        expect(envelope).toContain('Generate the image file only');
+    });
+
     it('exports a 5-minute default timeout', () => {
         expect(AGENT_TIMEOUT_MS).toBe(300_000);
     });
@@ -51,7 +76,7 @@ describe('agent run', () => {
 
         let thrown: unknown;
         try {
-            await runAgent({
+            await paintWithAgent({
                 ...baseInput(outputPath),
                 spawn,
             });
@@ -65,7 +90,7 @@ describe('agent run', () => {
         expect(thrown).toBeInstanceOf(Error);
         const message = thrown instanceof Error ? thrown.message : String(thrown);
         expect(message).toMatch(/missing|not found|does not exist|invalid|empty/i);
-        expect(message).toMatch(/agent|codex/);
+        expect(message).toMatch(/codex/);
     });
 
     it('rejects missing, empty, and non-image output', async () => {
@@ -74,7 +99,7 @@ describe('agent run', () => {
         const emptyPath = join(directory, 'empty.png');
         const randomPath = join(directory, 'random.png');
 
-        const missingError = await runAgent({
+        const missingError = await paintWithAgent({
             ...baseInput(missingPath),
             spawn: vi.fn(async (_request: AgentSpawnRequest) => undefined),
         }).then(
@@ -83,12 +108,12 @@ describe('agent run', () => {
         );
         expect(missingError).toBeInstanceOf(Error);
         expect((missingError as Error).message).toMatch(/missing|not found|does not exist/i);
-        expect((missingError as Error).message).toMatch(/agent|codex/);
+        expect((missingError as Error).message).toMatch(/codex/);
 
         const emptySpawn = vi.fn(async (_request: AgentSpawnRequest) => {
             writeFileSync(emptyPath, Buffer.alloc(0));
         });
-        const emptyError = await runAgent({
+        const emptyError = await paintWithAgent({
             ...baseInput(emptyPath),
             spawn: emptySpawn,
         }).then(
@@ -97,12 +122,12 @@ describe('agent run', () => {
         );
         expect(emptyError).toBeInstanceOf(Error);
         expect((emptyError as Error).message).toMatch(/empty/i);
-        expect((emptyError as Error).message).toMatch(/agent|codex/);
+        expect((emptyError as Error).message).toMatch(/codex/);
 
         const randomSpawn = vi.fn(async (_request: AgentSpawnRequest) => {
             writeFileSync(randomPath, 'not-an-image');
         });
-        const randomError = await runAgent({
+        const randomError = await paintWithAgent({
             ...baseInput(randomPath),
             spawn: randomSpawn,
         }).then(
@@ -111,7 +136,7 @@ describe('agent run', () => {
         );
         expect(randomError).toBeInstanceOf(Error);
         expect((randomError as Error).message).toMatch(/invalid/i);
-        expect((randomError as Error).message).toMatch(/agent|codex/);
+        expect((randomError as Error).message).toMatch(/codex/);
     });
 
     it('rejects a hung agent spawn after the injected timeout', async () => {
@@ -120,7 +145,7 @@ describe('agent run', () => {
 
         let thrown: unknown;
         try {
-            await runAgent({
+            await paintWithAgent({
                 ...baseInput(outputPath),
                 timeoutMs: 50,
                 spawn,
@@ -130,7 +155,6 @@ describe('agent run', () => {
         }
         expect(thrown).toBeInstanceOf(Error);
         const message = thrown instanceof Error ? thrown.message : String(thrown);
-        expect(message).toContain('agent');
         expect(message).toContain('codex');
         expect(message).toContain('50');
     }, 3000);
@@ -193,84 +217,7 @@ describe('spawnCapturedProcess', () => {
         expect(chunks.join('')).toContain('BACKEND_NOISE');
         expect(thrown).toBeInstanceOf(Error);
         expect(thrown instanceof Error ? thrown.message : String(thrown)).toBe(
-            'agent via codex exited with code 2.',
+            'codex exited with code 2.',
         );
-    });
-});
-
-describe('agent finish after verify', () => {
-    async function generate(outputPath: string, width: number, height: number, jpeg = false) {
-        const image = sharp({
-            create: { width, height, channels: 3, background: { r: 0, g: 255, b: 0 } },
-        });
-        await (jpeg ? image.jpeg() : image.png()).toFile(outputPath);
-    }
-
-    it('crops and resizes a verified PNG in place to youtube production pixels', async () => {
-        const outputPath = join(tempDir('beastcover-run-finish-png-'), 'out.png');
-        const spawn = vi.fn(async (_request: AgentSpawnRequest) => {
-            await generate(outputPath, 1536, 1024);
-        });
-
-        await expect(runAgent({ ...baseInput(outputPath), spawn })).resolves.toEqual({
-            outputPaths: [outputPath],
-        });
-        const meta = await sharp(outputPath).metadata();
-        expect([meta.width, meta.height]).toEqual([1280, 720]);
-    });
-
-    it('rewrites JPEG bytes saved under the .png target as a PNG at youtube size', async () => {
-        const outputPath = join(tempDir('beastcover-run-finish-jpeg-'), 'out.png');
-        const spawn = vi.fn(async (_request: AgentSpawnRequest) => {
-            await generate(outputPath, 1536, 1024, true);
-        });
-
-        await runAgent({ ...baseInput(outputPath), spawn });
-        const meta = await sharp(outputPath).metadata();
-        expect([meta.format, meta.width, meta.height]).toEqual(['png', 1280, 720]);
-    });
-
-    it('crops every platform of one family from a single generation', async () => {
-        const directory = tempDir('beastcover-run-family-');
-        const generatedPath = join(directory, 'cache', 'raw.png');
-        const spawn = vi.fn(async (_request: AgentSpawnRequest) => {
-            await generate(generatedPath, 1024, 1536);
-        });
-        const targets = [
-            { preset: 'xiaohongshu' as const, outputPath: join(directory, 'out', 'a.png') },
-            { preset: 'douyin' as const, outputPath: join(directory, 'out', 'b.png') },
-        ];
-
-        await expect(
-            runAgent({ ...baseInput(generatedPath), generatedPath, targets, spawn }),
-        ).resolves.toEqual({ outputPaths: targets.map((target) => target.outputPath) });
-        expect(spawn).toHaveBeenCalledOnce();
-        const sizes = await Promise.all(
-            targets.map(async (target) => {
-                const meta = await sharp(target.outputPath).metadata();
-                return [meta.width, meta.height];
-            }),
-        );
-        expect(sizes).toEqual([
-            [1080, 1440],
-            [1080, 1920],
-        ]);
-        expect(existsSync(generatedPath)).toBe(true);
-    });
-
-    it('refuses to crop platforms of different families from one generation', async () => {
-        const directory = tempDir('beastcover-run-mixed-');
-        const spawn = vi.fn(async () => undefined);
-        await expect(
-            runAgent({
-                ...baseInput(join(directory, 'raw.png')),
-                targets: [
-                    { preset: 'youtube', outputPath: join(directory, 'a.png') },
-                    { preset: 'douyin', outputPath: join(directory, 'b.png') },
-                ],
-                spawn,
-            }),
-        ).rejects.toThrowError('runAgent crops one family per generation.');
-        expect(spawn).not.toHaveBeenCalled();
     });
 });

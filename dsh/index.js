@@ -70,7 +70,7 @@ export function createGenerateTool(toolName = 'beastcover_generate_image') {
   return {
     name: toolName,
     description:
-      'Render a headline into a local PNG cover with BeastCover, sized for one platform. Use for text-led covers whose wording may change. The render source runs locally and sends no content over the network.',
+      'Render a headline into a local PNG cover with BeastCover, sized for one platform. Rendering runs locally and sends no content over the network.',
     parameters: {
       type: 'object',
       properties: {
@@ -95,10 +95,9 @@ export function createGenerateTool(toolName = 'beastcover_generate_image') {
         type: 'object',
         properties: {
           pngPath: { type: 'string' },
-          source: { type: 'string', const: 'render' },
           privacy: { type: 'string', const: 'local' },
         },
-        required: ['pngPath', 'source', 'privacy'],
+        required: ['pngPath', 'privacy'],
       },
       render: (_args, value) => [{ type: 'text', text: `Created ${value.pngPath}. Render stayed on this machine.` }],
     },
@@ -127,7 +126,7 @@ export function createGenerateTool(toolName = 'beastcover_generate_image') {
         throw new Error(`${toolName} output must use the .png extension.`)
       }
 
-      const cliArgs = [CLI_PATH, 'gen', args.text, '--source', 'render', '--output', outputPath]
+      const cliArgs = [CLI_PATH, 'gen', args.text, '--output', outputPath]
       if (args.preset) cliArgs.push('--preset', args.preset)
       const result = await run(process.execPath, cliArgs, exec.signal)
       if (result.code !== 0) {
@@ -139,7 +138,7 @@ export function createGenerateTool(toolName = 'beastcover_generate_image') {
         throw new Error(`beastcover exited successfully but did not create ${outputPath}.`)
       }
 
-      return { pngPath: outputPath, source: 'render', privacy: 'local' }
+      return { pngPath: outputPath, privacy: 'local' }
     },
   }
 }
