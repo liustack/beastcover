@@ -45,7 +45,7 @@ Claude Code、Codex 以及任何认技能目录的 agent 都能用。装完对�
 </p>
 <p align="center">
   <img src="examples/callout-youtube.jpg" alt="圈注科普：红圈加箭头圈出一架小飞机，这是什么？" width="32%">
-  <img src="examples/scene-title-bilibili.jpg" alt="场景题字：海上一艘帆船，出海第一天" width="32%">
+  <img src="examples/scene-title-youtube.jpg" alt="场景题字：海上一艘帆船，出海第一天" width="32%">
   <img src="examples/face-stakes-youtube.jpg" alt="人物加赌注：虚化的岩浆场景前一张脸，DAY 1 牌子" width="32%">
 </p>
 <p align="center">

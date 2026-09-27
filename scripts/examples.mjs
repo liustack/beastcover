@@ -77,14 +77,14 @@ if (gen(['我看*傻*了', '--subject', face, '--preset', 'youtube,xiaohongshu',
 
 gen(['15元和150元的拉面', '--template', 'versus', '--photo', PHOTOS.ramen, '--photo', PHOTOS.ramenFancy, '--labels', '¥15,¥150', '--preset', 'youtube', '--output', out('versus-youtube.png')]);
 gen(['桌面*改造*', '--template', 'before-after', '--photo', PHOTOS.deskBefore, '--photo', PHOTOS.deskAfter, '--labels', '改前,改后', '--preset', 'xiaohongshu', '--output', out('before-after-xiaohongshu.png')]);
-gen(['*出海*第一天', '--template', 'scene-title', '--photo', PHOTOS.sailboat, '--preset', 'bilibili,x', '--output', out('scene-title.png')]);
+gen(['*出海*第一天', '--template', 'scene-title', '--photo', PHOTOS.sailboat, '--preset', 'youtube,x', '--output', out('scene-title.png')]);
 gen(['这是什么？', '--template', 'callout', '--photo', PHOTOS.plane, '--preset', 'youtube', '--output', out('callout-youtube.png')]);
 gen(['一周吃了*7碗*面', '--template', 'collage', '--photo', PHOTOS.ramen, '--photo', PHOTOS.tsukemen, '--photo', PHOTOS.streetFood, '--photo', PHOTOS.ramenFancy, '--preset', 'xiaohongshu', '--output', out('collage-xiaohongshu.png')]);
 gen(['慢一点的早晨', '--template', 'mood', '--photo', PHOTOS.coffee, '--preset', 'xiaohongshu', '--output', out('mood-xiaohongshu.png')]);
 jpegs.push(
     'versus-youtube',
     'before-after-xiaohongshu',
-    'scene-title-bilibili',
+    'scene-title-youtube',
     'scene-title-x',
     'callout-youtube',
     'collage-xiaohongshu',

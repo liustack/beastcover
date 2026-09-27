@@ -70,10 +70,10 @@ beastcover gen "桌面*改造*" --template before-after --photo openverse:db683a
 A full-bleed scene with an outlined title. The title started at the bottom, where it covered the boat, so the CLI moved it to the calm water at the top.
 
 ```bash
-beastcover gen "*出海*第一天" --template scene-title --photo openverse:d788f4c8-9d3d-40cf-8784-02d2573ce9a0 --preset bilibili,x
+beastcover gen "*出海*第一天" --template scene-title --photo openverse:d788f4c8-9d3d-40cf-8784-02d2573ce9a0 --preset youtube,x
 ```
 
-<img src="scene-title-bilibili.jpg" width="480"> <img src="scene-title-x.jpg" width="600">
+<img src="scene-title-youtube.jpg" width="480"> <img src="scene-title-x.jpg" width="600">
 
 ## Callout
 

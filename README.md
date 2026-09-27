@@ -45,7 +45,7 @@ Every platform has several cover types that keep winning, not one. BeastCover ma
 </p>
 <p align="center">
   <img src="examples/callout-youtube.jpg" alt="Callout: a small airplane circled in red with an arrow, 这是什么？" width="32%">
-  <img src="examples/scene-title-bilibili.jpg" alt="Scene title: a sailboat on open water, 出海第一天 in outlined yellow and white" width="32%">
+  <img src="examples/scene-title-youtube.jpg" alt="Scene title: a sailboat on open water, 出海第一天 in outlined yellow and white" width="32%">
   <img src="examples/face-stakes-youtube.jpg" alt="Face with stakes: a face beside a blurred lava field, a DAY 1 sign" width="32%">
 </p>
 <p align="center">
