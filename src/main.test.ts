@@ -964,7 +964,7 @@ describe('BeastCover CLI', () => {
         }
     });
 
-    it('puts a transparent subject on the cover and records it in history', async () => {
+    it('puts a transparent subject on the cover as it is', async () => {
         const cwd = tempDir('beastcover-cli-subject-');
         const subjectPath = join(cwd, 'me.png');
         await sharp({
@@ -1001,8 +1001,9 @@ describe('BeastCover CLI', () => {
             openRenderer: renderHtml.open,
             qc: undefined,
             cutout,
+            // 找脸换成假的：真的会在 macOS 上现编译 Vision 工具，CI 上能拖过超时。
+            photoFocus: centreFocus,
             stdout,
-            now: () => new Date('2026-09-25T00:00:00.000Z'),
         });
 
         expect(exitCode).toBe(0);
@@ -1051,6 +1052,7 @@ describe('BeastCover CLI', () => {
             openRenderer: mockRender().open,
             qc: undefined,
             cutout,
+            photoFocus: centreFocus,
             stdout,
         });
 
