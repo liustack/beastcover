@@ -17,9 +17,11 @@ import {
     checkQuietZone,
     detailUnder,
     type QcFinding,
+    type QcTarget,
     realObjects,
     type TextMask,
     textMaskFrom,
+    textOnPicture,
 } from '../qc/index.ts';
 import { type CoverRenderer, TextDoesNotFitError } from '../render/index.ts';
 import {
@@ -37,6 +39,11 @@ import { guidesOverlay } from './guides.ts';
 export interface CoverTemplate {
     /** 模板要改版式时提供，比如有人物时把标题让到一侧 */
     layoutFor?(layout: CoverLayout): CoverLayout;
+    /**
+     * 备选排法，比如标题从照片下半截挪到上半截。第一种排法质检不过时按顺序试，
+     * 留问题最少的一种。renderHtml 要按版式里标题的位置决定压暗和构图
+     */
+    placements?: readonly ((layout: CoverLayout) => CoverLayout)[];
     /** 量字号用的页面：同样的版式和字体，不带照片等重资源 */
     measureHtml(layout: CoverLayout, headline: Headline): string;
     /** 版式有 accentArea 时提供：只排第二段大字的量字号页面，大字放在 .copy 里 */
@@ -64,6 +71,8 @@ export interface ComposedCover {
     feedHeadlinePx: number;
     /** 这张成品的质检结果，文件照写，问题标出来 */
     findings: QcFinding[];
+    /** 第一种排法质检不过，换成了模板的备选排法 */
+    moved: boolean;
 }
 
 /** 质检：画面分析找人脸、人、自带文字、主体物。本机没有 Vision 时 analyze 为 undefined，只跳过这一项 */
@@ -76,6 +85,66 @@ async function meanLuma(png: Buffer): Promise<number> {
     const { channels } = await sharp(png).removeAlpha().stats();
     const [r, g, b] = channels.map((channel) => channel.mean) as [number, number, number];
     return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/** 质检要的材料：不带字的背景、字迹、只压在照片上的字迹、画面分析（本机能看才有） */
+interface MasterInspection {
+    background: Buffer;
+    text: TextMask;
+    pictureText: TextMask;
+    contents?: ImageContents;
+}
+
+/** 带字和不带字各渲一张比出字迹，不带字的交给画面分析 */
+async function inspectMaster(
+    renderer: CoverRenderer,
+    qc: QcRuntime,
+    page: { html: string; width: number; height: number },
+): Promise<MasterInspection> {
+    const inspected = await renderer.inspect({ ...page, scale: 1 });
+    const text = await textMaskFrom(inspected.withText, inspected.background);
+    const inspection: MasterInspection = {
+        background: inspected.background,
+        text,
+        pictureText: await textOnPicture(text, inspected.background),
+    };
+    if (qc.analyze !== undefined) {
+        const contents = await qc.analyze(inspected.background);
+        inspection.contents = {
+            ...contents,
+            objects: await realObjects(inspected.background, contents.objects),
+        };
+    }
+    return inspection;
+}
+
+/** 按一张成品的裁切框比对：字压没压住人脸、人、自带的字、主体，字下面花不花，整张暗不暗 */
+async function findingsFor(
+    target: QcTarget,
+    crop: Rect,
+    qc: MasterInspection,
+    png: Buffer,
+): Promise<QcFinding[]> {
+    return [
+        ...(qc.contents === undefined
+            ? []
+            : checkOverlaps({
+                  platform: target,
+                  crop,
+                  text: qc.text,
+                  pictureText: qc.pictureText,
+                  contents: qc.contents,
+              })),
+        ...checkQuietZone(target, await detailUnder(qc.background, qc.text, crop)),
+        ...checkBrightness(target, await meanLuma(png)),
+    ];
+}
+
+/** 一种排法的问题分：不过关的按十个提醒算。0 表示干净 */
+function placementScore(outputs: readonly { findings: readonly QcFinding[] }[]): number {
+    return outputs
+        .flatMap((output) => output.findings)
+        .reduce((sum, finding) => sum + (finding.level === 'fail' ? 10 : 1), 0);
 }
 
 export const MIN_HEADLINE_PX = 16;
@@ -293,101 +362,109 @@ export async function composeCovers(input: {
             coveredAreas: familyCoveredAreas(familyName, names),
         };
         const framed = { ...base, ...areas };
-        const layout = { ...(input.template.layoutFor?.(framed) ?? framed), ...areas };
-        const headline = await fitHeadline(
-            input.renderer,
-            input.template,
-            layout,
-            input.text,
-            `the ${members.map((member) => member.platform.name).join(', ')} safe area`,
-        );
-        const masterHtml = await input.template.renderHtml(
-            layout,
-            headline,
-            Math.round(family.masterWidth * masterScale),
-            Math.round(family.masterHeight * masterScale),
-        );
-        const master = await input.renderer.screenshot({
-            html: masterHtml,
-            width: family.masterWidth,
-            height: family.masterHeight,
-            scale: masterScale,
-        });
-        // 质检：带字和不带字各渲一张比出字迹，不带字的交给画面分析，再按每个平台的裁切框比对。
-        let qc: { background: Buffer; text: TextMask; contents?: ImageContents } | undefined;
-        if (input.qc !== undefined) {
-            const inspected = await input.renderer.inspect({
+        const where = `the ${members.map((member) => member.platform.name).join(', ')} safe area`;
+
+        // 按一种排法出这一族：量字号、渲母版、质检、裁出每个平台。文件先不写，挑好排法再写。
+        const attempt = async (place: ((layout: CoverLayout) => CoverLayout) | undefined) => {
+            const layout = { ...(place?.(framed) ?? framed), ...areas };
+            const headline = await fitHeadline(
+                input.renderer,
+                input.template,
+                layout,
+                input.text,
+                where,
+            );
+            const masterHtml = await input.template.renderHtml(
+                layout,
+                headline,
+                Math.round(family.masterWidth * masterScale),
+                Math.round(family.masterHeight * masterScale),
+            );
+            const master = await input.renderer.screenshot({
                 html: masterHtml,
                 width: family.masterWidth,
                 height: family.masterHeight,
-                scale: 1,
+                scale: masterScale,
             });
-            qc = {
-                background: inspected.background,
-                text: await textMaskFrom(inspected.withText, inspected.background),
-            };
-            if (input.qc.analyze !== undefined) {
-                const contents = await input.qc.analyze(inspected.background);
-                qc.contents = {
-                    ...contents,
-                    objects: await realObjects(inspected.background, contents.objects),
-                };
+            const qc =
+                input.qc === undefined
+                    ? undefined
+                    : await inspectMaster(input.renderer, input.qc, {
+                          html: masterHtml,
+                          width: family.masterWidth,
+                          height: family.masterHeight,
+                      });
+            const outputs: {
+                platform: Platform;
+                outputPath: string;
+                png: Buffer;
+                findings: QcFinding[];
+            }[] = [];
+            for (const { platform, outputPath } of members) {
+                const pixelWidth = Math.round(platform.width * input.scale);
+                const pixelHeight = Math.round(platform.height * input.scale);
+                const crop = scaleRect(platform.crop, masterScale);
+                let image = sharp(master)
+                    .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
+                    // 裁切框取整后和成品比例差不到 0.2%，fill 拉满不会看出变形。
+                    .resize(pixelWidth, pixelHeight, { fit: 'fill' });
+                if (input.guides) {
+                    image = sharp(await image.png().toBuffer()).composite([
+                        {
+                            input: guidesOverlay(
+                                platform,
+                                {
+                                    textArea: layout.textArea,
+                                    focusArea: family.focusArea,
+                                    ...(layout.subjectArea
+                                        ? { subjectArea: layout.subjectArea }
+                                        : {}),
+                                    ...(layout.accentArea ? { accentArea: layout.accentArea } : {}),
+                                },
+                                pixelWidth,
+                                pixelHeight,
+                            ),
+                            left: 0,
+                            top: 0,
+                        },
+                    ]);
+                }
+                const png = await image.png().toBuffer();
+                const findings =
+                    qc === undefined
+                        ? []
+                        : await findingsFor(platform.name, platform.crop, qc, png);
+                outputs.push({ platform, outputPath, png, findings });
+            }
+            return { headline, outputs };
+        };
+
+        // 模板给了备选排法时，质检不过（字压住人脸、人、主体，或压在花的地方）就换下一种，
+        // 留问题最少的那一种。看不了画面（没有 Vision）时没法比，用第一种。
+        const places = [input.template.layoutFor, ...(input.template.placements ?? [])];
+        let chosen = await attempt(places[0]);
+        let moved = false;
+        if (input.qc?.analyze !== undefined) {
+            for (const place of places.slice(1)) {
+                if (placementScore(chosen.outputs) === 0) {
+                    break;
+                }
+                const next = await attempt(place);
+                if (placementScore(next.outputs) < placementScore(chosen.outputs)) {
+                    chosen = next;
+                    moved = true;
+                }
             }
         }
-
-        for (const { platform, outputPath } of members) {
-            const pixelWidth = Math.round(platform.width * input.scale);
-            const pixelHeight = Math.round(platform.height * input.scale);
-            const crop = scaleRect(platform.crop, masterScale);
-            let image = sharp(master)
-                .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
-                // 裁切框取整后和成品比例差不到 0.2%，fill 拉满不会看出变形。
-                .resize(pixelWidth, pixelHeight, { fit: 'fill' });
-            if (input.guides) {
-                image = sharp(await image.png().toBuffer()).composite([
-                    {
-                        input: guidesOverlay(
-                            platform,
-                            {
-                                textArea: layout.textArea,
-                                focusArea: family.focusArea,
-                                ...(layout.subjectArea ? { subjectArea: layout.subjectArea } : {}),
-                                ...(layout.accentArea ? { accentArea: layout.accentArea } : {}),
-                            },
-                            pixelWidth,
-                            pixelHeight,
-                        ),
-                        left: 0,
-                        top: 0,
-                    },
-                ]);
-            }
-            const png = await image.png().toBuffer();
-            const findings =
-                qc === undefined
-                    ? []
-                    : [
-                          ...(qc.contents === undefined
-                              ? []
-                              : checkOverlaps({
-                                    platform: platform.name,
-                                    crop: platform.crop,
-                                    text: qc.text,
-                                    contents: qc.contents,
-                                })),
-                          ...checkQuietZone(
-                              platform.name,
-                              await detailUnder(qc.background, qc.text, platform.crop),
-                          ),
-                          ...checkBrightness(platform.name, await meanLuma(png)),
-                      ];
+        for (const { platform, outputPath, png, findings } of chosen.outputs) {
             composed.set(platform.name, {
                 platform: platform.name,
                 outputPath: writePng(outputPath, png),
-                pixelWidth,
-                pixelHeight,
-                feedHeadlinePx: (headline.fontPx * platform.feedWidth) / platform.crop.width,
+                pixelWidth: Math.round(platform.width * input.scale),
+                pixelHeight: Math.round(platform.height * input.scale),
+                feedHeadlinePx: (chosen.headline.fontPx * platform.feedWidth) / platform.crop.width,
                 findings,
+                moved,
             });
         }
     }
@@ -404,7 +481,13 @@ export async function composeCustomCover(input: {
     height: number;
     scale: number;
     outputPath: string;
-}): Promise<{ outputPath: string; pixelWidth: number; pixelHeight: number }> {
+    qc?: QcRuntime;
+}): Promise<{
+    outputPath: string;
+    pixelWidth: number;
+    pixelHeight: number;
+    findings: QcFinding[];
+}> {
     const base = customLayout(input.width, input.height);
     const canvas = { x: 0, y: 0, width: input.width, height: input.height };
     const areas = { visibleArea: canvas, clearArea: canvas, coveredAreas: [] };
@@ -419,13 +502,27 @@ export async function composeCustomCover(input: {
     );
     const pixelWidth = Math.round(input.width * input.scale);
     const pixelHeight = Math.round(input.height * input.scale);
+    const html = await input.template.renderHtml(layout, headline, pixelWidth, pixelHeight);
     const png = await input.renderer.screenshot({
-        html: await input.template.renderHtml(layout, headline, pixelWidth, pixelHeight),
+        html,
         width: input.width,
         height: input.height,
         scale: input.scale,
     });
-    return { outputPath: writePng(input.outputPath, png), pixelWidth, pixelHeight };
+    const findings =
+        input.qc === undefined
+            ? []
+            : await findingsFor(
+                  'canvas',
+                  canvas,
+                  await inspectMaster(input.renderer, input.qc, {
+                      html,
+                      width: input.width,
+                      height: input.height,
+                  }),
+                  png,
+              );
+    return { outputPath: writePng(input.outputPath, png), pixelWidth, pixelHeight, findings };
 }
 
 export function thumbnailWarnings(covers: readonly ComposedCover[]): string[] {

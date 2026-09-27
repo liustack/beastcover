@@ -7,9 +7,12 @@ import type { ImageContents, UnitBox } from '../subject/vision.ts';
 
 export type QcLevel = 'fail' | 'warn';
 
+/** 质检对象：一个平台的成品，或 --width/--height 的自定义画布 */
+export type QcTarget = PlatformName | 'canvas';
+
 export interface QcFinding {
     level: QcLevel;
-    platform: PlatformName;
+    platform: QcTarget;
     message: string;
 }
 
@@ -96,6 +99,40 @@ export async function textMaskFrom(withText: Buffer, background: Buffer): Promis
     return { width, height, data };
 }
 
+// 纯色设计块（色带、色块、渐变底）上的局部细节几乎为 0，照片哪怕是天空也有噪点和明暗。
+// 拉普拉斯绝对值放大 16 倍后做局部平均，低于这个值就是纯色块。
+const FLAT_PANEL_DETAIL = 24;
+
+/**
+ * 只留压在照片上的字迹。显著性模型的主体框常常连着旁边的纯色色带一起框进来，
+ * 压在色带上的字什么也挡不住，不该算压住主体。人脸、人、画面自带的字不走这一步。
+ */
+export async function textOnPicture(mask: TextMask, background: Buffer): Promise<TextMask> {
+    const { width, height } = mask;
+    const lap = await sharp(background)
+        .removeAlpha()
+        .greyscale()
+        .resize(width, height, { fit: 'fill' })
+        .convolve({ width: 3, height: 3, kernel: [0, 1, 0, 1, -4, 1, 0, 1, 0], offset: 128 })
+        .extractChannel(0)
+        .raw()
+        .toBuffer();
+    const edges = Buffer.alloc(width * height);
+    for (let i = 0; i < edges.length; i += 1) {
+        edges[i] = Math.min(255, Math.abs((lap[i] ?? 128) - 128) * 16);
+    }
+    const local = await sharp(edges, { raw: { width, height, channels: 1 } })
+        .blur(2)
+        .extractChannel(0)
+        .raw()
+        .toBuffer();
+    const data = new Uint8Array(width * height);
+    for (let i = 0; i < data.length; i += 1) {
+        data[i] = mask.data[i] === 1 && (local[i] ?? 0) >= FLAT_PANEL_DETAIL ? 1 : 0;
+    }
+    return { width, height, data };
+}
+
 /** 测试和简单场景用：把几个矩形画成字块掩膜 */
 export function maskFromRects(width: number, height: number, rects: readonly Rect[]): TextMask {
     const data = new Uint8Array(width * height);
@@ -174,34 +211,42 @@ export async function realObjects(
 
 /** 标题有没有压到画面里的人脸、人、自带的字、主体物。只看这个平台裁切框里的部分 */
 export function checkOverlaps(input: {
-    platform: PlatformName;
+    platform: QcTarget;
     crop: Rect;
     text: TextMask;
+    /** 只压在照片上的字迹（textOnPicture），主体物只和它比。不给就用 text */
+    pictureText?: TextMask;
     contents: ImageContents;
 }): QcFinding[] {
     const { platform, crop, text, contents } = input;
+    const pictureText = input.pictureText ?? text;
     const master = { width: text.width, height: text.height };
     const canvas = master.width * master.height;
-    const hits = (boxes: readonly UnitBox[], threshold: number, skipLarge = false): boolean =>
+    const hits = (
+        boxes: readonly UnitBox[],
+        threshold: number,
+        mask: TextMask,
+        skipLarge = false,
+    ): boolean =>
         boxes.some((unit) => {
             const box = toMaster(unit, master);
             if (skipLarge && area(box) > canvas * BACKGROUND_SHARE) {
                 return false;
             }
-            return coveredShare(box, text, crop) > threshold;
+            return coveredShare(box, mask, crop) > threshold;
         });
     const findings: QcFinding[] = [];
     const fail = (message: string) => findings.push({ level: 'fail', platform, message });
-    if (hits(contents.faces, FACE_SHARE)) {
+    if (hits(contents.faces, FACE_SHARE, text)) {
         fail('the headline covers a face in the picture.');
     }
-    if (hits(contents.people, PERSON_SHARE)) {
+    if (hits(contents.people, PERSON_SHARE, text)) {
         fail('the headline covers a person in the picture.');
     }
-    if (hits(contents.text, TEXT_SHARE)) {
+    if (hits(contents.text, TEXT_SHARE, text)) {
         fail('the headline covers text that is already in the picture.');
     }
-    if (hits(contents.objects, OBJECT_SHARE, true)) {
+    if (hits(contents.objects, OBJECT_SHARE, pictureText, true)) {
         fail("the headline covers the picture's main subject.");
     }
     return findings;
@@ -250,7 +295,7 @@ export async function detailUnder(background: Buffer, text: TextMask, crop: Rect
 }
 
 /** 字要压在安静区：压在细碎的地方既可能盖住东西，缩小以后也更难读 */
-export function checkQuietZone(platform: PlatformName, detail: number): QcFinding[] {
+export function checkQuietZone(platform: QcTarget, detail: number): QcFinding[] {
     return detail > BUSY_DETAIL
         ? [
               {
@@ -264,7 +309,7 @@ export function checkQuietZone(platform: PlatformName, detail: number): QcFindin
 }
 
 /** 暗图在信息流里一贯落后 */
-export function checkBrightness(platform: PlatformName, meanLuma: number): QcFinding[] {
+export function checkBrightness(platform: QcTarget, meanLuma: number): QcFinding[] {
     return meanLuma < DARK_LUMA
         ? [
               {

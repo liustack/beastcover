@@ -336,6 +336,7 @@ describe('cover composition', () => {
             outputPath: join(directory, 'custom.png'),
             pixelWidth: 1600,
             pixelHeight: 600,
+            findings: [],
         });
     });
 
@@ -350,6 +351,107 @@ describe('cover composition', () => {
                 scale: 1,
             }),
         ).rejects.toThrowError(/must use the \.png extension/);
+    });
+});
+
+describe('placement fallback', () => {
+    /** 红底，标题区涂绿；withText 为 false 时只有红底，等于不带字的背景 */
+    function draw(page: RenderPage, withText: boolean): Promise<Buffer> {
+        const { layout } = JSON.parse(page.html) as FakeLayoutPage;
+        const area = layout.textArea;
+        const s = page.scale;
+        return sharp({
+            create: {
+                width: Math.round(page.width * s),
+                height: Math.round(page.height * s),
+                channels: 3,
+                background: { r: 255, g: 0, b: 0 },
+            },
+        })
+            .composite(
+                withText
+                    ? [
+                          {
+                              input: {
+                                  create: {
+                                      width: Math.round(area.width * s),
+                                      height: Math.round(area.height * s),
+                                      channels: 3,
+                                      background: { r: 0, g: 255, b: 0 },
+                                  },
+                              },
+                              left: Math.round(area.x * s),
+                              top: Math.round(area.y * s),
+                          },
+                      ]
+                    : [],
+            )
+            .png()
+            .toBuffer();
+    }
+
+    it('moves the headline to the next placement when the first covers a person', async () => {
+        const bottom = (layout: CoverLayout): CoverLayout => ({
+            ...layout,
+            textArea: { x: 192, y: 700, width: 1392, height: 300 },
+        });
+        const top = (layout: CoverLayout): CoverLayout => ({
+            ...layout,
+            textArea: { x: 192, y: 150, width: 1392, height: 300 },
+        });
+        const screenshots: RenderPage[] = [];
+        const renderer: CoverRenderer = {
+            fitText: vi.fn(async () => 80),
+            screenshot: vi.fn(async (page: RenderPage) => {
+                screenshots.push(page);
+                return draw(page, true);
+            }),
+            close: vi.fn(async () => undefined),
+            probeFonts: vi.fn(async () => []),
+            inspect: vi.fn(async (page: RenderPage) => ({
+                background: await draw(page, false),
+                withText: await draw(page, true),
+            })),
+        };
+        const output = join(tempDir(), 'moved.png');
+        const [cover] = await composeCovers({
+            renderer,
+            template: { ...template, layoutFor: bottom, placements: [top] },
+            text: 'Moved',
+            targets: [{ platform: 'youtube', outputPath: output }],
+            scale: 1,
+            // 画面下半有一个人：标题在下面就压到人，挪到上面就干净。
+            qc: {
+                analyze: async () => ({
+                    faces: [],
+                    people: [{ x: 0.3, y: 0.55, width: 0.3, height: 0.4 }],
+                    text: [],
+                    objects: [],
+                }),
+            },
+        });
+
+        expect(screenshots).toHaveLength(2);
+        expect(cover?.moved).toBe(true);
+        expect(cover?.findings.filter((finding) => finding.level === 'fail')).toEqual([]);
+        // 成品里的绿色标题区在上半截。
+        const crop = getPlatform('youtube').crop;
+        const factor = getPlatform('youtube').width / crop.width;
+        expect(await pixel(output, 640, (300 - crop.y) * factor)).toEqual([0, 255, 0]);
+        expect(await pixel(output, 640, (850 - crop.y) * factor)).toEqual([255, 0, 0]);
+    });
+
+    it('keeps the first placement when it is already clean', async () => {
+        const { renderer, screenshots } = fakeRenderer(() => 80);
+        const [cover] = await composeCovers({
+            renderer,
+            template: { ...template, placements: [(layout) => layout] },
+            text: 'Clean',
+            targets: [{ platform: 'youtube', outputPath: join(tempDir(), 'clean.png') }],
+            scale: 1,
+        });
+        expect(screenshots).toHaveLength(1);
+        expect(cover?.moved).toBe(false);
     });
 });
 
@@ -376,6 +478,7 @@ describe('thumbnail check', () => {
                 pixelHeight: 1440,
                 feedHeadlinePx: 9.1,
                 findings: [],
+                moved: false,
             },
             {
                 platform: 'youtube',
@@ -384,6 +487,7 @@ describe('thumbnail check', () => {
                 pixelHeight: 720,
                 feedHeadlinePx: 18,
                 findings: [],
+                moved: false,
             },
         ]);
         expect(warnings).toEqual([

@@ -7,6 +7,7 @@ import {
     maskFromRects,
     type QcFinding,
     textMaskFrom,
+    textOnPicture,
 } from './index.ts';
 
 const MASTER = { width: 1920, height: 1200 };
@@ -113,6 +114,44 @@ describe('text mask', () => {
         expect(text.data[50 * 200 + 40]).toBe(1);
         expect(text.data[10 * 200 + 150]).toBe(0);
         expect(text.data[50 * 200 + 150]).toBe(0);
+    });
+});
+
+describe('text on the picture', () => {
+    it('drops the ink that sits on a solid colour band and keeps the ink on a photo', async () => {
+        // 左半是纯色色带，右半是随机噪点（照片的细节），整张都压着字。
+        const width = 200;
+        const height = 100;
+        const pixels = Buffer.alloc(width * height * 3);
+        for (let y = 0; y < height; y += 1) {
+            for (let x = 0; x < width; x += 1) {
+                const offset = (y * width + x) * 3;
+                const value = x < width / 2 ? 230 : Math.floor(Math.random() * 256);
+                pixels[offset] = value;
+                pixels[offset + 1] = x < width / 2 ? 200 : value;
+                pixels[offset + 2] = x < width / 2 ? 60 : value;
+            }
+        }
+        const background = await sharp(pixels, { raw: { width, height, channels: 3 } })
+            .png()
+            .toBuffer();
+        const picture = await textOnPicture(
+            maskFromRects(width, height, [{ x: 0, y: 0, width, height }]),
+            background,
+        );
+        expect(picture.data[50 * width + 40]).toBe(0);
+        expect(picture.data[50 * width + 160]).toBe(1);
+    });
+
+    it('stops a flat band inside a saliency box from counting as covering the subject', () => {
+        const band = mask([{ x: 0, y: 400, width: 1920, height: 300 }]);
+        const onPhoto = maskFromRects(MASTER.width, MASTER.height, []);
+        const contents = { ...NOTHING, objects: [{ x: 0, y: 0.3, width: 1, height: 0.4 }] };
+        const input = { platform: 'youtube' as const, crop: FULL, text: band, contents };
+        expect(checkOverlaps(input).map((finding) => finding.message)).toEqual([
+            "the headline covers the picture's main subject.",
+        ]);
+        expect(checkOverlaps({ ...input, pictureText: onPhoto })).toEqual([]);
     });
 });
 
