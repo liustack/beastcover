@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.7.5 (unreleased)
+## 0.7.5 (2026-09-28)
 
-- **Six lettering styles.** `--style bold | variety | round | editorial | brush | memo` sets how the words look on any cover type: heavy outlined type (the default), variety-show 花字 (red type, white ring, dark edge, the keyword swapped), rounded sticker lettering, magazine serif, a calligraphy title, or, for `big-type`, a phone notes screen. The type still decides the idea and the layout. `round` and `brush` use a rounded or brush Chinese font when one is installed and say which free font to install when not.
+- **Six lettering styles.** `--style bold | variety | round | editorial | brush | memo` sets how the words look on any cover type: heavy outlined type (the default), variety-show 花字 (red type, white ring, dark edge, the keyword swapped), rounded sticker lettering, magazine serif, a calligraphy title, or, for `big-type`, a phone notes screen. The type still decides the idea and the layout. `round` and `brush` use a rounded or brush Chinese font when one is installed and say which free font to install when not. Serif and rounded fonts use their bold weight, so the `mood` line holds up better at feed size.
 - **Synthetic weight no longer eats outlines.** On machines without a heavy Chinese font, the letters are thickened in their own colour (a highlighted word no longer gets a dark fringe), and the outline and ring widen by the same amount so they stay visible.
 - **Two runs cutting out the same photo at once no longer fail on Windows.**
 - **Before and after show the same spot.** When the two photos are the same size (a painted pair, or two shots from one camera), both halves use one framing that holds both subjects, instead of each half centring on its own.
