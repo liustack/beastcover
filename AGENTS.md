@@ -136,6 +136,8 @@ src/
     ├── index.ts            # Discover, create, project.json, history.jsonl
     └── index.test.ts
 
+examples/                   # Real covers with their commands, also the visual regression set
+scripts/examples.mjs        # pnpm examples: regenerate the free-path examples
 skills/beastcover/SKILL.md      # Agent skill and routing contract
 dsh/index.js                # DeepSeek Harness plugin backed by the bundled CLI
 cordis.patch.yml            # DSH bundle mount
@@ -168,3 +170,4 @@ beastcover doctor
 - Run `pnpm build` and confirm it produces `dist/main.js`.
 - Run the built CLI against the real local Chromium and inspect the generated PNG dimensions and appearance.
 - UI-facing template changes require a newly rendered PNG and visual inspection on every platform preset.
+- After template or layout changes, run `pnpm examples` and compare the regenerated covers in `examples/` against git by eye. Looks cannot be asserted in tests; this folder is the baseline. The agent examples are repainted by hand.

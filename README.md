@@ -42,6 +42,8 @@ Issues are welcome any time. [Open one](https://github.com/liustack/beastcover/i
 
 **🎨 Painted covers when you bring your own model.** The default path costs nothing: free photos plus local rendering. When you want a painted cover in one of four bold styles, bring what you already pay for: the Codex or agy CLI on your subscription (`--source agent`), or a GPT Image or Nano Banana API key (`--source model`).
 
+Real covers with the commands that made them are in [examples/](examples/).
+
 ## Commands
 
 Your agent runs these for you. You can also run them yourself:

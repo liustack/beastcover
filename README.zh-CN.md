@@ -42,6 +42,8 @@ npx -y skills add liustack/beastcover -g
 
 **🎨 有模型 CLI 还能画封面。** 装了 Codex、Grok 或 Claude CLI，就能用四种高冲击画风画封面，花的是你自己的订阅。
 
+真实封面和生成它们的命令在 [examples/](examples/)。
+
 ## 命令
 
 agent 会替你跑这些命令。想自己动手也行：
