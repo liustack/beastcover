@@ -152,6 +152,21 @@ describe('cover renderer', () => {
             });
         const free = await fitWithin();
         const two = await fitWithin(2);
+        // 整段倾斜不改断行：限一行时，歪着的一行字不会被数成好几行。
+        const tilted = (px: number) =>
+            `<html><body style="margin:0"><div style="position:absolute;left:150px;top:300px;width:1100px;transform:rotate(-6deg)"><p class="copy" style="margin:0;font:900 ${px}px sans-serif;line-height:1.1">Every platform <span style="background:#ff0">gets</span> 一张好封面</p></div></body></html>`;
+        const flat = (px: number) => tilted(px).replace('transform:rotate(-6deg)', '');
+        const oneLine = (html: (px: number) => string) =>
+            renderer.fitText({
+                html,
+                width: 1400,
+                height: 800,
+                box: { x: 0, y: 0, width: 1400, height: 800 },
+                minPx: 16,
+                maxPx: 120,
+                maxLines: 1,
+            });
+        expect(await oneLine(tilted)).toBe(await oneLine(flat));
         expect(two).toBeLessThan(free);
         // 两行放 9 个字，一行至少 5 个字：字号不超过栏宽的五分之一。
         expect(two).toBeLessThanOrEqual(240 / 5);

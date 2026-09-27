@@ -110,8 +110,9 @@ async function withPage<T>(
 }
 
 /**
- * 标题排出来有几行：按文字的行框数不同的上沿。页面自己的脚本是关着的，这段跑在 Playwright
- * 的隔离环境里。比半个字号还矮的框（标题前的小标签、空白）不算一行。
+ * 标题排出来有几行：按文字行框的垂直中心分组。页面自己的脚本是关着的，这段跑在 Playwright
+ * 的隔离环境里。倾斜（rotate）只改画法不改断行，但会让同一行的词框上下错开，所以量之前把
+ * 标题和它祖先的 transform 暂时去掉，量完还原。比六成字号还矮的框（标题前的小标签）不算一行。
  */
 function countLines(page: Page, fontPx: number): Promise<number> {
     return page.locator('.copy:not(.probe)').evaluate((element, size) => {
@@ -121,28 +122,62 @@ function countLines(page: Page, fontPx: number): Promise<number> {
             width: number;
             height: number;
         }
-        const doc = (
-            globalThis as unknown as {
-                document: {
-                    createRange(): {
-                        selectNodeContents(node: unknown): void;
-                        getClientRects(): ArrayLike<LineBox>;
-                    };
+        interface Styled {
+            style: {
+                getPropertyValue(name: string): string;
+                getPropertyPriority(name: string): string;
+                setProperty(name: string, value: string, priority?: string): void;
+                removeProperty(name: string): void;
+            };
+            parentElement: Styled | null;
+        }
+        const scope = globalThis as unknown as {
+            document: {
+                createRange(): {
+                    selectNodeContents(node: unknown): void;
+                    getClientRects(): ArrayLike<LineBox>;
                 };
-            }
-        ).document;
-        const range = doc.createRange();
-        range.selectNodeContents(element);
-        const tops: number[] = [];
-        for (const rect of Array.from(range.getClientRects())) {
-            if (rect.width === 0 || rect.height < size * 0.6) {
-                continue;
-            }
-            if (!tops.some((top) => Math.abs(top - rect.top) < size * 0.5)) {
-                tops.push(rect.top);
+            };
+            getComputedStyle(node: Styled): { transform: string };
+        };
+        const turned: { node: Styled; value: string; priority: string }[] = [];
+        for (
+            let node: Styled | null = element as Styled;
+            node !== null;
+            node = node.parentElement
+        ) {
+            if (scope.getComputedStyle(node).transform !== 'none') {
+                turned.push({
+                    node,
+                    value: node.style.getPropertyValue('transform'),
+                    priority: node.style.getPropertyPriority('transform'),
+                });
+                node.style.setProperty('transform', 'none', 'important');
             }
         }
-        return tops.length;
+        try {
+            const range = scope.document.createRange();
+            range.selectNodeContents(element);
+            const centres: number[] = [];
+            for (const rect of Array.from(range.getClientRects())) {
+                if (rect.width === 0 || rect.height < size * 0.6) {
+                    continue;
+                }
+                const centre = rect.top + rect.height / 2;
+                if (!centres.some((seen) => Math.abs(seen - centre) < size * 0.5)) {
+                    centres.push(centre);
+                }
+            }
+            return centres.length;
+        } finally {
+            for (const { node, value, priority } of turned) {
+                if (value === '') {
+                    node.style.removeProperty('transform');
+                } else {
+                    node.style.setProperty('transform', value, priority);
+                }
+            }
+        }
     }, fontPx);
 }
 
