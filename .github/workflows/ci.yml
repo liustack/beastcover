@@ -2,7 +2,8 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    # ci-windows is temporary, to watch the first Windows run. Drop it on merge.
+    branches: [main, ci-windows]
   pull_request:
 
 jobs:
