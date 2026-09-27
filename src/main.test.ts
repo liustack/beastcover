@@ -15,6 +15,7 @@ import type { AgentRunInput } from './agent/index.ts';
 import { familyClearArea, familyCoveredAreas, familyVisibleArea } from './compose/index.ts';
 import { setConfigValue } from './config.ts';
 import { createProgram, runCli } from './main.ts';
+import type { ModelRunInput } from './model/index.ts';
 import type { CoverRenderer, RenderPage } from './render/index.ts';
 import { familyLayout } from './render/layout.ts';
 import { calloutGeometry, calloutLayout, framedFocusBox } from './render/photo-cover.ts';
@@ -84,6 +85,12 @@ async function testPngBytes(width: number, height: number): Promise<Buffer> {
 
 function mockRunAgent() {
     return vi.fn(async (input: AgentRunInput) => ({
+        outputPaths: input.targets.map((target) => target.outputPath),
+    }));
+}
+
+function mockRunModelApi() {
+    return vi.fn(async (input: ModelRunInput) => ({
         outputPaths: input.targets.map((target) => target.outputPath),
     }));
 }
@@ -1444,6 +1451,127 @@ describe('BeastCover CLI', () => {
             .trimEnd()
             .split('\n');
         expect(history).toHaveLength(4);
+    });
+
+    it('paints through the model API once per family with the configured key', async () => {
+        const cwd = tempDir('beastcover-model-source-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        const configPath = join(cwd, 'config.json');
+        writeFileSync(configPath, '{"model":{"openai":{"apiKey":"sk-image"}}}\n', 'utf8');
+        const runModelApi = mockRunModelApi();
+        const stdout = captureOutput();
+
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                'A figure on a shore',
+                '--source',
+                'model',
+                '--preset',
+                'youtube,xiaohongshu',
+            ],
+            {
+                cwd,
+                configPath,
+                runModelApi,
+                stdout,
+                now: () => new Date('2026-09-27T00:00:00.000Z'),
+            },
+        );
+
+        expect(exitCode).toBe(0);
+        expect(
+            runModelApi.mock.calls.map(([input]) => [
+                input.provider,
+                input.model,
+                input.family,
+                input.targets.map((target) => target.preset),
+            ]),
+        ).toEqual([
+            ['openai', 'gpt-image-2.5-flare', 'landscape', ['youtube']],
+            ['openai', 'gpt-image-2.5-flare', 'portrait', ['xiaohongshu']],
+        ]);
+        expect(runModelApi.mock.calls[0]?.[0]?.prompt).toContain('主体：A figure on a shore');
+        expect(runModelApi.mock.calls[0]?.[0]?.apiKey).toBe('sk-image');
+        const printed = stdout.chunks.join('');
+        expect(printed.match(/Backend: openai gpt-image-2\.5-flare/g)).toHaveLength(1);
+        expect(printed).toContain('Privacy: the prompt went to openai with your API key.');
+        const history = readFileSync(join(cwd, '.beastcover', 'history.jsonl'), 'utf8')
+            .trimEnd()
+            .split('\n');
+        expect(history).toHaveLength(2);
+        expect(JSON.parse(history[0] as string)).toMatchObject({
+            source: 'model',
+            via: 'openai',
+        });
+    });
+
+    it('fails without an API key and keeps agent-only options out of the model source', async () => {
+        const cwd = tempDir('beastcover-model-guards-');
+        await runCli(['node', 'beastcover', 'new', 'demo'], { cwd, stdout: captureOutput() });
+        const configPath = join(cwd, 'config.json');
+        const runModelApi = mockRunModelApi();
+
+        const missing = captureOutput();
+        expect(
+            await runCli(['node', 'beastcover', 'gen', 'x', '--source', 'model'], {
+                cwd,
+                configPath,
+                runModelApi,
+                stdout: captureOutput(),
+                stderr: missing,
+            }),
+        ).toBe(1);
+        expect(missing.chunks.join('')).toContain(
+            'No image model API key configured. Run beastcover config set model.openai.apiKey <key> or beastcover config set model.gemini.apiKey <key>.',
+        );
+
+        writeFileSync(configPath, '{"model":{"gemini":{"apiKey":"g-image"}}}\n', 'utf8');
+        for (const [args, message] of [
+            [
+                ['--via', 'codex'],
+                '--via codex works with --source agent. --source model takes openai or gemini.',
+            ],
+            [['--remix', 'a.png'], '--remix works with --source agent.'],
+            [['--ref', 'a.png'], '--ref works with --source agent.'],
+            [
+                ['--scale', '2'],
+                '--scale works with --source render or stock. model output size comes from the model.',
+            ],
+        ] as const) {
+            const stderr = captureOutput();
+            expect(
+                await runCli(['node', 'beastcover', 'gen', 'x', '--source', 'model', ...args], {
+                    cwd,
+                    configPath,
+                    runModelApi,
+                    stdout: captureOutput(),
+                    stderr,
+                }),
+            ).toBe(1);
+            expect(stderr.chunks.join('')).toContain(message);
+        }
+        expect(runModelApi).not.toHaveBeenCalled();
+
+        const agentSide = captureOutput();
+        expect(
+            await runCli(
+                ['node', 'beastcover', 'gen', 'x', '--source', 'agent', '--via', 'openai'],
+                {
+                    cwd,
+                    configPath,
+                    runModelApi,
+                    lookupCommand: () => '/fake/codex',
+                    stdout: captureOutput(),
+                    stderr: agentSide,
+                },
+            ),
+        ).toBe(1);
+        expect(agentSide.chunks.join('')).toContain(
+            '--via openai works with --source model. --source agent takes codex or agy.',
+        );
     });
 
     it('puts a transparent subject on the cover and records it in history', async () => {

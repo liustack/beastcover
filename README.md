@@ -40,7 +40,7 @@ Issues are welcome any time. [Open one](https://github.com/liustack/beastcover/i
 
 **🔒 Your draft stays home.** Rendering happens in a local Chromium. The only network calls are the photo search and the photo download.
 
-**🎨 Painted covers if you have an agent CLI.** With Codex or agy CLI installed, you can paint a cover in one of four bold styles, on your own subscription.
+**🎨 Painted covers when you bring your own model.** The default path costs nothing: free photos plus local rendering. When you want a painted cover in one of four bold styles, bring what you already pay for: the Codex or agy CLI on your subscription (`--source agent`), or a GPT Image or Nano Banana API key (`--source model`).
 
 ## Commands
 
@@ -65,7 +65,7 @@ Photo covers are framed around the photo's own subject and keep it clear of the 
 
 Add `--subject me.jpg` to put a person on the cover: they stand on one side with a white outline, and the headline moves to the other side. A transparent PNG is used as is. On macOS 14 or newer, a normal photo is cut out on your machine with the system's own subject cutout, so nothing is uploaded and your face is not redrawn. Elsewhere, cut the photo out first (iPhone and macOS "Copy Subject", remove.bg, Photoshop) and pass the PNG.
 
-Without a photo, `--source render` makes a text-only cover. `--template poster` makes it loud: a full-bleed palette colour, huge type, and an optional `--tag`. `--template number --number 3` puts a huge figure beside a short line. `--template compare --before old.jpg --after new.jpg` splits two images with an arrow on the seam. Every template is fitted to every platform's safe area. A video thumbnail wants a hook of a few words, while WeChat and X article cards show the title next to the cover, so `--hook "It fails"` puts the short line on the video and note covers and keeps the full headline on WeChat and X. With an agent CLI, `--source agent --via codex` paints a cover in the project style, and `beastcover styles` lists all four.
+Without a photo, `--source render` makes a text-only cover. `--template poster` makes it loud: a full-bleed palette colour, huge type, and an optional `--tag`. `--template number --number 3` puts a huge figure beside a short line. `--template compare --before old.jpg --after new.jpg` splits two images with an arrow on the seam. Every template is fitted to every platform's safe area. A video thumbnail wants a hook of a few words, while WeChat and X article cards show the title next to the cover, so `--hook "It fails"` puts the short line on the video and note covers and keeps the full headline on WeChat and X. With an agent CLI, `--source agent --via codex` paints a cover in the project style, and `beastcover styles` lists all four. With an API key configured, `--source model` paints the same styles through GPT Image (`--via openai`) or Nano Banana (`--via gemini`).
 
 ## Sizes
 
@@ -95,6 +95,8 @@ For a canvas no platform uses, set `--width` and `--height`. The old ratio names
 
 ```bash
 beastcover config set stock.pexels.apiKey <key>
+beastcover config set model.openai.apiKey <key>
+beastcover config set model.gemini.apiKey <key>
 beastcover config set render.preset xiaohongshu
 beastcover config show
 ```
@@ -109,6 +111,7 @@ Settings live in `~/.beastcover/config.json` with file mode 0600, and `config sh
 | `render` | Nothing |
 | `--subject` | Nothing. The cutout runs on your Mac |
 | `agent` | Goes through your own CLI and subscription. BeastCover never sees it |
+| `model` | The style prompt and your subject line go to OpenAI or Gemini with your API key. No local file is uploaded |
 
 Photo downloads connect straight to the image host, over https only, with private addresses blocked and a 40 MB cap per photo. A proxy set only through `HTTPS_PROXY` is not used. Proxies that take over DNS (fake-ip mode) work.
 

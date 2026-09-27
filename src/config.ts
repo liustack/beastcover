@@ -5,11 +5,26 @@ import { getPlatform, type PlatformName, parsePlatformList } from './platforms/i
 
 export const CONFIG_PATH = join(homedir(), '.beastcover', 'config.json');
 
-export const IMAGE_SOURCES = ['render', 'stock', 'agent'] as const;
+export const IMAGE_SOURCES = ['render', 'stock', 'agent', 'model'] as const;
 export type ImageSource = (typeof IMAGE_SOURCES)[number];
 
 export const AGENT_PROVIDERS = ['codex', 'agy'] as const;
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
+
+export const MODEL_PROVIDERS = ['openai', 'gemini'] as const;
+export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
+
+// 模型代号更新很快，写错一代只需要 config set model.<provider>.model 就能改。
+export const MODEL_DEFAULTS: Record<ModelProvider, string> = {
+    openai: 'gpt-image-2.5-flare',
+    gemini: 'gemini-3-pro-image-preview',
+};
+
+export interface ModelConfig {
+    via?: ModelProvider;
+    openai?: { apiKey?: string; model?: string };
+    gemini?: { apiKey?: string; model?: string };
+}
 
 export interface StockConfig {
     pexels?: {
@@ -35,6 +50,7 @@ export interface BeastCoverConfigFile {
     agent?: {
         via?: AgentProvider;
     };
+    model?: ModelConfig;
 }
 
 export interface ConfigFlags {
@@ -44,7 +60,7 @@ export interface ConfigFlags {
     width?: number;
     height?: number;
     scale?: number;
-    via?: AgentProvider;
+    via?: AgentProvider | ModelProvider;
 }
 
 export interface EffectiveConfig {
@@ -58,6 +74,7 @@ export interface EffectiveConfig {
     };
     stock?: BeastCoverConfigFile['stock'];
     agent?: BeastCoverConfigFile['agent'];
+    model?: BeastCoverConfigFile['model'];
 }
 
 export const BUILT_IN_CONFIG = {
@@ -142,8 +159,46 @@ function validateStockConfig(stock: unknown, configPath: string): void {
     }
 }
 
+const MODEL_PROVIDER_KEYS = ['apiKey', 'model'] as const;
+
+function validateModelConfig(model: unknown, configPath: string): void {
+    if (!isPlainObject(model)) {
+        invalidConfig(configPath, 'model', 'an object');
+    }
+    for (const key of Object.keys(model)) {
+        if (key !== 'via' && !MODEL_PROVIDERS.includes(key as ModelProvider)) {
+            throw new Error(`${configPath} contains unknown config key "model.${key}".`);
+        }
+    }
+    if (
+        model.via !== undefined &&
+        (typeof model.via !== 'string' || !MODEL_PROVIDERS.includes(model.via as ModelProvider))
+    ) {
+        invalidConfig(configPath, 'model.via', `one of ${MODEL_PROVIDERS.join(', ')}`);
+    }
+    for (const provider of MODEL_PROVIDERS) {
+        const section = model[provider];
+        if (section === undefined) {
+            continue;
+        }
+        if (!isPlainObject(section)) {
+            invalidConfig(configPath, `model.${provider}`, 'an object');
+        }
+        for (const key of Object.keys(section)) {
+            if (!(MODEL_PROVIDER_KEYS as readonly string[]).includes(key)) {
+                throw new Error(
+                    `${configPath} contains unknown config key "model.${provider}.${key}".`,
+                );
+            }
+            if (typeof section[key] !== 'string') {
+                invalidConfig(configPath, `model.${provider}.${key}`, 'a string');
+            }
+        }
+    }
+}
+
 function validateConfig(parsed: Record<string, unknown>, configPath: string): BeastCoverConfigFile {
-    const rootKeys = new Set(['source', 'output', 'render', 'stock', 'agent']);
+    const rootKeys = new Set(['source', 'output', 'render', 'stock', 'agent', 'model']);
     for (const key of Object.keys(parsed)) {
         if (key === 'localModel') {
             throw new Error(
@@ -216,6 +271,10 @@ function validateConfig(parsed: Record<string, unknown>, configPath: string): Be
 
     if (parsed.stock !== undefined) {
         validateStockConfig(parsed.stock, configPath);
+    }
+
+    if (parsed.model !== undefined) {
+        validateModelConfig(parsed.model, configPath);
     }
 
     if (parsed.agent !== undefined) {
@@ -338,6 +397,31 @@ export function setConfigValue(
             config.stock.openverse[field] = rawValue;
             break;
         }
+        case 'model.via': {
+            if (!MODEL_PROVIDERS.includes(value as ModelProvider)) {
+                throw new Error(`model.via must be one of ${MODEL_PROVIDERS.join(', ')}.`);
+            }
+            config.model ??= {};
+            config.model.via = value as ModelProvider;
+            break;
+        }
+        case 'model.openai.apiKey':
+        case 'model.openai.model':
+        case 'model.gemini.apiKey':
+        case 'model.gemini.model': {
+            const [, provider, field] = dottedKey.split('.') as [
+                string,
+                ModelProvider,
+                'apiKey' | 'model',
+            ];
+            if (value === '') {
+                throw new Error(`${dottedKey} must not be empty.`);
+            }
+            config.model ??= {};
+            config.model[provider] ??= {};
+            (config.model[provider] as Record<string, string>)[field] = rawValue.trim();
+            break;
+        }
         case 'agent.via': {
             if (value === 'grok' || value === 'claude') {
                 throw new Error(
@@ -388,6 +472,7 @@ export function resolveEffectiveConfig(
         },
         ...(fileConfig.stock ? { stock: structuredClone(fileConfig.stock) } : {}),
         ...(fileConfig.agent ? { agent: { ...fileConfig.agent } } : {}),
+        ...(fileConfig.model ? { model: structuredClone(fileConfig.model) } : {}),
     };
 }
 
@@ -409,11 +494,23 @@ function redactStockConfig(stock: StockConfig): StockConfig {
     return redacted;
 }
 
+function redactModelConfig(model: ModelConfig): ModelConfig {
+    const redacted = structuredClone(model);
+    for (const provider of MODEL_PROVIDERS) {
+        const section = redacted[provider];
+        if (section?.apiKey !== undefined) {
+            section.apiKey = '[redacted]';
+        }
+    }
+    return redacted;
+}
+
 export function renderConfigShow(fileConfig: BeastCoverConfigFile): string {
     const effective = resolveEffectiveConfig(fileConfig, {});
     const redacted: EffectiveConfig = {
         ...effective,
         ...(effective.stock ? { stock: redactStockConfig(effective.stock) } : {}),
+        ...(effective.model ? { model: redactModelConfig(effective.model) } : {}),
     };
 
     return JSON.stringify(redacted, null, 2);

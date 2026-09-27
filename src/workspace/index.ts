@@ -7,7 +7,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { AGENT_PROVIDERS, type AgentProvider, IMAGE_SOURCES, type ImageSource } from '../config.ts';
+import { AGENT_PROVIDERS, IMAGE_SOURCES, MODEL_PROVIDERS } from '../config.ts';
 import { PLATFORM_NAMES, type PlatformName } from '../platforms/index.ts';
 import { STOCK_PROVIDERS, type StockProvider } from '../stock/types.ts';
 import { loadFallbackStyle, loadStyle } from '../styles/loader.ts';
@@ -41,14 +41,20 @@ export interface HistoryPhoto {
     pageUrl?: string;
 }
 
+// history 是日志：改名前的旧记录（local-model 来源、grok/claude 后端）照读，不因改名拒读。
+const HISTORY_SOURCES = [...IMAGE_SOURCES, 'local-model'] as const;
+export type HistorySource = (typeof HISTORY_SOURCES)[number];
+const HISTORY_VIAS = [...AGENT_PROVIDERS, ...MODEL_PROVIDERS, 'grok', 'claude'] as const;
+export type HistoryVia = (typeof HISTORY_VIAS)[number];
+
 export interface HistoryRecord {
     createdAt: string;
     style: string;
     palette: Record<string, PaletteSlotValue>;
     text: string;
     output: string;
-    source?: ImageSource;
-    via?: AgentProvider;
+    source?: HistorySource;
+    via?: HistoryVia;
     /** 出图的平台，自定义画布时没有 */
     preset?: PlatformName;
     /** render 用的文字封面模板，默认的 text 不记 */
@@ -382,24 +388,21 @@ function parseHistoryRecord(filePath: string, lineNumber: number, raw: string): 
     if (parsed.source !== undefined) {
         if (
             typeof parsed.source !== 'string' ||
-            !IMAGE_SOURCES.includes(parsed.source as ImageSource)
+            !HISTORY_SOURCES.includes(parsed.source as HistorySource)
         ) {
             throw new Error(
-                `${filePath}:${lineNumber} has invalid "source". Expected one of ${IMAGE_SOURCES.join(', ')}.`,
+                `${filePath}:${lineNumber} has invalid "source". Expected one of ${HISTORY_SOURCES.join(', ')}.`,
             );
         }
-        record.source = parsed.source as ImageSource;
+        record.source = parsed.source as HistorySource;
     }
     if (parsed.via !== undefined) {
-        if (
-            typeof parsed.via !== 'string' ||
-            !AGENT_PROVIDERS.includes(parsed.via as AgentProvider)
-        ) {
+        if (typeof parsed.via !== 'string' || !HISTORY_VIAS.includes(parsed.via as HistoryVia)) {
             throw new Error(
-                `${filePath}:${lineNumber} has invalid "via". Expected one of ${AGENT_PROVIDERS.join(', ')}.`,
+                `${filePath}:${lineNumber} has invalid "via". Expected one of ${HISTORY_VIAS.join(', ')}.`,
             );
         }
-        record.via = parsed.via as AgentProvider;
+        record.via = parsed.via as HistoryVia;
     }
     if (parsed.preset !== undefined) {
         if (

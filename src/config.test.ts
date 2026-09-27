@@ -191,4 +191,52 @@ describe('layered config', () => {
             render: { presets: ['youtube'], scale: 1 },
         });
     });
+
+    it('sets, validates, and redacts the model API keys', () => {
+        const configPath = tempConfigPath();
+
+        setConfigValue('model.openai.apiKey', 'sk-image-key', configPath);
+        setConfigValue('model.gemini.apiKey', 'g-image-key', configPath);
+        setConfigValue('model.gemini.model', 'gemini-3.1-flash-image', configPath);
+        setConfigValue('model.via', 'gemini', configPath);
+        expect(loadConfigFile(configPath)).toEqual({
+            model: {
+                via: 'gemini',
+                openai: { apiKey: 'sk-image-key' },
+                gemini: { apiKey: 'g-image-key', model: 'gemini-3.1-flash-image' },
+            },
+        });
+        expect(statSync(configPath).mode & 0o777).toBe(0o600);
+
+        expect(() => setConfigValue('model.via', 'codex', configPath)).toThrowError(
+            'model.via must be one of openai, gemini.',
+        );
+        expect(() => setConfigValue('model.openai.apiKey', ' ', configPath)).toThrowError(
+            'model.openai.apiKey must not be empty.',
+        );
+
+        writeFileSync(configPath, '{"model":{"stability":{"apiKey":"x"}}}\n', 'utf8');
+        expect(() => loadConfigFile(configPath)).toThrowError(
+            `${configPath} contains unknown config key "model.stability".`,
+        );
+        writeFileSync(configPath, '{"model":{"openai":{"apiKey":42}}}\n', 'utf8');
+        expect(() => loadConfigFile(configPath)).toThrowError(
+            `${configPath} has invalid "model.openai.apiKey". Expected a string.`,
+        );
+        writeFileSync(configPath, '{"model":{"via":"codex"}}\n', 'utf8');
+        expect(() => loadConfigFile(configPath)).toThrowError(
+            `${configPath} has invalid "model.via". Expected one of openai, gemini.`,
+        );
+
+        const shown = renderConfigShow({
+            model: {
+                openai: { apiKey: 'sk-image-key' },
+                gemini: { apiKey: 'g-image-key', model: 'gemini-3.1-flash-image' },
+            },
+        });
+        expect(shown).not.toContain('sk-image-key');
+        expect(shown).not.toContain('g-image-key');
+        expect(shown).toContain('[redacted]');
+        expect(shown).toContain('gemini-3.1-flash-image');
+    });
 });

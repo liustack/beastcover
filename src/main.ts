@@ -48,11 +48,15 @@ import {
     type ImageSource,
     initConfigFile,
     loadConfigFile,
+    MODEL_PROVIDERS,
+    type ModelProvider,
     renderConfigShow,
     resolveEffectiveConfig,
     setConfigValue,
 } from './config.ts';
 import { type DoctorReport, lookupCommandOnPath, renderDoctorReport, runDoctor } from './doctor.ts';
+import { runModelApi as defaultRunModelApi, selectModelProvider } from './model/index.ts';
+import { buildModelPrompt } from './model/prompt.ts';
 import {
     type FamilyName,
     getPlatform,
@@ -130,6 +134,7 @@ export interface CliRuntime {
     setExitCode: (code: number) => void;
     lookupCommand: (name: string) => string | undefined;
     runAgent: typeof defaultRunAgent;
+    runModelApi: typeof defaultRunModelApi;
     stock: Pick<StockRuntime, 'fetch' | 'sleep' | 'download'>;
     /** 把普通照片里的主体抠成透明 PNG，默认用 macOS Vision */
     cutout: (inputPath: string, outputPath: string) => Promise<void>;
@@ -163,6 +168,7 @@ function createRuntime(overrides: CliRuntimeOverrides = {}): CliRuntime {
         setExitCode: overrides.setExitCode ?? (() => undefined),
         lookupCommand: overrides.lookupCommand ?? lookupCommandOnPath,
         runAgent: overrides.runAgent ?? defaultRunAgent,
+        runModelApi: overrides.runModelApi ?? defaultRunModelApi,
         stock: overrides.stock ?? {},
         cutout: overrides.cutout ?? visionSubjectCutout(vision),
         photoFocus:
@@ -235,16 +241,21 @@ function parseImageSource(value: string): ImageSource {
     return value as ImageSource;
 }
 
-function parseVia(value: string): AgentProvider {
+function parseVia(value: string): AgentProvider | ModelProvider {
     if (value === 'grok' || value === 'claude') {
         throw new Error(
             `via "${value}" was removed: the ${value} CLI has no image generation. Use codex or agy.`,
         );
     }
-    if (!AGENT_PROVIDERS.includes(value as AgentProvider)) {
-        throw new Error(`Unknown via "${value}". Use ${AGENT_PROVIDERS.join(', ')}.`);
+    if (
+        !AGENT_PROVIDERS.includes(value as AgentProvider) &&
+        !MODEL_PROVIDERS.includes(value as ModelProvider)
+    ) {
+        throw new Error(
+            `Unknown via "${value}". Use ${AGENT_PROVIDERS.join(', ')} with --source agent, or ${MODEL_PROVIDERS.join(', ')} with --source model.`,
+        );
     }
-    return value as AgentProvider;
+    return value as AgentProvider | ModelProvider;
 }
 
 function collectRefs(value: string, previous: string[]): string[] {
@@ -627,8 +638,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
     program
         .command('gen')
         .description('Generate covers from a headline')
-        .argument('[text]', 'Headline for the cover, or the subject for agent', DEFAULT_RENDER_TEXT)
-        .option('--source <source>', 'Image source: render, stock, or agent')
+        .argument(
+            '[text]',
+            'Headline for the cover, or the subject for agent and model',
+            DEFAULT_RENDER_TEXT,
+        )
+        .option('--source <source>', 'Image source: render, stock, agent, or model')
         .option(
             '-o, --output <path>',
             'Output PNG path. With several presets, each file gets the platform name',
@@ -641,7 +656,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         .option('--height <pixels>', 'Custom canvas height instead of a platform preset')
         .option('--scale <factor>', 'Device scale factor from 1 to 4')
         .option('--guides', 'Draw the safe areas on each cover for checking the layout')
-        .option('--via <provider>', 'Agent CLI backend: codex or agy')
+        .option('--via <provider>', 'Backend: codex or agy for agent, openai or gemini for model')
         .option('--ref <path>', 'Named reference image (repeatable)', collectRefs, [])
         .option(
             '--remix <path>',
@@ -711,8 +726,12 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const effective = resolveEffectiveConfig(fileConfig, flags);
                 const guides = Boolean(options.guides);
 
-                if (flags.via !== undefined && effective.source !== 'agent') {
-                    throw new Error('--via is only valid with --source agent.');
+                if (
+                    flags.via !== undefined &&
+                    effective.source !== 'agent' &&
+                    effective.source !== 'model'
+                ) {
+                    throw new Error('--via is only valid with --source agent or model.');
                 }
                 if (options.photo !== undefined && effective.source !== 'stock') {
                     throw new Error('--photo is only valid with --source stock.');
@@ -727,12 +746,18 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 ) {
                     throw new Error('--look and --fit work with --source stock.');
                 }
-                if (options.hook !== undefined && effective.source === 'agent') {
+                if (
+                    options.hook !== undefined &&
+                    (effective.source === 'agent' || effective.source === 'model')
+                ) {
                     throw new Error('--hook works with --source render or stock.');
                 }
-                if (options.scale !== undefined && effective.source === 'agent') {
+                if (
+                    options.scale !== undefined &&
+                    (effective.source === 'agent' || effective.source === 'model')
+                ) {
                     throw new Error(
-                        '--scale works with --source render or stock. agent output size comes from the model.',
+                        `--scale works with --source render or stock. ${effective.source} output size comes from the model.`,
                     );
                 }
                 const hook = options.hook === undefined ? undefined : parseHook(options.hook);
@@ -948,8 +973,16 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                             { prompt: slot.prompt, css: slot.css },
                         ]),
                     );
+                    if (
+                        flags.via !== undefined &&
+                        !AGENT_PROVIDERS.includes(flags.via as AgentProvider)
+                    ) {
+                        throw new Error(
+                            `--via ${flags.via} works with --source model. --source agent takes ${AGENT_PROVIDERS.join(' or ')}.`,
+                        );
+                    }
                     const selected = selectAgentProvider({
-                        via: flags.via,
+                        via: flags.via as AgentProvider | undefined,
                         configVia: effective.agent?.via,
                         lookup: runtime.lookupCommand,
                     });
@@ -1045,6 +1078,114 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                     ]
                                   : []),
                             'Privacy: agent used your own CLI. We did not handle the data.',
+                            '',
+                        ].join('\n'),
+                    );
+                    return;
+                }
+
+                if (effective.source === 'model') {
+                    const workspaceDir = findWorkspace(runtime.cwd);
+                    if (workspaceDir === undefined) {
+                        throw new Error(
+                            'No BeastCover workspace found. Run beastcover new <name> first.',
+                        );
+                    }
+                    if (effective.render.canvas) {
+                        throw new Error('model uses preset sizes. Omit --width and --height.');
+                    }
+                    if (guides) {
+                        throw new Error('--guides works with --source render or stock.');
+                    }
+                    if (options.subject !== undefined) {
+                        throw new Error('--subject works with --source render or stock.');
+                    }
+                    if ((options.ref ?? []).length > 0) {
+                        throw new Error('--ref works with --source agent.');
+                    }
+                    if (
+                        flags.via !== undefined &&
+                        !MODEL_PROVIDERS.includes(flags.via as ModelProvider)
+                    ) {
+                        throw new Error(
+                            `--via ${flags.via} works with --source agent. --source model takes ${MODEL_PROVIDERS.join(' or ')}.`,
+                        );
+                    }
+                    const pack = loadStylePack(workspaceDir);
+                    const style = loadStyle(pack.style);
+                    const palette = mergedPalette(pack);
+                    const catalogPalette = Object.fromEntries(
+                        style.paletteSlots.map((slot) => [
+                            slot.name,
+                            { prompt: slot.prompt, css: slot.css },
+                        ]),
+                    );
+                    const selected = selectModelProvider({
+                        ...(flags.via !== undefined ? { via: flags.via as ModelProvider } : {}),
+                        ...(effective.model ? { config: effective.model } : {}),
+                    });
+
+                    const now = runtime.now();
+                    const outputPath = coverOutputPath(
+                        runtime,
+                        flags,
+                        effective.output,
+                        workspaceDir,
+                        now,
+                    );
+                    // 和 agent 一样一族只生成一次：原图存进 cache/，族内各平台从同一张图裁。
+                    const byFamily = new Map<FamilyName, CoverTarget[]>();
+                    for (const target of coverOutputPaths(outputPath, effective.render.presets)) {
+                        const family = getPlatform(target.platform).family;
+                        byFamily.set(family, [...(byFamily.get(family) ?? []), target]);
+                    }
+                    const stem = basename(outputPath, extname(outputPath));
+                    const lines: string[] = [];
+                    for (const [family, targets] of byFamily) {
+                        const generatedPath = join(workspaceDir, 'cache', `${stem}-${family}.png`);
+                        const prompt = buildModelPrompt({
+                            style,
+                            subject: text,
+                            mergedPalette: palette,
+                            family,
+                        });
+                        await runtime.runModelApi({
+                            provider: selected.provider,
+                            apiKey: selected.apiKey,
+                            model: selected.model,
+                            prompt,
+                            family,
+                            generatedPath,
+                            targets: targets.map((target) => ({
+                                preset: target.platform,
+                                outputPath: target.outputPath,
+                            })),
+                        });
+                        for (const target of targets) {
+                            appendHistory(workspaceDir, {
+                                createdAt: now.toISOString(),
+                                style: pack.style,
+                                palette,
+                                catalogPalette,
+                                text,
+                                source: 'model',
+                                via: selected.provider,
+                                preset: target.platform,
+                                output: target.outputPath,
+                            });
+                            const plan = getAgentCanvasPlan(target.platform);
+                            lines.push(
+                                `Created ${target.outputPath}`,
+                                `Canvas: ${plan.outputWidth}x${plan.outputHeight}`,
+                            );
+                        }
+                    }
+
+                    runtime.stdout.write(
+                        [
+                            ...lines,
+                            `Backend: ${selected.provider} ${selected.model}`,
+                            `Privacy: the prompt went to ${selected.provider} with your API key. No local file left this machine.`,
                             '',
                         ].join('\n'),
                     );

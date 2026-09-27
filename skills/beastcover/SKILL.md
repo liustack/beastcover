@@ -67,8 +67,9 @@ Old ratio names (`16:9`, `5:2`, `3:2`, `3:4`) are gone. The CLI names the replac
 | A real photo carries the mood and the headline sits on it | `stock` |
 | The headline is the whole cover, or the wording will change often | `render` |
 | A painted cover in the project style, and the user has an agent CLI | `agent` |
+| A painted cover in the project style, and the user has an image API key | `model` |
 
-`stock` and `render` need nothing beyond Node and Chromium. `agent` needs the user's own Codex or agy CLI. Do not silently substitute one source for another. If a requested agent backend is missing, stop and name the CLI to install. Do not switch to stock, render, or a different CLI.
+`stock` and `render` are free and need nothing beyond Node and Chromium. `agent` needs the user's own Codex or agy CLI, and `model` needs the user's own API key in the config. Do not silently substitute one source for another. If a requested agent backend or API key is missing, stop and name the CLI to install or the config key to set. Do not switch to stock, render, or a different backend.
 
 ## Photo cover from free stock
 
@@ -137,7 +138,7 @@ When a workspace exists, omit `--output` so the PNG lands in `.beastcover/out/`.
 
 After the command finishes, verify that the PNG exists at the reported path. Tell the user that render content stayed on the machine.
 
-## Paint with a local model
+## Paint with an agent CLI
 
 `agent` needs a workspace. The style lives in `.beastcover/project.json`. Do not create a workspace silently.
 
@@ -167,6 +168,24 @@ beastcover gen "<subject>" --source agent --via codex --remix /abs/me.jpg --remi
 - The model redraws the face and invents what the photo does not show, like the rest of a body. When the face must stay exact, use `--subject` on a render or stock cover instead.
 
 After the command finishes, verify the image at the reported path. Tell the user: `Privacy: agent used your own CLI. We did not handle the data.`
+
+## Paint through an image API
+
+`model` paints the same style prompt through the user's own image model API key: GPT Image (`openai`) or Nano Banana (`gemini`). It needs a workspace, and a key in the config:
+
+```bash
+beastcover config set model.openai.apiKey <key>
+beastcover config set model.gemini.apiKey <key>
+beastcover gen "<subject>" --source model --preset youtube,xiaohongshu
+beastcover gen "<subject>" --source model --via gemini --preset xiaohongshu
+```
+
+- `--via` picks `openai` or `gemini`. Without it, the first provider with a configured key is used, `openai` first. A named provider without a key fails with the config key to set. Never put a key on the command line or in a file the user did not name.
+- Like `agent`, the model runs once per group of platforms and each platform is cropped from that image.
+- `--ref` and `--remix` do not work with `model` yet. When the user wants reference images, use `--source agent`.
+- The default model per provider can be replaced with `beastcover config set model.<provider>.model <id>` when a newer one ships.
+
+After the command finishes, verify the image at the reported path. Tell the user: `Privacy: the prompt went to <provider> with your API key. No local file left this machine.`
 
 ## Make it land
 

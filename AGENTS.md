@@ -17,6 +17,8 @@ Phase one currently ships these working surfaces:
 - `gen --subject <path>` puts a person or object on a render or stock cover: a transparent PNG as is, or a photo cut out on macOS 14+ with Vision
 - `gen --source stock` frames the photo around its subject (Vision faces and saliency on macOS, sharp attention elsewhere), and takes `--look natural|mono|duotone|punch` and `--fit cover|extend`
 - `agent` calls the user's own Codex or agy CLI to paint a cover, and `--remix` redraws one image or puts the person from one image into the scene of another
+- `gen --source model` paints the same styles through the user's own image API key: GPT Image (`openai`) or Nano Banana (`gemini`), keys in `model.<provider>.apiKey`. No refs or remix yet
+- The default path is completely free (free stock photos plus local HTML rendering). agent and model are opt-ins the user already pays for elsewhere
 - `styles` lists the four self-contained catalog styles
 - `new` and `project` manage a per-project `.beastcover/` workspace
 
@@ -53,6 +55,8 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - history.jsonl stores output, photo, and subject paths relative to the workspace.
 - Workspace discovery only accepts a `.beastcover/` that contains `project.json`, because the settings folder `~/.beastcover/` has the same name.
 - `agent` asks the backend for the native generate size, then crops and resizes in-process with `sharp`. It does not shell out to sips or ImageMagick.
+- `model` reuses the agent generate plans and crop pipeline: one API call per family, the returned image is normalized to the plan size with `sharp`, then cropped per platform. Providers never fall back to each other, a missing key is an error naming the config key, keys go only into request headers and never into error messages, and `fetch` is injected so tests never touch the network. Model ids live in `MODEL_DEFAULTS` and `model.<provider>.model` overrides them.
+- history.jsonl is a log: records written before the rename (`local-model` source, `grok`/`claude` backends) stay readable.
 - Each style record is self-contained. Copy its full prompt unchanged and append one subject description.
 - A project workspace lives at `.beastcover/` inside the user project. Discovery walks up from the current directory. Missing workspaces are reported, never created silently.
 - Workspace ignore rules live only in `src/workspace/ignore.ts`. The CLI writes `.beastcover/.gitignore` (`/out/`, `/cache/`, `/refs/`) and never touches the user's `.gitignore` or `.git/info/exclude`. `project.json` and `history.jsonl` stay commitable.
@@ -89,6 +93,13 @@ src/
 │   ├── remix.ts            # --remix mode and the own-or-cc0/pdm license gate
 │   ├── finish.ts           # sharp crop then resize
 │   └── run.ts              # rm, spawn, captured stdio, on-disk image verification
+├── model/
+│   ├── index.ts            # Re-exports
+│   ├── provider.ts         # Key-based provider selection with no silent fallback
+│   ├── prompt.ts           # Style prompt plus 主体 plus the family composition note
+│   ├── openai.ts           # GPT Image generations call, key only in the header
+│   ├── gemini.ts           # Nano Banana generateContent call, aspect ratio config
+│   └── run.ts              # One call per family, normalize to plan size, crop per platform
 ├── render/
 │   ├── index.ts            # Playwright renderer: fit the headline, screenshot a page
 │   ├── layout.ts           # Cover layouts, subject split, headline markup, measuring probes
@@ -143,6 +154,7 @@ beastcover gen "别再乱剪了" --source render --subject me.jpg --preset youtu
 beastcover gen "封面没人点" --source render --template poster --tag "新手必看" --preset all
 beastcover gen "个习惯多出两小时" --source render --template number --number 3 --preset all
 beastcover gen "A figure on a shore" --source agent --via codex --preset xiaohongshu
+beastcover gen "A figure on a shore" --source model --via gemini --preset xiaohongshu
 beastcover config init
 beastcover config set render.preset x
 beastcover config set stock.pexels.apiKey <key>
