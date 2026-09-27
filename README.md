@@ -61,7 +61,7 @@ Install Chromium through the Playwright that ships with beastcover. A bare `npx 
 
 `stock search` prints one photo per line: ref, size, license, creator, thumbnail URL. Pick one and pass its ref to `--photo`. `--photo` also takes a local image path.
 
-With a workspace, the photo and its provenance record land in `.beastcover/refs/` and the cover lands in `.beastcover/out/`. `project.json` holds the project's style and palette, `history.jsonl` records every cover, and both are safe to commit.
+With a workspace, the photo and its provenance record land in `.beastcover/refs/` and the cover lands in `.beastcover/out/`. `project.json` holds the project's style and palette, and `history.jsonl` records every cover. The whole `.beastcover/` folder keeps itself out of your git.
 
 Photo covers are framed around the photo's own subject and keep it clear of the headline. `--look mono|duotone|punch` grades the photo, `--fit extend` keeps a photo whole when its shape does not suit the platform, filling the rest with a blurred copy, and `--callout` circles the subject in red with an arrow pointing at it. With an agent CLI, `--source agent --remix me.jpg` redraws your image in the project style, and a second `--remix scene.jpg` puts you into that scene.
 

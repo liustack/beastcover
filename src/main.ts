@@ -1336,8 +1336,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             runtime.stdout.write(
                 [
                     'Created .beastcover/',
-                    '  project.json    style and palette, commit this',
-                    '  .gitignore      keeps out/, cache/, refs/ out of git',
+                    '  project.json    style and palette',
+                    '  .gitignore      keeps the whole folder out of your git',
                     '  refs/ out/ cache/',
                     '',
                     'Nothing was written to your .gitignore or .git/info/exclude.',

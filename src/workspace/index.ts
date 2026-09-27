@@ -211,19 +211,26 @@ export function loadStylePack(workspaceDir: string): StylePack {
 
     const style = loadStyle(parsed.style);
 
-    if (!isPlainObject(parsed.palette)) {
-        invalidPack(packPath, 'palette', 'an object');
-    }
-    const slotNames = new Set(style.paletteSlots.map((slot) => slot.name));
+    // palette 和 composition 都是可选覆盖：不写就用风格自带的。档案最小只需 name 和 style，
+    // 换风格改一个词即可，不用同步其他字段。
     const palette: Record<string, PaletteSlotOverride> = {};
-    for (const [key, value] of Object.entries(parsed.palette)) {
-        if (!slotNames.has(key)) {
-            throw new Error(`${packPath} contains unknown palette slot "${key}".`);
+    if (parsed.palette !== undefined) {
+        if (!isPlainObject(parsed.palette)) {
+            invalidPack(packPath, 'palette', 'an object');
         }
-        palette[key] = parsePaletteSlotOverride(packPath, key, value);
+        const slotNames = new Set(style.paletteSlots.map((slot) => slot.name));
+        for (const [key, value] of Object.entries(parsed.palette)) {
+            if (!slotNames.has(key)) {
+                throw new Error(`${packPath} contains unknown palette slot "${key}".`);
+            }
+            palette[key] = parsePaletteSlotOverride(packPath, key, value);
+        }
     }
 
-    if (typeof parsed.composition !== 'string' || parsed.composition.trim() === '') {
+    if (
+        parsed.composition !== undefined &&
+        (typeof parsed.composition !== 'string' || parsed.composition.trim() === '')
+    ) {
         invalidPack(packPath, 'composition', 'a non-empty string');
     }
 
@@ -231,11 +238,11 @@ export function loadStylePack(workspaceDir: string): StylePack {
         name: parsed.name,
         style: parsed.style,
         palette,
-        composition: parsed.composition,
+        composition: parsed.composition ?? style.composition,
     };
 }
 
-function writeStylePack(workspaceDir: string, pack: StylePack): void {
+function writeStylePack(workspaceDir: string, pack: { name: string; style: string }): void {
     writeFileSync(join(workspaceDir, PROJECT_PACK_FILE), `${JSON.stringify(pack, null, 2)}\n`, {
         encoding: 'utf8',
     });
@@ -264,14 +271,10 @@ export function createWorkspace(cwd: string, options: CreateWorkspaceOptions): C
 
     const style =
         options.styleName === undefined ? loadFallbackStyle() : loadStyle(options.styleName);
-    const palette: Record<string, PaletteSlotOverride> = {};
-    for (const slot of style.paletteSlots) {
-        palette[slot.name] = { prompt: slot.prompt, css: slot.css };
-    }
     const pack: StylePack = {
         name,
         style: style.name,
-        palette,
+        palette: {},
         composition: style.composition,
     };
 
@@ -280,7 +283,8 @@ export function createWorkspace(cwd: string, options: CreateWorkspaceOptions): C
         mkdirSync(join(target, directory), { recursive: true });
     }
     writeWorkspaceIgnoreFile(target);
-    writeStylePack(target, pack);
+    // 档案只写两行。palette 和 composition 是可选覆盖，默认跟着风格走。
+    writeStylePack(target, { name, style: style.name });
 
     return { path: target, pack };
 }

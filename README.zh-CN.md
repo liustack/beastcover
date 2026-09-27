@@ -61,7 +61,7 @@ beastcover gen "人接不住认知以外的流量，也赚不到认知以外的�
 
 `stock search` 每行列一张照片：ref、尺寸、授权、作者、缩略图地址。挑一张，把 ref 交给 `--photo`。`--photo` 也收本地图片路径。
 
-有工作区时，照片和它的来源记录存进 `.beastcover/refs/`，封面写到 `.beastcover/out/`。`project.json` 记着这个项目的风格和配色，`history.jsonl` 记着每一张封面，两个文件都可以提交。
+有工作区时，照片和它的来源记录存进 `.beastcover/refs/`，封面写到 `.beastcover/out/`。`project.json` 记着这个项目的风格和配色，`history.jsonl` 记着每一张封面。整个 `.beastcover/` 目录自己对你的 git 隐身，不会混进你的提交。
 
 照片封面会按照片自己的主体来构图，让主体避开标题。`--look mono|duotone|punch` 给照片调色，`--fit extend` 在照片形状不适合平台时保留整张照片，其余部分用模糊的同一张补满，`--callout` 用红圈圈住主体，再画一支箭头指过去。装了模型 CLI 的话，`--source local-model --remix me.jpg` 按项目画风重绘你的图，再加一个 `--remix 场景.jpg` 就能把你放进那个场景。
 

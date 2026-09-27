@@ -44,14 +44,9 @@ describe('project workspace', () => {
 
         expect(created.path).toBe(join(cwd, '.beastcover'));
         expect(created.pack.style).toBe('torn_paper_editorial_collage');
-        expect(created.pack.palette).toEqual(
-            Object.fromEntries(
-                style.paletteSlots.map((slot) => [
-                    slot.name,
-                    { prompt: slot.prompt, css: slot.css },
-                ]),
-            ),
-        );
+        // 档案最小化：palette 不再抄进 project.json，覆盖为空时用风格默认。
+        expect(created.pack.palette).toEqual({});
+        expect(created.pack.composition).toBe(style.composition);
         expect(existsSync(join(created.path, 'refs'))).toBe(true);
         expect(existsSync(join(created.path, 'out'))).toBe(true);
         expect(existsSync(join(created.path, 'cache'))).toBe(true);

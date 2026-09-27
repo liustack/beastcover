@@ -2,11 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-    WORKSPACE_GITIGNORE,
-    WORKSPACE_GITIGNORE_ENTRIES,
-    writeWorkspaceIgnoreFile,
-} from './ignore.ts';
+import { WORKSPACE_GITIGNORE, writeWorkspaceIgnoreFile } from './ignore.ts';
 
 const tempDirectories: string[] = [];
 
@@ -17,14 +13,12 @@ afterEach(() => {
 });
 
 describe('workspace ignore policy', () => {
-    it('ignores generated output, cache, and refs inside .beastcover', () => {
-        expect([...WORKSPACE_GITIGNORE_ENTRIES]).toEqual(['/out/', '/cache/', '/refs/']);
-        expect(WORKSPACE_GITIGNORE).toBe('/out/\n/cache/\n/refs/\n');
+    it('hides the whole workspace from the user git, records included', () => {
+        expect(WORKSPACE_GITIGNORE).toBe('*\n');
 
         const directory = mkdtempSync(join(tmpdir(), 'beastcover-ignore-'));
         tempDirectories.push(directory);
         writeWorkspaceIgnoreFile(directory);
         expect(readFileSync(join(directory, '.gitignore'), 'utf8')).toBe(WORKSPACE_GITIGNORE);
-        expect(WORKSPACE_GITIGNORE).not.toContain('history');
     });
 });

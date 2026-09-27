@@ -59,7 +59,7 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - history.jsonl is a log: records written before the rename (`local-model` source, `grok`/`claude` backends) stay readable.
 - Each style record is self-contained. Copy its full prompt unchanged and append one subject description.
 - A project workspace lives at `.beastcover/` inside the user project. Discovery walks up from the current directory. Missing workspaces are reported, never created silently.
-- Workspace ignore rules live only in `src/workspace/ignore.ts`. The CLI writes `.beastcover/.gitignore` (`/out/`, `/cache/`, `/refs/`) and never touches the user's `.gitignore` or `.git/info/exclude`. `project.json` and `history.jsonl` stay commitable.
+- Workspace ignore rules live only in `src/workspace/ignore.ts`. The CLI writes `.beastcover/.gitignore` containing `*`, so the whole workspace, tool records included, stays out of the user's git (user decision, 2026-09-27: the tool must not push its records into the user's repository). It never touches the user's `.gitignore` or `.git/info/exclude`.
 - Tests live next to their modules as `*.test.ts` or `*.test.js`.
 
 ## Code Organization
