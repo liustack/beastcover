@@ -13,6 +13,28 @@ export interface PhotoLayer {
     sourceHeight: number;
     /** 照片主体落在画布上的范围（0 到 1）。按主体构图时才有 */
     focusBox?: Rect;
+    /** 这次从原图里取的那一块（0 到 1，原点左上角）。按主体裁切构图时才有 */
+    window?: Rect;
+}
+
+/** 取景窗口在原图里的位置（0 到 1） */
+function windowOf(framed: FramedPhoto, source: { width: number; height: number }): Rect {
+    return {
+        x: framed.left / source.width,
+        y: framed.top / source.height,
+        width: framed.width / source.width,
+        height: framed.height / source.height,
+    };
+}
+
+/** 原图里的一个主体框（中心加宽高），在取景窗口裁出来的画布上落在哪（0 到 1） */
+export function focusInWindow(focus: PhotoFocus, window: Rect): Rect {
+    return {
+        x: (focus.x - focus.width / 2 - window.x) / window.width,
+        y: (focus.y - focus.height / 2 - window.y) / window.height,
+        width: focus.width / window.width,
+        height: focus.height / window.height,
+    };
 }
 
 export const PHOTO_FITS = ['cover', 'extend'] as const;
@@ -183,6 +205,7 @@ export async function preparePhotoLayer(
     const focus = framing.focus;
     let bytes: Buffer;
     let focusBox: Rect | undefined;
+    let window: Rect | undefined;
 
     const visible = framing.visible ?? { x: 0, y: 0, width: 1, height: 1 };
     if (framing.fit === 'extend') {
@@ -247,18 +270,15 @@ export async function preparePhotoLayer(
             .resize(pixelWidth, pixelHeight, { fit: 'fill' })
             .jpeg({ quality: PHOTO_JPEG_QUALITY, mozjpeg: true })
             .toBuffer();
-        focusBox = {
-            x: ((focus.x - focus.width / 2) * source.width - framed.left) / framed.width,
-            y: ((focus.y - focus.height / 2) * source.height - framed.top) / framed.height,
-            width: (focus.width * source.width) / framed.width,
-            height: (focus.height * source.height) / framed.height,
-        };
+        window = windowOf(framed, source);
+        focusBox = focusInWindow(focus, window);
     }
     return {
         dataUri: `data:image/jpeg;base64,${bytes.toString('base64')}`,
         sourceWidth: source.width,
         sourceHeight: source.height,
         ...(focusBox === undefined ? {} : { focusBox }),
+        ...(window === undefined ? {} : { window }),
     };
 }
 
@@ -417,12 +437,7 @@ export function framedFocusBox(
         target: photoFocusTarget(layout, hasSubject),
         visible: framingFraction(layout),
     });
-    return {
-        x: ((focus.x - focus.width / 2) * photo.width - framed.left) / framed.width,
-        y: ((focus.y - focus.height / 2) * photo.height - framed.top) / framed.height,
-        width: (focus.width * photo.width) / framed.width,
-        height: (focus.height * photo.height) / framed.height,
-    };
+    return focusInWindow(focus, windowOf(framed, photo));
 }
 
 /** 圈注要按平台的可见区和遮挡区算，合成入口一定填了它们。没填是调用方的 bug，直接报错 */

@@ -7,7 +7,7 @@ import type { CoverTemplate, RenderedPage } from '../compose/index.ts';
 import type { FamilyName, Rect } from '../platforms/index.ts';
 import type { PictureSubject } from '../qc/index.ts';
 import type { CoverLayout, Headline } from '../render/layout.ts';
-import { type PhotoLook, preparePhotoLayer } from '../render/photo-cover.ts';
+import { focusInWindow, type PhotoLook, preparePhotoLayer } from '../render/photo-cover.ts';
 import type { TypeSpec } from '../render/type.ts';
 import type { PhotoFocus } from '../subject/vision.ts';
 import {
@@ -386,10 +386,26 @@ function unionFocus(a: PhotoFocus | undefined, b: PhotoFocus | undefined): Photo
     };
 }
 
+/** 两边主体合起来的框，放不放得进这一半的取景窗口里平台看得见、又让开标签的那一截 */
+function unionFits(
+    union: PhotoFocus,
+    source: { width: number; height: number },
+    seen: Rect,
+    labelShare: number,
+): boolean {
+    const aspect = seen.width / seen.height;
+    const windowWidth = Math.min(source.width, source.height * aspect);
+    const windowHeight = Math.min(source.height, source.width / aspect);
+    return (
+        union.width * source.width <= windowWidth &&
+        union.height * source.height <= windowHeight * (1 - labelShare)
+    );
+}
+
 /**
  * 两张照片构图，再把亮度拉到两者的平均：一半更亮等于替观众下了结论（research.md 第 3.5 节）。
  * 主体放进面板里平台看得见、又不被标签挡住的那一截。前后对比的两张一样大时是同一个机位拍的
- * 一对，两半用同一个取景（框住两边的主体），看的是同一处的变化；对比两样东西时各自构图。
+ * 一对，两边的主体放得进同一个取景时两半就用它，看的是同一处的变化。对比两样东西时各自构图。
  */
 async function panelPhotos(
     layout: CoverLayout,
@@ -401,21 +417,34 @@ async function panelPhotos(
     // 现画的场景每个族一张，取这一族的。
     const shown = photos.map((photo) => photoForLayout(photo, layout));
     const [first, second] = shown as [GenrePhoto, GenrePhoto];
-    const pair =
+    const sameShot =
         kind === 'before-after' && first.width === second.width && first.height === second.height;
-    const shared = pair ? unionFocus(first.focus, second.focus) : undefined;
+    const union = sameShot ? unionFocus(first.focus, second.focus) : undefined;
+    // 标签挂在这一截上边时，主体往下让开标签那一段。
+    const labelShares = geometry.panels.map((panel, index) => {
+        const seen = seenPart(panel, layout);
+        const label = geometry.labels[index] as ChipAnchor;
+        const labelBottom = label.y + geometry.labelPx * 1.6;
+        return label.y < seen.y + seen.height && labelBottom > seen.y
+            ? Math.min(0.4, Math.max(0, (labelBottom - seen.y) / seen.height))
+            : 0;
+    });
+    // 同一个取景：两半让开同样多，窗口才落在原图同一块。两边的主体合起来得放得进每一半
+    // 看得见的那一截，放不下就各自构图，先保证两边的主体都完整露出来。
+    const sharedLabel = Math.max(...labelShares);
+    const shared =
+        union !== undefined &&
+        geometry.panels.every((panel) =>
+            unionFits(union, first, seenPart(panel, layout), sharedLabel),
+        )
+            ? union
+            : undefined;
     const prepared = await Promise.all(
         geometry.panels.map(async (panel, index) => {
             const photo = shown[index] as GenrePhoto;
-            const focus = pair ? shared : photo.focus;
+            const focus = shared ?? photo.focus;
             const seen = seenPart(panel, layout);
-            // 标签挂在这一截上边时，主体往下让开标签那一段。
-            const label = geometry.labels[index] as ChipAnchor;
-            const labelBottom = label.y + geometry.labelPx * 1.6;
-            const labelShare =
-                label.y < seen.y + seen.height && labelBottom > seen.y
-                    ? Math.min(0.4, Math.max(0, (labelBottom - seen.y) / seen.height))
-                    : 0;
+            const labelShare = shared === undefined ? (labelShares[index] as number) : sharedLabel;
             const layer = await preparePhotoLayer(
                 photo.path,
                 Math.round(seen.width * scale),
@@ -430,11 +459,17 @@ async function panelPhotos(
                 layer.dataUri.slice(layer.dataUri.indexOf(',') + 1),
                 'base64',
             );
+            // 共用取景时，交给质检的还是这张照片自己的主体：合起来的框只管构图，
+            // 两边的主体各自有没有被裁掉要分开查。
+            const focusBox =
+                shared !== undefined && photo.focus !== undefined && layer.window !== undefined
+                    ? focusInWindow(photo.focus, layer.window)
+                    : layer.focusBox;
             return {
                 dataUri: layer.dataUri,
                 rect: seen,
                 luma: await meanLuma(bytes),
-                ...(layer.focusBox === undefined ? {} : { focusBox: layer.focusBox }),
+                ...(focusBox === undefined ? {} : { focusBox }),
             };
         }),
     );

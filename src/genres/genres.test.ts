@@ -772,55 +772,65 @@ describe('cover type rendering', () => {
                 .png()
                 .toFile(path);
         }
-        // 乱的碗碟在左边，整洁以后主体换成右边的水槽：各自构图会取到不同的两块。
-        const photos: [GenrePhoto, GenrePhoto] = [
-            {
-                path: pair[0],
-                width: 1536,
-                height: 1024,
-                focus: { x: 0.3, y: 0.6, width: 0.3, height: 0.4, source: 'saliency' },
-            },
-            {
-                path: pair[1],
-                width: 1536,
-                height: 1024,
-                focus: { x: 0.72, y: 0.62, width: 0.3, height: 0.4, source: 'saliency' },
-            },
-        ];
+        const at = (x: number, width: number) => ({
+            x,
+            y: 0.55,
+            width,
+            height: 0.4,
+            source: 'saliency' as const,
+        });
         const relative = (subject: { box: Rect; frame: Rect }) => ({
             x: Math.round(subject.box.x - subject.frame.x),
             y: Math.round(subject.box.y - subject.frame.y),
             width: Math.round(subject.box.width),
             height: Math.round(subject.box.height),
         });
-        for (const [kind, same] of [
-            ['before-after', true],
-            ['versus', false],
-        ] as const) {
-            const template = genreTemplate(kind, {
+        // 同一个主体、上下分的竖版：两个标签挂的位置不同，取景也得一样。
+        const same = at(0.5, 0.3);
+        const template = genreTemplate('before-after', {
+            text: '厨房改造',
+            fonts: FONTS,
+            photos: [
+                { path: pair[0], width: 1536, height: 1024, focus: same },
+                { path: pair[1], width: 1536, height: 1024, focus: same },
+            ],
+            labels: ['改前', '改后'],
+        });
+        const base = familyLayout('portrait');
+        const layout = template.layoutFor === undefined ? base : template.layoutFor(base);
+        const page = await template.renderHtml(
+            layout,
+            { fontPx: 80, keepClauses: false },
+            layout.width,
+            layout.height,
+        );
+        const [a, b] = page.subjects;
+        if (a === undefined || b === undefined) {
+            throw new Error('before-after reported no subjects');
+        }
+        expect(relative(a)).toEqual(relative(b));
+
+        // 主体一个在最左、一个在最右，合起来放不进一个取景：各自构图，两边的主体都完整露出来，
+        // 质检分别核对的也是各自的主体。
+        const [cover] = await composeCovers({
+            renderer,
+            template: genreTemplate('before-after', {
                 text: '厨房改造',
                 fonts: FONTS,
-                photos,
+                photos: [
+                    { path: pair[0], width: 1536, height: 1024, focus: at(0.03, 0.05) },
+                    { path: pair[1], width: 1536, height: 1024, focus: at(0.97, 0.05) },
+                ],
                 labels: ['改前', '改后'],
-            });
-            const base = familyLayout('landscape');
-            const layout = template.layoutFor === undefined ? base : template.layoutFor(base);
-            const page = await template.renderHtml(
-                layout,
-                { fontPx: 80, keepClauses: false },
-                layout.width,
-                layout.height,
-            );
-            const [a, b] = page.subjects;
-            if (a === undefined || b === undefined) {
-                throw new Error(`${kind} reported no subjects`);
-            }
-            if (same) {
-                expect(relative(a), kind).toEqual(relative(b));
-            } else {
-                expect(relative(a), kind).not.toEqual(relative(b));
-            }
-        }
+            }),
+            text: '厨房改造',
+            targets: [{ platform: 'youtube', outputPath: join(directory, 'pair-edges.png') }],
+            scale: 1,
+            qc: {},
+        });
+        expect(cover?.findings.filter((finding) => finding.message.includes('is cut off'))).toEqual(
+            [],
+        );
     }, 60_000);
 
     it('checks the scene subject of face-stakes, and finds none in a gradient scene', async () => {
