@@ -305,9 +305,11 @@ export async function openRenderer(): Promise<CoverRenderer> {
 
 /**
  * 在页面里跑的探测函数（会被序列化进浏览器，不能引用外部变量）。
- * 覆盖：同一个字用「候选, sans-serif」和「候选, serif」各画一次，候选有这个字时两次都用它，
- * 画出来一样；没有时两次各自回退到不同的系统字体，画出来不一样。中文字宽都是 1em，
- * 只比宽度分不出来，所以比像素。密度：900 字重下墨迹像素 ÷（字数 × 字号²）。
+ * 覆盖：候选有这个字时，不管后面跟哪个通用字体都用它自己画，所以 sans-serif 和 serif 两次
+ * 画出来一样；再拿一个肯定不存在的字体名当参照，候选至少在一个通用字体下要画得和参照不一样，
+ * 不然就是也在走系统回退。只比两个通用字体不够：Windows 上中文的 sans-serif 和 serif 常常
+ * 回退到同一个字体，没装的字体也会两次一样。中文字宽都是 1em，只比宽度分不出来，所以比像素。
+ * 密度：900 字重下墨迹像素 ÷（字数 × 字号²）。
  */
 function probeFontsInPage(input: {
     text: string;
@@ -352,9 +354,18 @@ function probeFontsInPage(input: {
         }
         return String(hash);
     };
-    const has = (family: string, char: string): boolean =>
-        signature(`64px "${family}", sans-serif`, char) ===
-        signature(`64px "${family}", serif`, char);
+    // 这个名字不会装在任何机器上，画出来的就是纯系统回退。
+    const MISSING = 'BeastCover Probe Reference 7f3a9c';
+    const GENERICS = ['sans-serif', 'serif', 'monospace'] as const;
+    const has = (family: string, char: string): boolean => {
+        const own = GENERICS.map((generic) => signature(`64px "${family}", ${generic}`, char));
+        if (own[0] !== own[1]) {
+            return false;
+        }
+        return GENERICS.some(
+            (generic, index) => own[index] !== signature(`64px "${MISSING}", ${generic}`, char),
+        );
+    };
     const density = (family: string, sample: string): number => {
         const wide = doc.createElement('canvas');
         wide.width = SIZE * (Array.from(sample).length + 1);
