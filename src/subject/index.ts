@@ -132,9 +132,13 @@ async function cutoutCached(imagePath: string, runtime: SubjectRuntime): Promise
         try {
             renameSync(partial, cached);
         } catch (error) {
-            // POSIX 的 rename 原子覆盖，Windows 上覆盖一个正被对方读着的缓存会报 EPERM。
-            // 并发抠同一张图写出的内容相同，对方已经写好就用对方的，其他错误照抛。
-            if (!existsSync(cached)) {
+            // POSIX 的 rename 原子覆盖，Windows 上覆盖一个正被对方读着或锁住的缓存会报
+            // EPERM/EBUSY/EACCES/EEXIST。并发抠同一张图写出的内容相同，这几类错误且对方
+            // 已经写好时就用对方的。其他错误码（如 EIO）是真实故障，照抛。
+            const code = (error as NodeJS.ErrnoException).code;
+            const lostToTwin =
+                code === 'EPERM' || code === 'EBUSY' || code === 'EACCES' || code === 'EEXIST';
+            if (!lostToTwin || !existsSync(cached)) {
                 throw error;
             }
         }

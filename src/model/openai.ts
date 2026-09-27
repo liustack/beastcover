@@ -1,13 +1,15 @@
 // OpenAI Images API：POST /v1/images/generations，图片总是以 base64 返回。
-// key 只进 Authorization 头，报错信息里只带响应正文，不带 key。
+// key 只进 Authorization 头。服务端错误正文可能回显 key，进报错信息前先脱敏。
+import { redactSecrets } from '../stock/http.ts';
+
 export type ModelFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 const OPENAI_IMAGES_URL = 'https://api.openai.com/v1/images/generations';
 
-async function failureText(response: Response): Promise<string> {
+export async function failureText(response: Response, apiKey: string): Promise<string> {
     let body: string;
     try {
-        body = (await response.text()).slice(0, 300);
+        body = redactSecrets((await response.text()).slice(0, 300), [apiKey]);
     } catch {
         body = '';
     }
@@ -36,7 +38,9 @@ export async function generateOpenAiImage(input: {
     });
 
     if (!response.ok) {
-        throw new Error(`openai image generation failed: ${await failureText(response)}`);
+        throw new Error(
+            `openai image generation failed: ${await failureText(response, input.apiKey)}`,
+        );
     }
 
     let parsed: { data?: { b64_json?: string }[] };

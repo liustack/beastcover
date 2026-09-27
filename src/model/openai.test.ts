@@ -38,6 +38,32 @@ describe('openai image generation', () => {
         expect(init.body as string).not.toContain('sk-secret');
     });
 
+    it('redacts the key when the error body echoes it', async () => {
+        const attempt = generateOpenAiImage({
+            apiKey: 'sk-secret',
+            model: 'm',
+            prompt: 'p',
+            width: 1536,
+            height: 1024,
+            fetch: vi.fn(async () =>
+                jsonResponse(401, { error: { message: 'Invalid API key: sk-secret' } }),
+            ),
+        });
+        await expect(attempt).rejects.toThrowError(/\[redacted\]/);
+        await expect(
+            generateOpenAiImage({
+                apiKey: 'sk-secret',
+                model: 'm',
+                prompt: 'p',
+                width: 1536,
+                height: 1024,
+                fetch: vi.fn(async () =>
+                    jsonResponse(401, { error: { message: 'Invalid API key: sk-secret' } }),
+                ),
+            }),
+        ).rejects.not.toThrowError(/sk-secret/);
+    });
+
     it('reports the status and body on failure without the key', async () => {
         const failing = vi.fn(async () => jsonResponse(401, { error: { message: 'bad key' } }));
         const attempt = generateOpenAiImage({

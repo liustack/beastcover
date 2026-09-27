@@ -1,18 +1,8 @@
 // Gemini generateContent：imageConfig 定比例，图片在 candidates 的 inlineData 里（base64）。
-// key 只进 x-goog-api-key 头，报错信息里只带响应正文，不带 key。
-import type { ModelFetch } from './openai.ts';
+// key 只进 x-goog-api-key 头。服务端错误正文可能回显 key，进报错信息前先脱敏。
+import { failureText, type ModelFetch } from './openai.ts';
 
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-
-async function failureText(response: Response): Promise<string> {
-    let body: string;
-    try {
-        body = (await response.text()).slice(0, 300);
-    } catch {
-        body = '';
-    }
-    return body === '' ? `HTTP ${response.status}` : `HTTP ${response.status}: ${body}`;
-}
 
 export async function generateGeminiImage(input: {
     apiKey: string;
@@ -41,7 +31,9 @@ export async function generateGeminiImage(input: {
     );
 
     if (!response.ok) {
-        throw new Error(`gemini image generation failed: ${await failureText(response)}`);
+        throw new Error(
+            `gemini image generation failed: ${await failureText(response, input.apiKey)}`,
+        );
     }
 
     let parsed: {

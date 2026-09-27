@@ -54,6 +54,21 @@ describe('gemini image generation', () => {
         expect(init.body as string).not.toContain('g-secret');
     });
 
+    it('redacts the key when the error body echoes it', async () => {
+        const make = () =>
+            generateGeminiImage({
+                apiKey: 'g-secret',
+                model: 'm',
+                prompt: 'p',
+                aspectRatio: '2:3',
+                fetch: vi.fn(async () =>
+                    jsonResponse(403, { error: { message: 'key g-secret is not valid' } }),
+                ),
+            });
+        await expect(make()).rejects.toThrowError(/\[redacted\]/);
+        await expect(make()).rejects.not.toThrowError(/g-secret/);
+    });
+
     it('reports the status on failure and fails loudly without image data', async () => {
         await expect(
             generateGeminiImage({
