@@ -354,9 +354,10 @@ describe('cover output paths', () => {
         expect(coverOutputPaths('/out/cover.png', ['x'])).toEqual([
             { platform: 'x', outputPath: '/out/cover.png' },
         ]);
+        // Windows 上 join 产出反斜杠路径，期望值也用 join 构造。
         expect(coverOutputPaths('/out/cover.png', ['wechat', 'x'])).toEqual([
-            { platform: 'wechat', outputPath: '/out/cover-wechat.png' },
-            { platform: 'x', outputPath: '/out/cover-x.png' },
+            { platform: 'wechat', outputPath: join('/out', 'cover-wechat.png') },
+            { platform: 'x', outputPath: join('/out', 'cover-x.png') },
         ]);
     });
 });
