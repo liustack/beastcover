@@ -1,14 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { coverPalette, packFor } from '../styles/pack.ts';
-import { chooseFont, proberFrom } from './fonts.ts';
+import { genrePage } from '../genres/page.ts';
+import { chooseFont, type FontChoice, proberFrom } from './fonts.ts';
 import { type CoverRenderer, openRenderer, TextDoesNotFitError } from './index.ts';
-import { customLayout, type Headline } from './layout.ts';
-import { createRenderTemplate } from './template.ts';
+import { type CoverLayout, customLayout, type Headline } from './layout.ts';
 
 const tempDirectories: string[] = [];
 
@@ -53,13 +50,25 @@ function headline(fontPx: number): Headline {
     return { fontPx, keepClauses: false };
 }
 
+const PLAIN_FONT: FontChoice = { role: 'heavy', stack: 'sans-serif', syntheticBold: 0, notes: [] };
+
+/** 最朴素的封面页：浅底深字，不描边 */
+function page(text: string, layout: CoverLayout, fontPx: number, measure = false): string {
+    return genrePage({
+        layout,
+        headline: headline(fontPx),
+        text,
+        type: { style: 'ink', font: PLAIN_FONT },
+        colors: { fill: '#111111', stroke: '#111111', ring: '#ffffff', accent: '#ffcc00' },
+        background: '#f5eedc',
+        measure,
+    });
+}
+
 describe('cover renderer', () => {
     it('returns a PNG whose pixel size includes the requested scale', async () => {
         const png = await renderer.screenshot({
-            html: createRenderTemplate('A headline that gets the click', {
-                layout: customLayout(320, 180),
-                headline: headline(24),
-            }),
+            html: page('A headline that gets the click', customLayout(320, 180), 24),
             width: 320,
             height: 180,
             scale: 2,
@@ -104,12 +113,7 @@ describe('cover renderer', () => {
     it('finds the largest font size whose headline stays inside the box', async () => {
         const layout = customLayout(800, 400);
         const fontPx = await renderer.fitText({
-            html: (px) =>
-                createRenderTemplate('Every platform', {
-                    layout,
-                    headline: headline(px),
-                    measure: true,
-                }),
+            html: (px) => page('Every platform', layout, px, true),
             width: layout.width,
             height: layout.height,
             box: layout.textArea,
@@ -121,12 +125,7 @@ describe('cover renderer', () => {
         expect(fontPx).toBeLessThan(400);
         const bigger = await renderer
             .fitText({
-                html: (px) =>
-                    createRenderTemplate('Every platform', {
-                        layout,
-                        headline: headline(px),
-                        measure: true,
-                    }),
+                html: (px) => page('Every platform', layout, px, true),
                 width: layout.width,
                 height: layout.height,
                 box: layout.textArea,
@@ -141,8 +140,7 @@ describe('cover renderer', () => {
         const layout = customLayout(800, 800);
         const measure = (text: string) =>
             renderer.fitText({
-                html: (px) =>
-                    createRenderTemplate(text, { layout, headline: headline(px), measure: true }),
+                html: (px) => page(text, layout, px, true),
                 width: layout.width,
                 height: layout.height,
                 box: layout.textArea,
@@ -154,28 +152,6 @@ describe('cover renderer', () => {
         expect(await measure('Understanding it')).toBeLessThan(await measure('Get it'));
         // 中文紧挨着长单词时也一样。
         expect(await measure('试试Understanding')).toBeLessThan(await measure('试试Get'));
-    }, 30_000);
-
-    it('changes the rendered PNG when the palette css changes', async () => {
-        const layout = customLayout(320, 180);
-        const shot = (pack: Parameters<typeof coverPalette>[0]) =>
-            renderer.screenshot({
-                html: createRenderTemplate('Palette css probe', {
-                    layout,
-                    headline: headline(24),
-                    palette: coverPalette(pack),
-                }),
-                width: 320,
-                height: 180,
-                scale: 1,
-            });
-
-        const before = await shot(packFor('risograph_editorial'));
-        const overridden = packFor('risograph_editorial');
-        overridden.palette.paper = { css: '#ff0000' };
-        const after = await shot(overridden);
-
-        expect(after.equals(before)).toBe(false);
     }, 30_000);
 });
 

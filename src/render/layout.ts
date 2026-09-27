@@ -150,7 +150,11 @@ export interface PlacedSubject {
  * 画面边缘（被画面切掉），但不越过朝向标题的那条边，脸也要落在可见区里。放不下就缩小，
  * 缩回原来的大小还不行就照没有脸时的办法摆。
  */
-export function placeSubject(layout: CoverLayout, subject: PlacedSubject): Rect {
+export function placeSubject(
+    layout: CoverLayout,
+    subject: PlacedSubject,
+    faceShare = FACE_SHARE,
+): Rect {
     const area = layout.subjectArea;
     if (area === undefined) {
         throw new Error('A subject needs a layout with a subject area.');
@@ -170,7 +174,7 @@ export function placeSubject(layout: CoverLayout, subject: PlacedSubject): Rect 
     const bottom = area.y + area.height;
     const margin = visible.width * FACE_MARGIN;
     const baseScale = base.width / subject.width;
-    const faceScale = (clear.height * FACE_SHARE) / (face.height * subject.height);
+    const faceScale = (clear.height * faceShare) / (face.height * subject.height);
     let scale = Math.max(baseScale, Math.min(faceScale, area.height / subject.height));
     while (scale > baseScale) {
         const width = subject.width * scale;

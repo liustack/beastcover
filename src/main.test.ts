@@ -1,12 +1,4 @@
-import {
-    existsSync,
-    mkdirSync,
-    mkdtempSync,
-    readdirSync,
-    readFileSync,
-    rmSync,
-    writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import sharp from 'sharp';
@@ -97,7 +89,7 @@ function mockRunModelApi() {
     }));
 }
 
-function catalogPalette(styleName: string) {
+function _catalogPalette(styleName: string) {
     const style = loadStyle(styleName);
     return Object.fromEntries(
         style.paletteSlots.map((slot) => [slot.name, { prompt: slot.prompt, css: slot.css }]),
@@ -202,7 +194,14 @@ describe('BeastCover CLI', () => {
                 '--width',
                 '800',
             ],
-            { cwd: directory, configPath, openRenderer: renderHtml.open, stdout, stderr },
+            {
+                cwd: directory,
+                configPath,
+                openRenderer: renderHtml.open,
+                qc: undefined,
+                stdout,
+                stderr,
+            },
         );
 
         expect(exitCode).toBe(0);
@@ -217,21 +216,12 @@ describe('BeastCover CLI', () => {
         expect(readdirSync(directory)).not.toContain('.beastcover');
     });
 
-    it('takes --style for one run and leaves nothing behind in the directory', async () => {
-        const cwd = tempDir('beastcover-cli-style-');
+    it('takes --scheme for one run and leaves nothing behind in the directory', async () => {
+        const cwd = tempDir('beastcover-cli-scheme-');
         const renderHtml = mockRender();
         const genOut = captureOutput();
         const exitCode = await runCli(
-            [
-                'node',
-                'beastcover',
-                'gen',
-                'Style card',
-                '--source',
-                'render',
-                '--style',
-                'conceptual_colorfield',
-            ],
+            ['node', 'beastcover', 'gen', 'Scheme card', '--source', 'render', '--scheme', 'navy'],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
@@ -245,24 +235,35 @@ describe('BeastCover CLI', () => {
         const outputPath = join(cwd, 'beastcover.png');
         expect(existsSync(outputPath)).toBe(true);
         expect(genOut.chunks.join('')).toContain(`Created ${outputPath}\nCanvas: 1280x720 at 1x`);
-        expect(renderHtml.mock.calls[0]?.[0].html).toContain('Style card');
-        expect(renderHtml.mock.calls[0]?.[0].html).toContain('--cover-paper: #f4efe6');
-        expect(renderHtml.mock.calls[0]?.[0].html).toContain('--cover-ink: #3a3a38');
+        expect(genOut.chunks.join('')).toContain('Template: big-type');
+        expect(renderHtml.mock.calls[0]?.[0].html).toContain('Scheme card');
+        expect(renderHtml.mock.calls[0]?.[0].html).toContain('#123A6B');
         // 做完就走：目录里只有成品，没有任何工具目录或档案。
         expect(readdirSync(cwd)).toEqual(['beastcover.png']);
 
-        const badStyle = captureOutput();
-        expect(
-            await runCli(['node', 'beastcover', 'gen', 'x', '--style', 'watercolor_soft'], {
-                cwd,
-                configPath: join(cwd, 'unused-config.json'),
-                openRenderer: renderHtml.open,
-                qc: undefined,
-                stdout: captureOutput(),
-                stderr: badStyle,
-            }),
-        ).toBe(1);
-        expect(badStyle.chunks.join('')).toContain('watercolor_soft');
+        for (const [args, message] of [
+            [
+                ['--scheme', 'watercolor'],
+                'Unknown scheme "watercolor". Use navy, night, orange, teal, cream, lemon.',
+            ],
+            [
+                ['--style', 'conceptual_colorfield'],
+                '--style picks the painting style for --source agent and model. Render and stock covers take --scheme.',
+            ],
+        ] as const) {
+            const stderr = captureOutput();
+            expect(
+                await runCli(['node', 'beastcover', 'gen', 'x', ...args], {
+                    cwd,
+                    configPath: join(cwd, 'unused-config.json'),
+                    openRenderer: renderHtml.open,
+                    qc: undefined,
+                    stdout: captureOutput(),
+                    stderr,
+                }),
+            ).toBe(1);
+            expect(stderr.chunks.join('')).toBe(`Error: ${message}\n`);
+        }
     });
 
     it('requires --photo for the stock source and rejects --photo elsewhere', async () => {
@@ -286,21 +287,22 @@ describe('BeastCover CLI', () => {
             'Error: Source "stock" needs --photo <ref-or-path>. Run beastcover stock search "<query>" to pick one.\n',
         );
 
-        const renderErr = captureOutput();
-        const renderExit = await runCli(
-            ['node', 'beastcover', 'gen', 'A', '--source', 'render', '--photo', 'x.jpg'],
+        const agentErr = captureOutput();
+        const agentExit = await runCli(
+            ['node', 'beastcover', 'gen', 'A', '--source', 'agent', '--photo', 'x.jpg'],
             {
                 cwd: directory,
                 configPath,
                 openRenderer: renderHtml.open,
                 qc: undefined,
+                lookupCommand: () => '/fake/codex',
                 stdout: captureOutput(),
-                stderr: renderErr,
+                stderr: agentErr,
             },
         );
-        expect(renderExit).toBe(1);
-        expect(renderErr.chunks.join('')).toBe(
-            'Error: --photo is only valid with --source stock.\n',
+        expect(agentExit).toBe(1);
+        expect(agentErr.chunks.join('')).toBe(
+            'Error: --photo works with --source render or stock.\n',
         );
     });
 
@@ -313,18 +315,7 @@ describe('BeastCover CLI', () => {
         const stdout = captureOutput();
         const now = new Date('2026-09-23T00:00:00.000Z');
         const exitCode = await runCli(
-            [
-                'node',
-                'beastcover',
-                'gen',
-                'Dawn tide',
-                '--source',
-                'stock',
-                '--photo',
-                'sea.png',
-                '--style',
-                'conceptual_colorfield',
-            ],
+            ['node', 'beastcover', 'gen', 'Dawn tide', '--source', 'stock', '--photo', 'sea.png'],
             {
                 cwd,
                 configPath: join(cwd, 'unused-config.json'),
@@ -340,7 +331,7 @@ describe('BeastCover CLI', () => {
         const html = renderHtml.mock.calls[0]?.[0].html ?? '';
         expect(html).toContain('Dawn tide');
         expect(html).toContain('data:image/jpeg;base64,');
-        expect(html).toContain('--cover-paper: #f4efe6');
+        expect(stdout.chunks.join('')).toContain('Template: scene-title');
         expect(stdout.chunks.join('')).toContain(
             'Photo: 64x32 is stretched 25.0x on youtube. A larger photo stays sharp.',
         );
@@ -895,31 +886,32 @@ describe('BeastCover CLI', () => {
         expect(renderHtml.open).toHaveBeenCalledOnce();
     });
 
-    it('refuses --callout where it cannot circle the photo subject', async () => {
+    it('refuses the callout template where it cannot circle the photo subject', async () => {
         const directory = tempDir('beastcover-cli-callout-refuse-');
         for (const [args, message] of [
-            [['--source', 'render'], 'Error: --callout works with --source stock.\n'],
+            [['--template', 'callout'], 'Error: --template callout needs one --photo. It got 0.\n'],
             [
-                ['--source', 'stock', '--photo', 'x.jpg', '--fit', 'extend'],
-                'Error: --callout circles the framed subject. Drop --fit extend to use it.\n',
+                ['--template', 'callout', '--photo', 'x.jpg', '--fit', 'extend'],
+                'Error: --fit works with --template face-stakes, scene-title, mood.\n',
             ],
             [
-                ['--source', 'stock', '--photo', 'x.jpg', '--subject', 'me.png'],
-                'Error: --callout points at the photo subject, and --subject would cover it. Use one of them.\n',
+                ['--template', 'callout', '--photo', 'x.jpg', '--subject', 'me.png'],
+                'Error: --subject works with --template face-text or face-stakes. callout has no person in it.\n',
+            ],
+            [
+                ['--callout', '--photo', 'x.jpg'],
+                'Error: --callout is now a template. Use --template callout --photo <photo>.\n',
             ],
         ] as const) {
             const stderr = captureOutput();
-            const exitCode = await runCli(
-                ['node', 'beastcover', 'gen', 'Headline', '--callout', ...args],
-                {
-                    cwd: directory,
-                    configPath: join(directory, 'config.json'),
-                    openRenderer: mockRender().open,
-                    qc: undefined,
-                    stdout: captureOutput(),
-                    stderr,
-                },
-            );
+            const exitCode = await runCli(['node', 'beastcover', 'gen', 'Headline', ...args], {
+                cwd: directory,
+                configPath: join(directory, 'config.json'),
+                openRenderer: mockRender().open,
+                qc: undefined,
+                stdout: captureOutput(),
+                stderr,
+            });
             expect(exitCode).toBe(1);
             expect(stderr.chunks.join('')).toBe(message);
         }
@@ -941,7 +933,8 @@ describe('BeastCover CLI', () => {
                 'stock',
                 '--photo',
                 'wide.png',
-                '--callout',
+                '--template',
+                'callout',
                 '--preset',
                 'youtube,douyin',
                 '--output',
@@ -959,7 +952,7 @@ describe('BeastCover CLI', () => {
         );
         expect(exitCode).toBe(1);
         expect(stderr.chunks.join('')).toBe(
-            'Error: --callout cannot mark the subject on youtube: the red circle would leave no room for the headline below it. Pick a photo where the subject is small and has empty space around it, or drop --callout.\n',
+            'Error: The callout cannot mark the subject on youtube: the red circle would leave no room for the headline below it. Pick a photo where the subject is small and has empty space around it, or use another --template.\n',
         );
         expect(renderHtml.open).not.toHaveBeenCalled();
         expect(readdirSync(cwd).filter((name) => name.startsWith('look'))).toEqual([]);
@@ -979,7 +972,8 @@ describe('BeastCover CLI', () => {
                 'stock',
                 '--photo',
                 'wide.png',
-                '--callout',
+                '--template',
+                'callout',
                 '--preset',
                 'youtube,douyin',
                 '--output',
@@ -1025,7 +1019,8 @@ describe('BeastCover CLI', () => {
                 'stock',
                 '--photo',
                 'wide.png',
-                '--callout',
+                '--template',
+                'callout',
                 '--preset',
                 'youtube,xiaohongshu',
                 '--output',
@@ -1049,7 +1044,7 @@ describe('BeastCover CLI', () => {
         );
         expect(exitCode).toBe(1);
         expect(stderr.chunks.join('')).toMatch(
-            /^Error: --callout on xiaohongshu: the subject covers/,
+            /^Error: The callout on xiaohongshu: the subject covers/,
         );
         expect(renderHtml.open).not.toHaveBeenCalled();
         expect(readdirSync(cwd).filter((name) => name.startsWith('look'))).toEqual([]);
@@ -1124,7 +1119,8 @@ describe('BeastCover CLI', () => {
                 'stock',
                 '--photo',
                 'openverse:a1',
-                '--callout',
+                '--template',
+                'callout',
                 '--preset',
                 'youtube',
                 '--output',
@@ -1155,7 +1151,7 @@ describe('BeastCover CLI', () => {
         expect(exitCode).toBe(1);
         expect(fetchImpl).toHaveBeenCalledOnce();
         expect(stderr.chunks.join('')).toMatch(
-            /^Error: --callout cannot mark the subject on youtube/,
+            /^Error: The callout cannot mark the subject on youtube/,
         );
         const after = readdirSync(tmpdir()).filter((name) => name.startsWith('beastcover-stock-'));
         expect(after).toEqual(before);
@@ -1177,7 +1173,8 @@ describe('BeastCover CLI', () => {
                 'stock',
                 '--photo',
                 'wide.png',
-                '--callout',
+                '--template',
+                'callout',
                 '--preset',
                 'youtube',
                 '--scale',
@@ -1637,29 +1634,40 @@ describe('BeastCover CLI', () => {
         }
     });
 
-    it('renders the poster, number, and compare templates and records the template', async () => {
+    it('renders each cover type from its inputs and names it in the output', async () => {
         const cwd = tempDir('beastcover-cli-templates-');
-        writeFileSync(join(cwd, 'a.png'), await testPngBytes(64, 64));
-        writeFileSync(join(cwd, 'b.png'), await testPngBytes(64, 64));
+        for (const name of ['a.png', 'b.png', 'c.png']) {
+            writeFileSync(join(cwd, name), await testPngBytes(64, 64));
+        }
 
         for (const [name, args, marker] of [
-            ['poster', ['--tag', '新手必看'], 'class="tag">新手必看'],
-            ['number', ['--number', '3'], 'class="figure">3'],
+            ['big-type', ['--tag', '新手必看'], 'class="eyebrow">新手必看'],
+            ['number', ['--number', '3'], 'class="figure-face figure">3'],
             [
-                'compare',
-                ['--before', 'a.png', '--after', 'b.png', '--labels', '之前,之后'],
+                'before-after',
+                ['--photo', 'a.png', '--photo', 'b.png', '--labels', '之前,之后'],
                 '>之后</div>',
             ],
+            [
+                'versus',
+                ['--photo', 'a.png', '--photo', 'b.png', '--labels', '¥15,¥150'],
+                '>VS</span>',
+            ],
+            [
+                'collage',
+                ['--photo', 'a.png', '--photo', 'b.png', '--photo', 'c.png'],
+                'class="band"',
+            ],
+            ['mood', ['--photo', 'a.png'], 'data:image/jpeg;base64,'],
         ] as const) {
             const renderHtml = mockRender();
+            const stdout = captureOutput();
             const exitCode = await runCli(
                 [
                     'node',
                     'beastcover',
                     'gen',
                     '封面没人点',
-                    '--source',
-                    'render',
                     '--template',
                     name,
                     ...args,
@@ -1672,12 +1680,154 @@ describe('BeastCover CLI', () => {
                     openRenderer: renderHtml.open,
                     qc: undefined,
                     photoFocus: centreFocus,
-                    stdout: captureOutput(),
+                    stdout,
                 },
             );
             expect(exitCode, name).toBe(0);
             expect(renderHtml.mock.calls[0]?.[0].html, name).toContain(marker);
             expect(existsSync(join(cwd, `${name}.png`)), name).toBe(true);
+            expect(stdout.chunks.join(''), name).toContain(`Template: ${name}, `);
+        }
+    });
+
+    it('picks the cover type from the inputs when --template is missing', async () => {
+        const cwd = tempDir('beastcover-cli-default-type-');
+        for (const name of ['a.png', 'b.png', 'c.png']) {
+            writeFileSync(join(cwd, name), await testPngBytes(64, 64));
+        }
+        for (const [args, name] of [
+            [[], 'big-type'],
+            [['--photo', 'a.png'], 'scene-title'],
+            [['--photo', 'a.png', '--photo', 'b.png'], 'before-after'],
+            [['--photo', 'a.png', '--photo', 'b.png', '--photo', 'c.png'], 'collage'],
+        ] as const) {
+            const stdout = captureOutput();
+            const exitCode = await runCli(
+                ['node', 'beastcover', 'gen', 'Pick', ...args, '--output', join(cwd, 'pick.png')],
+                {
+                    cwd,
+                    configPath: join(cwd, 'unused-config.json'),
+                    openRenderer: mockRender().open,
+                    qc: undefined,
+                    photoFocus: centreFocus,
+                    stdout,
+                },
+            );
+            expect(exitCode, name).toBe(0);
+            expect(stdout.chunks.join(''), name).toContain(`Template: ${name}, `);
+            expect(stdout.chunks.join(''), name).toContain(
+                '(picked from the inputs; set --template to choose)',
+            );
+        }
+    });
+
+    it('paints the scene with the configured model when there is no photo', async () => {
+        const cwd = tempDir('beastcover-cli-scene-');
+        const configPath = join(cwd, 'config.json');
+        writeFileSync(configPath, '{"model":{"openai":{"apiKey":"o-key"}}}\n', 'utf8');
+        const runModelApi = vi.fn(async (input: ModelRunInput) => {
+            await sharp(await testPngBytes(1536, 1024)).toFile(input.generatedPath);
+            return { outputPaths: [] };
+        });
+        const renderHtml = mockRender();
+        const stdout = captureOutput();
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                '海边第一天',
+                '--scene',
+                'a harbour at dawn',
+                '--preset',
+                'youtube,x',
+                '--output',
+                join(cwd, 'scene.png'),
+            ],
+            {
+                cwd,
+                configPath,
+                openRenderer: renderHtml.open,
+                qc: undefined,
+                runModelApi,
+                photoFocus: centreFocus,
+                lookupCommand: () => undefined,
+                stdout,
+            },
+        );
+        expect(exitCode).toBe(0);
+        // 横版和超宽共用一张横图，只画一次。
+        expect(runModelApi).toHaveBeenCalledOnce();
+        expect(runModelApi.mock.calls[0]?.[0]).toMatchObject({ provider: 'openai', targets: [] });
+        expect(runModelApi.mock.calls[0]?.[0].prompt).toContain('a harbour at dawn');
+        expect(renderHtml.mock.calls[0]?.[0].html).toContain('data:image/jpeg;base64,');
+        const out = stdout.chunks.join('');
+        expect(out).toContain('Template: scene-title');
+        expect(out).toContain('Scene: painted by openai');
+        expect(out).toContain(
+            'Privacy: the scene description went to openai with your API key. Render stayed on this machine.',
+        );
+    });
+
+    it('falls back to a gradient scene and says how to paint it', async () => {
+        const cwd = tempDir('beastcover-cli-scene-degrade-');
+        const stdout = captureOutput();
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                '海边第一天',
+                '--template',
+                'mood',
+                '--scene',
+                'a harbour at dawn',
+                '--output',
+                join(cwd, 'scene.png'),
+            ],
+            {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: mockRender().open,
+                qc: undefined,
+                photoFocus: centreFocus,
+                lookupCommand: () => undefined,
+                stdout,
+            },
+        );
+        expect(exitCode).toBe(0);
+        expect(stdout.chunks.join('')).toContain(
+            'Scene: no image model key or agent CLI on this machine, so the scene is a plain colour gradient.',
+        );
+
+        for (const [args, message] of [
+            [
+                ['--scene', 'x', '--photo', 'a.png'],
+                'Use --photo or --scene, not both. --scene paints the picture when there is no photo.',
+            ],
+            [
+                ['--scene', 'x', '--template', 'versus'],
+                '--scene paints the picture for --template scene-title, mood, face-stakes. versus needs real photos.',
+            ],
+            [
+                ['--scene', 'x', '--via', 'codex'],
+                'No installed CLI found for via "codex". Install codex.',
+            ],
+            [['--scene', 'x', '--source', 'agent'], '--scene works with --source render or stock.'],
+        ] as const) {
+            const stderr = captureOutput();
+            const code = await runCli(['node', 'beastcover', 'gen', 'A', ...args], {
+                cwd,
+                configPath: join(cwd, 'unused-config.json'),
+                openRenderer: mockRender().open,
+                qc: undefined,
+                photoFocus: centreFocus,
+                lookupCommand: () => undefined,
+                stdout: captureOutput(),
+                stderr,
+            });
+            expect(code, args.join(' ')).toBe(1);
+            expect(stderr.chunks.join(''), args.join(' ')).toBe(`Error: ${message}\n`);
         }
     });
 
@@ -1686,32 +1836,51 @@ describe('BeastCover CLI', () => {
         for (const [args, message] of [
             [
                 ['--template', 'banner'],
-                'Unknown template "banner". Use text, poster, number, compare.',
+                'Unknown template "banner". Use big-type, number, face-text, face-stakes, versus, before-after, scene-title, callout, collage, mood.',
             ],
-            [['--tag', '新手'], '--tag is only valid with --template poster.'],
             [
-                ['--template', 'poster', '--number', '3'],
-                '--number is only valid with --template number.',
+                ['--template', 'poster'],
+                'The "poster" template was replaced. Use --template big-type.',
+            ],
+            [
+                ['--template', 'compare'],
+                'The "compare" template was replaced. Use --template before-after.',
+            ],
+            [
+                ['--tag', '新手', '--photo', 'a.png'],
+                '--tag works with --template big-type, number, face-text.',
+            ],
+            [
+                ['--template', 'big-type', '--number', '3'],
+                '--number works with --template number, face-stakes.',
             ],
             [
                 ['--template', 'number'],
                 '--template number needs --number <figure>, like --number 3.',
             ],
             [
-                ['--template', 'compare', '--before', 'a.png'],
-                '--template compare needs --before <path> and --after <path>.',
+                ['--template', 'before-after', '--photo', 'a.png'],
+                '--template before-after needs 2 --photo images. It got 1.',
             ],
             [
-                ['--template', 'compare', '--before', 'a.png', '--after', 'b.png'],
-                `--before image not found: ${join(cwd, 'a.png')}`,
+                ['--template', 'before-after', '--photo', 'a.png', '--photo', 'b.png'],
+                `Photo not found: ${join(cwd, 'a.png')}`,
+            ],
+            [
+                ['--template', 'versus', '--photo', 'a.png', '--photo', 'b.png'],
+                '--template versus needs --labels for the two price tags, like --labels "¥15,¥1500".',
             ],
             [
                 ['--template', 'number', '--number', '3', '--subject', 'me.png'],
-                '--subject works with the text and poster templates.',
+                '--subject works with --template face-text or face-stakes. number has no person in it.',
             ],
             [
-                ['--source', 'stock', '--photo', 'x.jpg', '--template', 'poster'],
-                '--template works with --source render.',
+                ['--template', 'face-text'],
+                '--template face-text needs --subject <path>, a photo of the person.',
+            ],
+            [
+                ['--before', 'a.png'],
+                '--before and --after were replaced. Use --template before-after --photo <before> --photo <after>.',
             ],
         ] as const) {
             const stderr = captureOutput();
@@ -1767,7 +1936,7 @@ describe('BeastCover CLI', () => {
         expect(photoFocus).toHaveBeenCalledOnce();
         expect(photoFocus.mock.calls[0]?.[0]).toBe(join(cwd, 'wide.png'));
         const html = renderHtml.mock.calls[0]?.[0].html ?? '';
-        expect(html).toContain('class="tone-shadow"');
+        expect(html).toContain('class="tone tone-deep"');
         expect(html).toContain('filter: grayscale(1) contrast(1.2)');
 
         for (const [args, message] of [
@@ -1779,7 +1948,10 @@ describe('BeastCover CLI', () => {
                 ['--fit', 'stretch', '--source', 'stock', '--photo', 'wide.png'],
                 'Unknown fit "stretch". Use cover, extend.',
             ],
-            [['--look', 'mono'], '--look and --fit work with --source stock.'],
+            [
+                ['--look', 'mono'],
+                '--look works with --template face-stakes, versus, before-after, scene-title, callout, collage, mood.',
+            ],
         ] as const) {
             const stderr = captureOutput();
             const code = await runCli(['node', 'beastcover', 'gen', 'Look', ...args], {

@@ -612,7 +612,7 @@ describe('callout check', () => {
                 ['youtube', 'bilibili', 'og', 'github'],
             ),
         ).toThrowError(
-            '--callout cannot mark the subject on youtube, bilibili, og, github: the red circle would leave no room for the headline below it. Pick a photo where the subject is small and has empty space around it, or drop --callout.',
+            'The callout cannot mark the subject on youtube, bilibili, og, github: the red circle would leave no room for the headline below it. Pick a photo where the subject is small and has empty space around it, or use another --template.',
         );
         // 小一点的正中主体：标题带缩到圈下面就放得下。
         expect(() =>

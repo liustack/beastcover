@@ -79,6 +79,20 @@ const REMIX_INSTRUCTIONS: Readonly<Record<RemixMode, string>> = {
     place: '把参考图 1 里的人放进参考图 2 的场景：这个人的脸、发型和衣着保持不变，光线和色调跟着场景走',
 };
 
+/** 场景照片的信封：不带画风，只有一张真实照片的描述，存到指定路径 */
+export function buildSceneEnvelopePrompt(input: {
+    prompt: string;
+    generatedPath: string;
+    family: FamilyName;
+}): string {
+    const plan = getAgentGeneratePlan(input.family);
+    const size = formatSizePhrase(plan.generateWidth, plan.generateHeight);
+    return (
+        `Use your image generation capability to create one image and save it to ${input.generatedPath}. ` +
+        `${input.prompt} ${size}. ${ENVELOPE_CLOSER}`
+    );
+}
+
 export function buildEnvelopePrompt(input: {
     style: StyleDefinition;
     subject: string;

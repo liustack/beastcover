@@ -1,32 +1,12 @@
-import { type CoverColor, type PaletteSlotValue, parseCssColorValue } from '../styles/schema.ts';
+// 封面页面的公共部分：页面骨架、标题的排版规则、人物层。各封面类型（src/genres/）在这上面搭。
 import type { SubjectLayer } from '../subject/index.ts';
 import {
     type CoverLayout,
-    escapeHtml,
     type Headline,
-    headlineMarkup,
     lineHeightFor,
     placeSubject,
-    probeMarkup,
     textAreaCss,
 } from './layout.ts';
-
-export const DEFAULT_RENDER_COLORS = {
-    paper: '#f1eee6',
-    ink: '#161711',
-    accent: '#1746d1',
-} as const;
-
-export interface RenderTemplateOptions {
-    layout: CoverLayout;
-    /** 标题字号和断行方式，由渲染器在标题区域里量出来 */
-    headline: Headline;
-    palette?: Record<string, PaletteSlotValue>;
-    /** 量字号时加上探针 */
-    measure?: boolean;
-    /** 抠好的人物，版式里要有 subjectArea */
-    subject?: SubjectLayer;
-}
 
 /** 人物描边的粗细：clean 是干净分离，sticker 是贴纸感。按画布短边的比例 */
 export type SubjectOutline = 'clean' | 'sticker';
@@ -64,7 +44,7 @@ function outlineFilter(width: number, darkEdge: boolean): string {
 export function subjectMarkup(
     layout: CoverLayout,
     subject: SubjectLayer | undefined,
-    options: { outline?: SubjectOutline; lightBackground?: boolean } = {},
+    options: { outline?: SubjectOutline; lightBackground?: boolean; faceShare?: number } = {},
 ): {
     css: string;
     html: string;
@@ -72,7 +52,7 @@ export function subjectMarkup(
     if (subject === undefined) {
         return { css: '', html: '' };
     }
-    const rect = placeSubject(layout, subject);
+    const rect = placeSubject(layout, subject, options.faceShare);
     const short = Math.min(layout.width, layout.height);
     const width = Math.max(3, Math.round(short * OUTLINE_SHARE[options.outline ?? 'clean']));
     const shadow = Math.round(short * 0.02);
@@ -91,10 +71,7 @@ export function subjectMarkup(
     };
 }
 
-// 色条贴在标题区域左边 24px 处，公众号从超宽母版裁切时也还在画面里。
-const ACCENT_BAR_OFFSET = 36;
-
-/** 两个模板共用的标题排版：区域定位、字号、断行规则和探针 */
+/** 标题排版：区域定位、字号、断行规则和探针 */
 export function headlineCss(layout: CoverLayout, headline: Headline, text: string): string {
     return `
         .text-box {
@@ -103,7 +80,8 @@ export function headlineCss(layout: CoverLayout, headline: Headline, text: strin
             display: flex;
         }
 
-        .copy {
+        .copy,
+        .copy-layer {
             margin: 0;
             font-size: ${headline.fontPx}px;
             font-weight: 600;
@@ -131,66 +109,10 @@ export function headlineCss(layout: CoverLayout, headline: Headline, text: strin
             left: 0;
             visibility: hidden;
             white-space: nowrap;
-        }
-
-        .accent-bar {
-            position: absolute;
-            left: ${Math.max(0, layout.textArea.x - ACCENT_BAR_OFFSET)}px;
-            top: ${layout.textArea.y}px;
-            width: 12px;
-            height: ${layout.textArea.height}px;
-            background: var(--cover-accent);
         }`;
 }
 
-/** 按槽上声明的封面用途取色。没有哪个槽声明这个用途时用内置颜色 */
-function coverColor(
-    palette: Record<string, PaletteSlotValue>,
-    use: CoverColor,
-): string | undefined {
-    const slots = Object.entries(palette).filter(([, slot]) => slot.cover === use);
-    if (slots.length > 1) {
-        throw new Error(
-            `Palette slots ${slots.map(([name]) => `"${name}"`).join(', ')} are all marked as the cover ${use}.`,
-        );
-    }
-    const [entry] = slots;
-    return entry === undefined ? undefined : parseCssColorValue(entry[1].css);
-}
-
-export function resolveRenderColors(palette: Record<string, PaletteSlotValue> = {}): {
-    paper: string;
-    ink: string;
-    accent: string;
-} {
-    validatePaletteCss(palette);
-    return {
-        paper: coverColor(palette, 'paper') ?? DEFAULT_RENDER_COLORS.paper,
-        ink: coverColor(palette, 'ink') ?? DEFAULT_RENDER_COLORS.ink,
-        accent: coverColor(palette, 'accent') ?? DEFAULT_RENDER_COLORS.accent,
-    };
-}
-
-/** 调色板里每个槽都要有合法的 CSS 颜色，缺了或写错直接报错 */
-export function validatePaletteCss(palette: Record<string, PaletteSlotValue>): void {
-    for (const [name, slot] of Object.entries(palette)) {
-        if (typeof slot.css !== 'string') {
-            throw new Error(`Palette slot "${name}" is missing a CSS color.`);
-        }
-        parseCssColorValue(slot.css);
-    }
-}
-
-// 大字模板共用的无衬线粗体。
-export const BOLD_SANS =
-    '"PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif';
-
-/** 按底色深浅选黑字或白字：底色亮度高于 0.62 用近黑，否则用白。任何 CSS 颜色写法都能用 */
-export function contrastingText(background: string): string {
-    return `oklch(from ${background} clamp(0.18, (0.62 - l) * 1000, 1) 0 0)`;
-}
-
-/** 三个大字模板共用的页面骨架 */
+/** 页面骨架：画布尺寸、颜色变量、背景，样式和内容由封面类型填 */
 export function coverDocument(input: {
     layout: CoverLayout;
     colors: { paper: string; ink: string; accent: string };
@@ -240,69 +162,6 @@ ${input.css}
     <main id="canvas">
 ${input.body}
     </main>
-</body>
-</html>`;
-}
-
-export function createRenderTemplate(text: string, options: RenderTemplateOptions): string {
-    const palette = options.palette ?? {};
-    validatePaletteCss(palette);
-    const colors = resolveRenderColors(palette);
-    const paletteJson = escapeHtml(JSON.stringify(palette));
-    const { layout } = options;
-    const subject = subjectMarkup(layout, options.subject);
-
-    return `<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>BeastCover</title>
-    <style>
-        :root {
-            color-scheme: light;
-            font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Songti SC", serif;
-            --cover-paper: ${colors.paper};
-            --cover-ink: ${colors.ink};
-            --cover-accent: ${colors.accent};
-            background: var(--cover-paper);
-            color: var(--cover-ink);
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        html,
-        body {
-            width: ${layout.width}px;
-            height: ${layout.height}px;
-            margin: 0;
-            overflow: hidden;
-            background: var(--cover-paper);
-        }
-
-        #canvas {
-            position: relative;
-            width: ${layout.width}px;
-            height: ${layout.height}px;
-        }
-${headlineCss(layout, options.headline, text)}
-
-        .text-box {
-            align-items: center;
-        }
-${subject.css}
-    </style>
-</head>
-<body>
-    <main id="canvas">
-        <div class="accent-bar" aria-hidden="true"></div>
-        <section class="text-box" aria-label="Headline">
-            <p class="copy">${headlineMarkup(text, options.headline)}</p>${options.measure ? probeMarkup(text, options.headline) : ''}
-        </section>
-        ${subject.html}
-    </main>
-    <script type="application/json" id="beastcover-palette">${paletteJson}</script>
 </body>
 </html>`;
 }

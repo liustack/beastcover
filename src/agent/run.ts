@@ -205,8 +205,9 @@ export async function runAgent(input: AgentRunInput): Promise<{ outputPaths: str
         ...target,
         plan: getAgentCanvasPlan(target.preset),
     }));
+    // 没有平台要裁时只要原图（场景照片），有就必须同一族。
     const families = new Set(plans.map(({ plan }) => plan.family));
-    if (families.size !== 1) {
+    if (families.size > 1) {
         throw new Error('runAgent crops one family per generation.');
     }
 

@@ -52,20 +52,6 @@ describe('built-in style catalog', () => {
         }
     });
 
-    it('marks exactly one accent and at most one slot per cover use in every style', () => {
-        for (const style of BUILT_IN_STYLES) {
-            const slots: readonly PaletteSlot[] = style.paletteSlots;
-            for (const use of ['paper', 'ink', 'accent'] as const) {
-                const marked = slots.filter((slot) => slot.cover === use);
-                expect(marked.length, `${style.name} ${use}`).toBeLessThanOrEqual(1);
-            }
-            expect(
-                slots.filter((slot) => slot.cover === 'accent'),
-                style.name,
-            ).toHaveLength(1);
-        }
-    });
-
     it('records the fallback and scene constraints as catalog metadata', () => {
         expect(
             listStyles()

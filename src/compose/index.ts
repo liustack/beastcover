@@ -569,7 +569,7 @@ export function textOnlyWarnings(platforms: readonly PlatformName[], hasImage: b
         return [];
     }
     return [
-        'Cover: this YouTube thumbnail is text only. Breakout thumbnails nearly always show a subject: a face, a product, or a striking object. Add --subject, or use --source stock --photo.',
+        'Cover: this YouTube thumbnail is text only. Breakout thumbnails nearly always show a subject: a face, a product, or a striking object. Add --subject or --photo.',
     ];
 }
 

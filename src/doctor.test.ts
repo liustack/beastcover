@@ -60,7 +60,7 @@ describe('offline doctor', () => {
             });
 
             expect(healthy.healthy).toBe(true);
-            expect(healthy.checks).toHaveLength(6);
+            expect(healthy.checks).toHaveLength(7);
             // 没有 swiftc 时自动抠图不可用，只是提醒，不影响健康。
             expect(healthy.checks.find((check) => check.id === 'cutout')).toEqual({
                 id: 'cutout',
@@ -90,6 +90,11 @@ describe('offline doctor', () => {
                 });
                 expect(healthy.checks.find((check) => check.id === id)?.message).toMatch(id);
             }
+            // 没有模型 key、也没有 agent CLI：--scene 只能退到渐变，提醒但不算不健康。
+            expect(healthy.checks.find((check) => check.id === 'scene')).toMatchObject({
+                id: 'scene',
+                status: 'warn',
+            });
             expect(renderDoctorReport(healthy)).toContain('BeastCover doctor: healthy');
 
             chmodSync(configPath, 0o644);

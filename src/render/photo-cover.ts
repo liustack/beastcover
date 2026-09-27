@@ -1,15 +1,11 @@
-// 照片封面：图库照片做底图，项目调色板做色调层，正文大字压在下三分之一。
+// 照片怎么放进封面：按主体构图、整张放进去（extend）、圈注的红圈和箭头、照片封面的标题位置。
 // 渲染引擎禁网禁 JS，照片先用 sharp 裁到画布像素尺寸再内联成 data URI。
-// 封面是用户要发出去的成品，画面上只有照片、配色和标题，不印工具名和说明字样。
 import sharp from 'sharp';
 import type { Rect } from '../platforms/index.ts';
-import type { PaletteSlotValue } from '../styles/schema.ts';
-import type { SubjectLayer } from '../subject/index.ts';
 import type { PhotoFocus } from '../subject/vision.ts';
-import { type CoverLayout, type Headline, headlineMarkup, probeMarkup } from './layout.ts';
-import { headlineCss, resolveRenderColors, subjectMarkup } from './template.ts';
+import type { CoverLayout } from './layout.ts';
 
-const PHOTO_JPEG_QUALITY = 82;
+export const PHOTO_JPEG_QUALITY = 82;
 
 export interface PhotoLayer {
     dataUri: string;
@@ -360,7 +356,7 @@ export function arrowWings(start: Point, end: Point, stroke: number): [Point, Po
 /** 圈注做不到时的报错，where 点名是哪几张封面 */
 function calloutRefusal(where: string, problem: string): Error {
     return new Error(
-        `--callout cannot mark the subject on ${where}: ${problem}. Pick a photo where the subject is small and has empty space around it, or drop --callout.`,
+        `The callout cannot mark the subject on ${where}: ${problem}. Pick a photo where the subject is small and has empty space around it, or use another --template.`,
     );
 }
 
@@ -372,7 +368,7 @@ function calloutRing(
 ): { cx: number; cy: number; rx: number; ry: number; stroke: number; halo: number } {
     if (box.width > CALLOUT_MAX_WIDTH || box.height > CALLOUT_MAX_HEIGHT) {
         throw new Error(
-            `--callout on ${where}: the subject covers ${Math.round(box.width * 100)}% of the width and ${Math.round(box.height * 100)}% of the height, too big to circle. Pick a photo with one small, clear subject.`,
+            `The callout on ${where}: the subject covers ${Math.round(box.width * 100)}% of the width and ${Math.round(box.height * 100)}% of the height, too big to circle. Pick a photo with one small, clear subject.`,
         );
     }
     const w = layout.width;
@@ -557,7 +553,7 @@ export function calloutGeometry(
     return { cx, cy, rx, ry, stroke, arrow: { start, end } };
 }
 
-function calloutMarkup(layout: CoverLayout, box: Rect): string {
+export function calloutMarkup(layout: CoverLayout, box: Rect): string {
     const { cx, cy, rx, ry, stroke, arrow } = calloutGeometry(layout, box);
     const { start, end } = arrow;
     const [left, right] = arrowWings(start, end, stroke);
@@ -653,19 +649,6 @@ export function photoFocusTarget(
     }
 }
 
-interface PhotoCoverBase {
-    layout: CoverLayout;
-    /** 标题字号和断行方式，由渲染器在标题区域里量出来 */
-    headline: Headline;
-    palette?: Record<string, PaletteSlotValue>;
-    /** 抠好的人物，版式里要有 subjectArea */
-    subject?: SubjectLayer;
-    /** 照片调色，默认 natural */
-    look?: PhotoLook;
-    /** 用红圈圈住照片主体，再画一支箭头指过去 */
-    callout?: boolean;
-}
-
 export const PHOTO_LOOKS = ['natural', 'mono', 'duotone', 'punch'] as const;
 
 export type PhotoLook = (typeof PHOTO_LOOKS)[number];
@@ -675,154 +658,4 @@ export function parsePhotoLook(value: string): PhotoLook {
         throw new Error(`Unknown look "${value}". Use ${PHOTO_LOOKS.join(', ')}.`);
     }
     return value as PhotoLook;
-}
-
-// 调色全在合成层用 CSS 做：natural 是调色板的淡罩，mono 黑白，punch 更艳更硬，
-// duotone 双色调，暗部压成调色板的深色、亮部染成强调色。
-function lookCss(look: PhotoLook): string {
-    switch (look) {
-        case 'natural':
-            return '';
-        case 'mono':
-            return `
-        .photo { filter: grayscale(1) contrast(1.15); }
-        .wash { display: none; }`;
-        case 'punch':
-            return `
-        .photo { filter: saturate(1.45) contrast(1.15); }
-        .wash { display: none; }`;
-        case 'duotone':
-            return `
-        .photo { filter: grayscale(1) contrast(1.2); }
-        .wash { background: var(--cover-accent); opacity: 1; }
-        .tone-shadow {
-            position: absolute;
-            inset: 0;
-            z-index: -2;
-            background: var(--cover-ink);
-            mix-blend-mode: lighten;
-        }`;
-    }
-}
-
-/** 量字号时不需要照片，只排标题和探针 */
-export type PhotoCoverOptions =
-    | (PhotoCoverBase & { photo: PhotoLayer; measure?: false })
-    | (PhotoCoverBase & { measure: true });
-
-export function createPhotoCoverTemplate(text: string, options: PhotoCoverOptions): string {
-    const colors = resolveRenderColors(options.palette ?? {});
-    const { layout } = options;
-    const subject = subjectMarkup(layout, options.measure === true ? undefined : options.subject);
-    const photo =
-        options.measure === true ? '' : `<img class="photo" src="${options.photo.dataUri}" alt="">`;
-    let callout = '';
-    if (options.callout === true && options.measure !== true) {
-        if (options.photo.focusBox === undefined) {
-            throw new Error('--callout needs the photo framed around its subject.');
-        }
-        callout = calloutMarkup(layout, options.photo.focusBox);
-    }
-
-    return `<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>BeastCover</title>
-    <style>
-        :root {
-            color-scheme: light;
-            font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Songti SC", serif;
-            --cover-paper: ${colors.paper};
-            --cover-ink: ${colors.ink};
-            --cover-accent: ${colors.accent};
-            background: var(--cover-ink);
-            color: var(--cover-paper);
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        html,
-        body {
-            width: ${layout.width}px;
-            height: ${layout.height}px;
-            margin: 0;
-            overflow: hidden;
-        }
-
-        #canvas {
-            position: relative;
-            width: ${layout.width}px;
-            height: ${layout.height}px;
-            isolation: isolate;
-        }
-
-        .photo {
-            position: absolute;
-            inset: 0;
-            z-index: -3;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .wash {
-            position: absolute;
-            inset: 0;
-            z-index: -2;
-            background: var(--cover-paper);
-            mix-blend-mode: multiply;
-            opacity: 0.42;
-        }
-${lookCss(options.look ?? 'natural')}
-
-        .scrim {
-            position: absolute;
-            inset: 0;
-            z-index: -1;
-            /* 只压暗标题所在的下半截，而且压得轻：暗缩略图的表现一贯落后（1of10 30 万条）。
-               字的可读性交给贴着字的阴影。 */
-            background: linear-gradient(
-                180deg,
-                transparent 55%,
-                color-mix(in srgb, var(--cover-ink) 62%, transparent) 100%
-            );
-        }
-${headlineCss(layout, options.headline, text)}
-
-        .text-box {
-            align-items: flex-end;
-        }
-
-        .copy {
-            text-shadow:
-                0 0.03em 0.06em color-mix(in srgb, var(--cover-ink) 70%, transparent),
-                0 0.04em 0.4em color-mix(in srgb, var(--cover-ink) 60%, transparent);
-        }
-
-        .callout {
-            position: absolute;
-            inset: 0;
-            z-index: 1;
-        }
-${subject.css}
-    </style>
-</head>
-<body>
-    <main id="canvas">
-        ${photo}
-        ${options.look === 'duotone' ? '<div class="tone-shadow" aria-hidden="true"></div>' : ''}
-        <div class="wash" aria-hidden="true"></div>
-        <div class="scrim" aria-hidden="true"></div>
-        <div class="accent-bar" aria-hidden="true"></div>
-        <section class="text-box" aria-label="Headline">
-            <p class="copy">${headlineMarkup(text, options.headline)}</p>${options.measure === true ? probeMarkup(text, options.headline) : ''}
-        </section>
-        ${callout}
-        ${subject.html}
-    </main>
-</body>
-</html>`;
 }

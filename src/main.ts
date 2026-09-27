@@ -3,10 +3,9 @@
 declare const __APP_VERSION__: string;
 
 import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Command, CommanderError } from 'commander';
+import { Command, CommanderError, Option } from 'commander';
 import sharp from 'sharp';
 import {
     buildEnvelopePrompt,
@@ -33,13 +32,6 @@ import {
     thumbnailWarnings,
 } from './compose/index.ts';
 import {
-    parseHook,
-    parseTemplateName,
-    TEMPLATE_NAMES,
-    type TemplateName,
-    textCoverTemplate,
-} from './compose/templates.ts';
-import {
     AGENT_PROVIDERS,
     type AgentProvider,
     CONFIG_PATH,
@@ -56,37 +48,52 @@ import {
     setConfigValue,
 } from './config.ts';
 import { type DoctorReport, lookupCommandOnPath, renderDoctorReport, runDoctor } from './doctor.ts';
+import {
+    checkGenreInputs,
+    defaultGenre,
+    GENRE_NAMES,
+    GENRES,
+    type GenreName,
+    genreTemplate,
+    parseGenre,
+} from './genres/index.ts';
+import { parseFigure, parseHook, parseTag } from './genres/options.ts';
+import { type FontKit, fontKit, type GenrePhoto } from './genres/page.ts';
+import { parseScheme, SCHEME_NAMES, SCHEMES, type SchemeName } from './genres/schemes.ts';
+import { parseLabels } from './genres/split.ts';
 import { runModelApi as defaultRunModelApi, selectModelProvider } from './model/index.ts';
 import { buildModelPrompt } from './model/prompt.ts';
 import { newRunDir, tempCacheDir, tempRefsDir } from './paths.ts';
 import {
+    FAMILY_NAMES,
     type FamilyName,
     getPlatform,
     PLATFORM_NAMES,
     type PlatformName,
     parsePlatformList,
-    type Rect,
 } from './platforms/index.ts';
 import { formatFindings } from './qc/index.ts';
 import { feedPreview } from './qc/preview.ts';
-import { parseLabels } from './render/compare.ts';
+import { probeFamilies, proberFrom } from './render/fonts.ts';
 import { type CoverRenderer, openRenderer } from './render/index.ts';
-import type { CoverLayout } from './render/layout.ts';
-import { withSubjectArea } from './render/layout.ts';
-import { validateNumber } from './render/number.ts';
 import {
-    calloutLayout,
-    createPhotoCoverTemplate,
     PHOTO_LOOKS,
     type PhotoFit,
+    type PhotoLook,
     parsePhotoFit,
     parsePhotoLook,
-    photoFocusTarget,
-    photoTextLayout,
-    preparePhotoLayer,
-    visibleFraction,
 } from './render/photo-cover.ts';
-import { validateTag } from './render/poster.ts';
+import { parseEmphasis, stripEmphasis } from './render/type.ts';
+import {
+    findScenePainter,
+    gradientScene,
+    painterLabel,
+    paintScene,
+    parseScene,
+    SCENE_DEGRADED,
+    type ScenePainter,
+    sceneOrientation,
+} from './scene/index.ts';
 import {
     fetchStockPhoto,
     isStockRef,
@@ -100,7 +107,7 @@ import {
     stockFileStem,
 } from './stock/index.ts';
 import { listStyles, loadStyle } from './styles/loader.ts';
-import { coverPalette, mergedPalette, packFor } from './styles/pack.ts';
+import { mergedPalette, packFor } from './styles/pack.ts';
 import type { StyleDefinition } from './styles/schema.ts';
 import { findPhotoFocus } from './subject/focus.ts';
 import {
@@ -385,7 +392,7 @@ function coverLine(platform: PlatformName, text: string, hook: string | undefine
 async function writeCovers(
     runtime: CliRuntime,
     text: string,
-    templateFor: (line: string) => CoverTemplate,
+    templateFor: (line: string, fonts: FontKit) => CoverTemplate,
     render: EffectiveRender,
     outputPath: string,
     guides: boolean,
@@ -409,16 +416,37 @@ async function writeCovers(
     }
     const renderer = await runtime.openRenderer();
     try {
+        // 本机装了哪些字体、覆不覆盖标题里的字：在出图的同一个 Chromium 里探一次，按角色挑。
+        const fonts = fontKit(
+            proberFrom(
+                await renderer.probeFonts(
+                    stripEmphasis([text, hook ?? ''].join(' ')),
+                    probeFamilies(),
+                ),
+            ),
+        );
         if (render.canvas) {
             const cover = await composeCustomCover({
                 renderer,
-                template: templateFor(text),
-                text,
+                template: templateFor(text, fonts),
+                text: stripEmphasis(text),
                 ...render.canvas,
                 scale: render.scale,
                 outputPath,
+                ...(runtime.qc === undefined ? {} : { qc: runtime.qc }),
             });
-            return { covers: [{ outputPath: cover.outputPath, ...render.canvas }], warnings: [] };
+            return {
+                covers: [{ outputPath: cover.outputPath, ...render.canvas }],
+                warnings: [
+                    ...fonts.notes(),
+                    ...(runtime.qc === undefined
+                        ? []
+                        : formatFindings(cover.findings, isTerminal(runtime.stdout))),
+                    ...(runtime.qc !== undefined && runtime.qc.analyze === undefined
+                        ? [QC_PICTURE_SKIPPED]
+                        : []),
+                ],
+            };
         }
         const targets = coverOutputPaths(outputPath, render.presets);
         const lines = [...new Set(targets.map((target) => coverLine(target.platform, text, hook)))];
@@ -426,8 +454,8 @@ async function writeCovers(
         for (const line of lines) {
             const group = await composeCovers({
                 renderer,
-                template: templateFor(line),
-                text: line,
+                template: templateFor(line, fonts),
+                text: stripEmphasis(line),
                 targets: targets.filter(
                     (target) => coverLine(target.platform, text, hook) === line,
                 ),
@@ -457,8 +485,20 @@ async function writeCovers(
                 };
             }),
             warnings: [
-                ...headlineLengthWarnings(coverLine('youtube', text, hook), render.presets),
+                ...headlineLengthWarnings(
+                    stripEmphasis(coverLine('youtube', text, hook)),
+                    render.presets,
+                ),
                 ...thumbnailWarnings(composed),
+                ...(composed.some((cover) => cover.moved)
+                    ? [
+                          `Layout: the headline moved to its other spot on ${composed
+                              .filter((cover) => cover.moved)
+                              .map((cover) => cover.platform)
+                              .join(', ')}, where it covers less of the picture.`,
+                      ]
+                    : []),
+                ...fonts.notes(),
                 ...formatFindings(
                     composed.flatMap((cover) => cover.findings),
                     isTerminal(runtime.stdout),
@@ -529,11 +569,6 @@ function stretchLines(
         : [];
 }
 
-function visibleOption(layout: CoverLayout): { visible?: Rect } {
-    const visible = visibleFraction(layout);
-    return visible === undefined ? {} : { visible };
-}
-
 interface LoadedSubject {
     path: string;
     layer: SubjectLayer;
@@ -576,83 +611,73 @@ function subjectLine(subject: LoadedSubject | undefined): string[] {
     return [`Subject: ${subject.path} (${how})`];
 }
 
-interface TemplateOptions {
-    template?: string;
-    tag?: string;
-    number?: string;
-    before?: string;
-    after?: string;
-    labels?: string;
-    subject?: string;
+interface PhotoCredit {
+    ref?: string;
+    provider?: StockProvider;
+    creator?: string;
+    license?: string;
+    attribution?: string;
+    pageUrl?: string;
 }
 
-const TEMPLATE_ONLY_OPTIONS: readonly [keyof TemplateOptions, TemplateName][] = [
-    ['tag', 'poster'],
-    ['number', 'number'],
-    ['before', 'compare'],
-    ['after', 'compare'],
-    ['labels', 'compare'],
-];
+interface LoadedPhoto {
+    photo: GenrePhoto;
+    credit: PhotoCredit;
+}
 
-/** 模板和它专属的参数要对得上，对不上直接报错，不猜用户想要哪个 */
-function checkTemplateOptions(options: TemplateOptions, source: ImageSource): TemplateName {
-    const name = options.template === undefined ? 'text' : parseTemplateName(options.template);
-    if (name !== 'text' && source !== 'render') {
-        throw new Error('--template works with --source render.');
-    }
-    for (const [option, owner] of TEMPLATE_ONLY_OPTIONS) {
-        if (options[option] !== undefined && name !== owner) {
-            throw new Error(`--${option} is only valid with --template ${owner}.`);
+/** 一张 --photo：图库编号就下载进临时目录（项目零残留），本地路径就检查存在，再量尺寸、找主体 */
+async function loadPhoto(
+    runtime: CliRuntime,
+    value: string,
+    stockRuntime: StockRuntime,
+): Promise<LoadedPhoto> {
+    let path: string;
+    let credit: PhotoCredit = {};
+    if (isStockRef(value)) {
+        const refsDir = tempRefsDir();
+        mkdirSync(refsDir, { recursive: true });
+        const fetched = await fetchStockPhoto(
+            { ref: value, basePath: join(refsDir, stockFileStem(value)), now: runtime.now() },
+            stockRuntime,
+        );
+        path = fetched.imagePath;
+        credit = {
+            ref: fetched.photo.ref,
+            provider: fetched.photo.provider,
+            creator: fetched.photo.creator,
+            license: fetched.photo.license,
+            attribution: fetched.photo.attribution,
+            pageUrl: fetched.photo.pageUrl,
+        };
+    } else {
+        path = resolve(runtime.cwd, value);
+        if (!existsSync(path)) {
+            throw new Error(`Photo not found: ${path}`);
         }
     }
-    if (name === 'number' && options.number === undefined) {
-        throw new Error('--template number needs --number <figure>, like --number 3.');
-    }
-    if (name === 'compare' && (options.before === undefined || options.after === undefined)) {
-        throw new Error('--template compare needs --before <path> and --after <path>.');
-    }
-    if (options.subject !== undefined && (name === 'number' || name === 'compare')) {
-        throw new Error('--subject works with the text and poster templates.');
-    }
-    return name;
+    const size = await imageSize(path);
+    return { photo: { path, ...size, focus: await runtime.photoFocus(path) }, credit };
 }
 
-function existingImage(runtime: CliRuntime, option: string, value: string): string {
-    const path = resolve(runtime.cwd, value);
-    if (!existsSync(path)) {
-        throw new Error(`${option} image not found: ${path}`);
-    }
-    return path;
+function photoLines(photos: readonly LoadedPhoto[]): string[] {
+    return photos.flatMap(({ photo, credit }) => [
+        credit.ref === undefined
+            ? `Photo: ${photo.path}`
+            : `Photo: ${credit.ref} (saved at ${photo.path})`,
+        ...creditLines(credit),
+    ]);
 }
 
-function templateRequest(
-    runtime: CliRuntime,
-    name: TemplateName,
-    options: TemplateOptions,
-    subject: LoadedSubject | undefined,
-) {
-    const person = subject ? { subject: subject.layer } : {};
-    switch (name) {
-        case 'text':
-            return { template: 'text' as const, ...person };
-        case 'poster':
-            return {
-                template: 'poster' as const,
-                ...person,
-                ...(options.tag === undefined ? {} : { tag: validateTag(options.tag) }),
-            };
-        case 'number':
-            return { template: 'number' as const, figure: validateNumber(options.number ?? '') };
-        case 'compare':
-            return {
-                template: 'compare' as const,
-                before: existingImage(runtime, '--before', options.before ?? ''),
-                after: existingImage(runtime, '--after', options.after ?? ''),
-                focusOf: runtime.photoFocus,
-                ...(options.labels === undefined ? {} : { labels: parseLabels(options.labels) }),
-            };
-    }
-}
+// 能用 --scene 现画场景的类型：一张满版的场景照片。圈注要圈真实的主体，对比和拼图要真实的几张。
+const SCENE_GENRES: ReadonlySet<GenreName> = new Set(['scene-title', 'mood', 'face-stakes']);
+
+// 只有一张满版照片的类型：照片放大和主体被裁的提醒按整张画布算。
+const FULL_BLEED: ReadonlySet<GenreName> = new Set([
+    'face-stakes',
+    'scene-title',
+    'callout',
+    'mood',
+]);
 
 export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
     const runtime = createRuntime(overrides);
@@ -701,31 +726,41 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         )
         .option(
             '--photo <ref-or-path>',
-            'Stock photo ref (pexels:<id>, openverse:<id>) or a local image',
+            'Stock photo ref (pexels:<id>, openverse:<id>) or a local image (repeatable for versus, before-after, collage)',
+            collectRefs,
+            [],
         )
-        .option('--look <name>', `Photo cover colour: ${PHOTO_LOOKS.join(', ')}`)
         .option(
-            '--callout',
-            'Photo cover: circle the photo subject in red and point an arrow at it',
+            '--subject <path>',
+            'Person for face-text and face-stakes: a transparent PNG, or a photo to cut out on macOS',
         )
+        .option(
+            '--scene <description>',
+            'scene-title, mood, face-stakes with no --photo: the picture to paint with your image model key or agent CLI',
+        )
+        .option('--template <name>', `Cover type: ${GENRE_NAMES.join(', ')}`)
+        .option('--scheme <name>', `Colour scheme: ${SCHEME_NAMES.join(', ')}`)
+        .option('--tag <text>', 'big-type, number, face-text: a short label above the headline')
+        .option(
+            '--number <figure>',
+            'number: the big figure, like 3 or 90%. face-stakes: the stakes sign, like $10,000',
+        )
+        .option(
+            '--labels <first,second>',
+            'versus: the two price tags. before-after: a label for each side',
+        )
+        .option('--look <name>', `Photo colour: ${PHOTO_LOOKS.join(', ')}`)
         .option(
             '--fit <mode>',
-            'Photo cover framing: cover (crop, default) or extend (keep the whole photo)',
+            'Full-bleed photo framing: cover (crop, default) or extend (keep the whole photo)',
         )
         .option(
             '--hook <text>',
             'A short line for the video and note covers. WeChat and X article covers keep the headline',
         )
-        .option('--template <name>', `Text cover template: ${TEMPLATE_NAMES.join(', ')}`)
-        .option('--tag <text>', 'Poster template: a short label above the headline')
-        .option('--number <figure>', 'Number template: the big figure, like 3, 90%, or 10x')
-        .option('--before <path>', 'Compare template: the image shown first')
-        .option('--after <path>', 'Compare template: the image shown second')
-        .option('--labels <first,second>', 'Compare template: a label for each side')
-        .option(
-            '--subject <path>',
-            'Person or object to put on the cover: a transparent PNG, or a photo to cut out on macOS',
-        )
+        .addOption(new Option('--callout').hideHelp())
+        .addOption(new Option('--before <path>').hideHelp())
+        .addOption(new Option('--after <path>').hideHelp())
         .option('--verbose', 'Print backend CLI output')
         .action(
             async (
@@ -742,9 +777,11 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     style?: string;
                     ref?: string[];
                     remix?: string[];
-                    photo?: string;
+                    photo?: string[];
+                    scene?: string;
                     subject?: string;
                     template?: string;
+                    scheme?: string;
                     hook?: string;
                     callout?: boolean;
                     look?: string;
@@ -757,198 +794,57 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     verbose?: boolean;
                 },
             ) => {
+                // 换掉的旗标报错时指到新写法。
+                if (options.callout === true) {
+                    throw new Error(
+                        '--callout is now a template. Use --template callout --photo <photo>.',
+                    );
+                }
+                if (options.before !== undefined || options.after !== undefined) {
+                    throw new Error(
+                        '--before and --after were replaced. Use --template before-after --photo <before> --photo <after>.',
+                    );
+                }
                 const flags = flagsFromOptions(options);
                 const fileConfig = loadConfigFile(runtime.configPath);
                 const effective = resolveEffectiveConfig(fileConfig, flags);
                 const guides = Boolean(options.guides);
+                const rendered = effective.source === 'render' || effective.source === 'stock';
 
-                if (
-                    flags.via !== undefined &&
-                    effective.source !== 'agent' &&
-                    effective.source !== 'model'
-                ) {
+                // --via 在 render 和 stock 里只用来点名画场景的后端。
+                if (flags.via !== undefined && rendered && options.scene === undefined) {
                     throw new Error('--via is only valid with --source agent or model.');
                 }
-                if (options.photo !== undefined && effective.source !== 'stock') {
-                    throw new Error('--photo is only valid with --source stock.');
-                }
-                const templateName = checkTemplateOptions(options, effective.source);
                 if ((options.remix ?? []).length > 0 && effective.source !== 'agent') {
                     throw new Error('--remix works with --source agent.');
                 }
-                if (
-                    (options.look !== undefined || options.fit !== undefined) &&
-                    effective.source !== 'stock'
-                ) {
-                    throw new Error('--look and --fit work with --source stock.');
-                }
-                if (
-                    options.hook !== undefined &&
-                    (effective.source === 'agent' || effective.source === 'model')
-                ) {
-                    throw new Error('--hook works with --source render or stock.');
-                }
-                if (
-                    options.scale !== undefined &&
-                    (effective.source === 'agent' || effective.source === 'model')
-                ) {
-                    throw new Error(
-                        `--scale works with --source render or stock. ${effective.source} output size comes from the model.`,
-                    );
-                }
-                const hook = options.hook === undefined ? undefined : parseHook(options.hook);
-                const look = options.look === undefined ? 'natural' : parsePhotoLook(options.look);
-                const fit = options.fit === undefined ? 'cover' : parsePhotoFit(options.fit);
-                const callout = options.callout === true;
-                if (callout && effective.source !== 'stock') {
-                    throw new Error('--callout works with --source stock.');
-                }
-                if (callout && fit === 'extend') {
-                    throw new Error(
-                        '--callout circles the framed subject. Drop --fit extend to use it.',
-                    );
-                }
-                if (callout && options.subject !== undefined) {
-                    throw new Error(
-                        '--callout points at the photo subject, and --subject would cover it. Use one of them.',
-                    );
-                }
-
-                if (effective.source === 'stock') {
-                    if (options.photo === undefined || options.photo.trim() === '') {
+                if (!rendered) {
+                    const renderOnly: [string, unknown][] = [
+                        ['--photo', (options.photo ?? []).length > 0 ? true : undefined],
+                        ['--scene', options.scene],
+                        ['--template', options.template],
+                        ['--scheme', options.scheme],
+                        ['--tag', options.tag],
+                        ['--number', options.number],
+                        ['--labels', options.labels],
+                        ['--look', options.look],
+                        ['--fit', options.fit],
+                        ['--hook', options.hook],
+                        ['--scale', options.scale],
+                    ];
+                    const used = renderOnly.find(([, value]) => value !== undefined);
+                    if (used !== undefined) {
                         throw new Error(
-                            'Source "stock" needs --photo <ref-or-path>. Run beastcover stock search "<query>" to pick one.',
+                            used[0] === '--scale'
+                                ? `--scale works with --source render or stock. ${effective.source} output size comes from the model.`
+                                : `${used[0]} works with --source render or stock.`,
                         );
                     }
-                    const pack = packFor(options.style);
-                    const renderPalette = coverPalette(pack);
-                    const now = runtime.now();
-                    const stockRuntime: StockRuntime = {
-                        config: fileConfig.stock,
-                        ...runtime.stock,
-                    };
-
-                    // 成品路径不依赖照片，先算先拦，别为一个 .jpg 去下载图库照片。
-                    const outputPath = coverOutputPath(runtime, flags, effective.output);
-                    let photoPath: string;
-                    let photoMeta: {
-                        ref?: string;
-                        provider?: StockProvider;
-                        creator?: string;
-                        license?: string;
-                        attribution?: string;
-                        pageUrl?: string;
-                    } = {};
-                    {
-                        if (isStockRef(options.photo)) {
-                            // 下载进系统临时目录暂存：项目零残留，路径打印出来，要留的图自己拷走。
-                            const stem = stockFileStem(options.photo);
-                            const refsDir = tempRefsDir();
-                            mkdirSync(refsDir, { recursive: true });
-                            const fetched = await fetchStockPhoto(
-                                { ref: options.photo, basePath: join(refsDir, stem), now },
-                                stockRuntime,
-                            );
-                            photoPath = fetched.imagePath;
-                            photoMeta = {
-                                ref: fetched.photo.ref,
-                                provider: fetched.photo.provider,
-                                creator: fetched.photo.creator,
-                                license: fetched.photo.license,
-                                attribution: fetched.photo.attribution,
-                                pageUrl: fetched.photo.pageUrl,
-                            };
-                        } else {
-                            photoPath = resolve(runtime.cwd, options.photo);
-                            if (!existsSync(photoPath)) {
-                                throw new Error(`Photo not found: ${photoPath}`);
-                            }
-                        }
-
-                        const paletteOption = { palette: renderPalette };
-                        const photoSize = await imageSize(photoPath);
-                        const focus = await runtime.photoFocus(photoPath);
-                        if (callout) {
-                            checkCallout(
-                                photoSize,
-                                focus,
-                                effective.render.presets,
-                                effective.render.canvas,
-                            );
-                        }
-                        const subject = await loadSubject(runtime, options.subject);
-                        const templateFor = (line: string): CoverTemplate => ({
-                            layoutFor: callout
-                                ? (layout) => calloutLayout(layout, photoSize, focus)
-                                : subject
-                                  ? withSubjectArea
-                                  : photoTextLayout,
-                            measureHtml: (layout, headline) =>
-                                createPhotoCoverTemplate(line, {
-                                    layout,
-                                    headline,
-                                    measure: true,
-                                    ...paletteOption,
-                                }),
-                            renderHtml: async (layout, headline, pixelWidth, pixelHeight) =>
-                                createPhotoCoverTemplate(line, {
-                                    layout,
-                                    headline,
-                                    photo: await preparePhotoLayer(
-                                        photoPath,
-                                        pixelWidth,
-                                        pixelHeight,
-                                        {
-                                            focus,
-                                            target: photoFocusTarget(layout, subject !== undefined),
-                                            fit,
-                                            // 按版式比例构图，和渲染前的圈注检查用同一个窗口。
-                                            canvas: { width: layout.width, height: layout.height },
-                                            ...visibleOption(layout),
-                                        },
-                                    ),
-                                    look,
-                                    callout,
-                                    ...paletteOption,
-                                    ...(subject ? { subject: subject.layer } : {}),
-                                }),
-                        });
-                        const written = await writeCovers(
-                            runtime,
-                            text,
-                            templateFor,
-                            effective.render,
-                            outputPath,
-                            guides,
-                            hook,
-                        );
-
-                        runtime.stdout.write(
-                            [
-                                ...coverLines(written.covers, effective.render.scale),
-                                ...written.warnings,
-                                ...stretchLines(photoSize, effective.render, fit),
-                                ...(fit === 'cover' && effective.render.canvas === undefined
-                                    ? focusCropWarnings(
-                                          photoSize,
-                                          focus,
-                                          effective.render.presets,
-                                          subject !== undefined,
-                                      )
-                                    : []),
-                                ...subjectLine(subject),
-                                photoMeta.ref === undefined
-                                    ? `Photo: ${photoPath}`
-                                    : `Photo: ${photoMeta.ref} (saved at ${photoPath})`,
-                                ...creditLines(photoMeta),
-                                photoMeta.provider
-                                    ? `Privacy: the photo was downloaded from ${photoMeta.provider}. Render stayed on this machine.`
-                                    : 'Privacy: render stayed on this machine.',
-                                '',
-                            ].join('\n'),
-                        );
-                    }
-                    return;
+                }
+                if (rendered && options.style !== undefined) {
+                    throw new Error(
+                        '--style picks the painting style for --source agent and model. Render and stock covers take --scheme.',
+                    );
                 }
 
                 if (effective.source === 'agent') {
@@ -1140,16 +1036,160 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     return;
                 }
 
-                const pack = packFor(options.style);
-                const renderPalette = coverPalette(pack);
+                // render 和 stock 走同一条封面类型的路：先核对类型和素材，再下载、抠图、出图。
+                const photoValues = (options.photo ?? []).map((value) => value.trim());
+                if (effective.source === 'stock' && photoValues.length === 0) {
+                    throw new Error(
+                        'Source "stock" needs --photo <ref-or-path>. Run beastcover stock search "<query>" to pick one.',
+                    );
+                }
+                if (photoValues.some((value) => value === '')) {
+                    throw new Error('--photo must not be empty.');
+                }
+                const scene = options.scene === undefined ? undefined : parseScene(options.scene);
+                if (scene !== undefined && photoValues.length > 0) {
+                    throw new Error(
+                        'Use --photo or --scene, not both. --scene paints the picture when there is no photo.',
+                    );
+                }
+                // 现画的场景算一张照片。
+                const pictures = photoValues.length + (scene === undefined ? 0 : 1);
+                const hasSubject = options.subject !== undefined;
+                const genre =
+                    options.template === undefined
+                        ? defaultGenre({ photos: pictures, subject: hasSubject })
+                        : parseGenre(options.template);
+                if (scene !== undefined && !SCENE_GENRES.has(genre)) {
+                    throw new Error(
+                        `--scene paints the picture for --template ${[...SCENE_GENRES].join(', ')}. ${genre} needs real photos.`,
+                    );
+                }
+                checkGenreInputs(genre, {
+                    photos: pictures,
+                    subject: hasSubject,
+                    options: {
+                        tag: options.tag,
+                        number: options.number,
+                        labels: options.labels,
+                        look: options.look,
+                        fit: options.fit,
+                    },
+                });
+                parseEmphasis(text);
+                const hook = options.hook === undefined ? undefined : parseHook(options.hook);
+                if (hook !== undefined) {
+                    parseEmphasis(hook);
+                }
+                const scheme: SchemeName | undefined =
+                    options.scheme === undefined ? undefined : parseScheme(options.scheme);
+                const tag = options.tag === undefined ? undefined : parseTag(options.tag);
+                const figure =
+                    options.number === undefined ? undefined : parseFigure(options.number);
+                const labels =
+                    options.labels === undefined ? undefined : parseLabels(options.labels);
+                const look: PhotoLook | undefined =
+                    options.look === undefined ? undefined : parsePhotoLook(options.look);
+                const fit: PhotoFit =
+                    options.fit === undefined ? 'cover' : parsePhotoFit(options.fit);
+
+                // 成品路径不依赖照片，先算先拦，别为一个 .jpg 去下载图库照片。
                 const outputPath = coverOutputPath(runtime, flags, effective.output);
+                const stockRuntime: StockRuntime = { config: fileConfig.stock, ...runtime.stock };
+                const photos: LoadedPhoto[] = [];
+                for (const value of photoValues) {
+                    photos.push(await loadPhoto(runtime, value, stockRuntime));
+                }
+                // 故事画面：没给照片、给了 --scene，就按本机能力现画，画不了退到配色渐变并说明。
+                const genrePhotos = photos.map((loaded) => loaded.photo);
+                const sceneLines: string[] = [];
+                let painter: ScenePainter | undefined;
+                if (scene !== undefined) {
+                    painter = findScenePainter({
+                        ...(flags.via === undefined ? {} : { via: flags.via }),
+                        ...(effective.model === undefined ? {} : { model: effective.model }),
+                        lookup: runtime.lookupCommand,
+                    });
+                    const canvas = effective.render.canvas;
+                    const orientations = [
+                        ...new Set(
+                            canvas === undefined
+                                ? effective.render.presets.map((name) =>
+                                      sceneOrientation(getPlatform(name).family),
+                                  )
+                                : [canvas.width >= canvas.height ? 'landscape' : 'portrait'],
+                        ),
+                    ] as ('landscape' | 'portrait')[];
+                    const runDir = newRunDir();
+                    const colors = SCHEMES[scheme ?? 'navy'];
+                    const painted: { orientation: 'landscape' | 'portrait'; photo: GenrePhoto }[] =
+                        [];
+                    for (const orientation of orientations) {
+                        const path =
+                            painter === undefined
+                                ? await gradientScene(
+                                      { base: colors.base, deep: colors.baseDeep },
+                                      orientation,
+                                      runDir,
+                                  )
+                                : await paintScene(painter, scene, orientation, runDir, {
+                                      runModelApi: runtime.runModelApi,
+                                      runAgent: runtime.runAgent,
+                                      verbose: Boolean(options.verbose),
+                                      backendOutput: runtime.stderr,
+                                  });
+                        painted.push({
+                            orientation,
+                            photo: {
+                                path,
+                                ...(await imageSize(path)),
+                                focus: await runtime.photoFocus(path),
+                            },
+                        });
+                        if (painter !== undefined) {
+                            sceneLines.push(
+                                `Scene: painted by ${painterLabel(painter)}, saved at ${path}`,
+                            );
+                        }
+                    }
+                    if (painter === undefined) {
+                        sceneLines.push(SCENE_DEGRADED);
+                    }
+                    const byFamily = Object.fromEntries(
+                        FAMILY_NAMES.flatMap((family) => {
+                            const match = painted.find(
+                                (entry) => entry.orientation === sceneOrientation(family),
+                            );
+                            return match === undefined ? [] : [[family, match.photo]];
+                        }),
+                    );
+                    const primary = painted[0]?.photo;
+                    if (primary === undefined) {
+                        throw new Error('No scene was painted.');
+                    }
+                    genrePhotos.push({ ...primary, byFamily });
+                }
+                const single = photos.length === 1 ? photos[0] : undefined;
+                if (genre === 'callout' && single !== undefined) {
+                    checkCallout(
+                        single.photo,
+                        single.photo.focus,
+                        effective.render.presets,
+                        effective.render.canvas,
+                    );
+                }
                 const subject = await loadSubject(runtime, options.subject);
-                const request = templateRequest(runtime, templateName, options, subject);
-                const templateFor = (line: string) =>
-                    textCoverTemplate({
+                const templateFor = (line: string, fonts: FontKit): CoverTemplate =>
+                    genreTemplate(genre, {
                         text: line,
-                        palette: renderPalette,
-                        ...request,
+                        fonts,
+                        photos: genrePhotos,
+                        ...(subject === undefined ? {} : { subject: subject.layer }),
+                        ...(scheme === undefined ? {} : { scheme }),
+                        ...(tag === undefined ? {} : { tag }),
+                        ...(figure === undefined ? {} : { figure }),
+                        ...(labels === undefined ? {} : { labels }),
+                        ...(look === undefined ? {} : { look }),
+                        ...(options.fit === undefined ? {} : { fit }),
                     });
                 const written = await writeCovers(
                     runtime,
@@ -1160,19 +1200,45 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     guides,
                     hook,
                 );
+                const fullBleed =
+                    single !== undefined && FULL_BLEED.has(genre) ? single : undefined;
+                const provider = photos.find((loaded) => loaded.credit.provider)?.credit.provider;
 
                 runtime.stdout.write(
                     [
                         ...coverLines(written.covers, effective.render.scale),
+                        `Template: ${genre}, ${GENRES[genre].summary}${options.template === undefined ? ' (picked from the inputs; set --template to choose)' : ''}`,
                         ...written.warnings,
+                        ...(fullBleed === undefined
+                            ? []
+                            : stretchLines(fullBleed.photo, effective.render, fit)),
+                        ...(fullBleed !== undefined &&
+                        genre !== 'callout' &&
+                        fit === 'cover' &&
+                        effective.render.canvas === undefined
+                            ? focusCropWarnings(
+                                  fullBleed.photo,
+                                  fullBleed.photo.focus,
+                                  effective.render.presets,
+                                  genre === 'face-stakes',
+                              )
+                            : []),
                         ...(effective.render.canvas
                             ? []
                             : textOnlyWarnings(
                                   effective.render.presets,
-                                  subject !== undefined || templateName === 'compare',
+                                  subject !== undefined || genrePhotos.length > 0,
                               )),
                         ...subjectLine(subject),
-                        'Privacy: render stayed on this machine.',
+                        ...photoLines(photos),
+                        ...sceneLines,
+                        painter?.kind === 'model'
+                            ? `Privacy: the scene description went to ${painter.provider} with your API key. Render stayed on this machine.`
+                            : painter?.kind === 'agent'
+                              ? `Privacy: the scene was painted by your own ${painter.provider} CLI. Render stayed on this machine.`
+                              : provider
+                                ? `Privacy: the ${photos.length === 1 ? 'photo was' : 'photos were'} downloaded from ${provider}. Render stayed on this machine.`
+                                : 'Privacy: render stayed on this machine.',
                         '',
                     ].join('\n'),
                 );

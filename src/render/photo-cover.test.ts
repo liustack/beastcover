@@ -1,7 +1,6 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chromium, type Page } from 'playwright';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
 import { familyClearArea, familyCoveredAreas, familyVisibleArea } from '../compose/index.ts';
@@ -17,14 +16,12 @@ import {
     arrowWings,
     calloutGeometry,
     calloutLayout,
-    createPhotoCoverTemplate,
     framedFocusBox,
     photoTextLayout,
     preparePhotoLayer,
 } from './photo-cover.ts';
 
 const tempDirectories: string[] = [];
-const BASE = { layout: customLayout(640, 360), headline: { fontPx: 48, keepClauses: false } };
 
 afterEach(() => {
     for (const directory of tempDirectories.splice(0)) {
@@ -44,183 +41,6 @@ async function writeTestPhoto(width: number, height: number): Promise<string> {
     writeFileSync(path, bytes);
     return path;
 }
-
-describe('photo cover', () => {
-    it('covers the canvas at the requested pixel size and inlines a jpeg data uri', async () => {
-        const source = await writeTestPhoto(400, 800);
-        const layer = await preparePhotoLayer(source, 320, 180);
-
-        expect(layer.sourceWidth).toBe(400);
-        expect(layer.sourceHeight).toBe(800);
-        expect(layer.dataUri.startsWith('data:image/jpeg;base64,')).toBe(true);
-        const meta = await sharp(
-            Buffer.from(layer.dataUri.slice('data:image/jpeg;base64,'.length), 'base64'),
-        ).metadata();
-        expect([meta.width, meta.height]).toEqual([320, 180]);
-    });
-
-    it('circles a small photo subject and points an arrow at it', async () => {
-        const source = await writeTestPhoto(1600, 900);
-        // 主体在原图正中偏右上，宽高各占一成。
-        const focus = { x: 0.7, y: 0.3, width: 0.1, height: 0.1, source: 'saliency' as const };
-        const layer = await preparePhotoLayer(source, 1600, 900, {
-            focus,
-            target: { x: 0.7, y: 0.3 },
-            fit: 'cover',
-        });
-        expect(layer.focusBox?.width).toBeCloseTo(0.1, 2);
-        expect(layer.focusBox?.x).toBeCloseTo(0.65, 2);
-
-        const canvas = { x: 0, y: 0, width: 1600, height: 900 };
-        const layout = {
-            ...photoTextLayout(customLayout(1600, 900)),
-            visibleArea: canvas,
-            clearArea: canvas,
-            coveredAreas: [],
-        };
-        const html = createPhotoCoverTemplate('Look', {
-            layout,
-            headline: { fontPx: 48, keepClauses: false },
-            photo: layer,
-            callout: true,
-        });
-        expect(html).toContain('<svg class="callout"');
-        expect(html).toContain('<ellipse');
-        expect(html).toContain('stroke="#ff2a2a"');
-
-        const big = { ...layer, focusBox: { x: 0, y: 0, width: 0.9, height: 0.8 } };
-        expect(() =>
-            createPhotoCoverTemplate('Look', {
-                layout,
-                headline: { fontPx: 48, keepClauses: false },
-                photo: big,
-                callout: true,
-            }),
-        ).toThrowError(/too big to circle/);
-        const { focusBox: _box, ...unframed } = layer;
-        expect(() =>
-            createPhotoCoverTemplate('Look', {
-                layout,
-                headline: { fontPx: 48, keepClauses: false },
-                photo: unframed,
-                callout: true,
-            }),
-        ).toThrowError('--callout needs the photo framed around its subject.');
-    });
-
-    it('escapes text, inlines the photo, and applies palette colors', () => {
-        const html = createPhotoCoverTemplate('<Dawn> & "sea"', {
-            ...BASE,
-            photo: { dataUri: 'data:image/jpeg;base64,AAAA', sourceWidth: 1, sourceHeight: 1 },
-            palette: {
-                paper: { prompt: '暖白', css: '#f4efe6', cover: 'paper' },
-                accent: { prompt: '暖色', css: '#c9895a', cover: 'accent' },
-            },
-        });
-
-        expect(html).toContain('&lt;Dawn&gt; &amp; &quot;sea&quot;');
-        expect(html).toContain('src="data:image/jpeg;base64,AAAA"');
-        expect(html).toContain('--cover-paper: #f4efe6');
-        expect(html).toContain('--cover-accent: #c9895a');
-        expect(html).toContain('font-size: 48px;');
-        expect(html).not.toContain('<script');
-    });
-
-    it('puts only the headline on the cover, with no tool name or explanatory labels', () => {
-        const html = createPhotoCoverTemplate('Dawn', {
-            ...BASE,
-            photo: { dataUri: 'data:image/jpeg;base64,AAAA', sourceWidth: 1, sourceHeight: 1 },
-        });
-        const body = html.slice(html.indexOf('<body>'));
-
-        expect(body).toContain('>Dawn</p>');
-        for (const label of ['BeastCover', 'Photo cover', 'Local render', 'visual language']) {
-            expect(body).not.toContain(label);
-        }
-    });
-
-    it('breaks kept clauses at punctuation and wraps long unpunctuated Chinese inside the area', async () => {
-        const dataUri = `data:image/jpeg;base64,${(
-            await sharp({
-                create: { width: 16, height: 9, channels: 3, background: { r: 30, g: 30, b: 30 } },
-            })
-                .jpeg()
-                .toBuffer()
-        ).toString('base64')}`;
-        const photo = { dataUri, sourceWidth: 16, sourceHeight: 9 };
-        const browser = await chromium.launch({ headless: true });
-
-        // 这段在浏览器里跑，按每个字的纵坐标把正文切成行。写成字符串，免得把 DOM 类型拉进 Node 工程。
-        const LINES_SCRIPT = `(() => {
-            const copy = document.querySelector('.copy');
-            if (!copy) {
-                throw new Error('copy missing');
-            }
-            const walker = document.createTreeWalker(copy, NodeFilter.SHOW_TEXT);
-            const rows = [];
-            const range = document.createRange();
-            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-                const text = node.textContent ?? '';
-                for (let i = 0; i < text.length; i += 1) {
-                    range.setStart(node, i);
-                    range.setEnd(node, i + 1);
-                    const top = Math.round(range.getBoundingClientRect().top);
-                    const last = rows.at(-1);
-                    if (last && Math.abs(last.top - top) < 4) {
-                        last.text += text[i];
-                    } else {
-                        rows.push({ top, text: text[i] });
-                    }
-                }
-            }
-            return rows.map((row) => row.text.trim()).filter((row) => row !== '');
-        })()`;
-
-        async function lines(page: Page): Promise<string[]> {
-            return (await page.evaluate(LINES_SCRIPT)) as string[];
-        }
-
-        try {
-            for (const familyName of FAMILY_NAMES) {
-                const layout = familyLayout(familyName);
-                const page = await browser.newPage({
-                    viewport: { width: layout.width, height: layout.height },
-                });
-                // 字号取到刚好让每个短句放进一行，句与句之间换行。
-                const fontPx = Math.floor(layout.textArea.width / 13);
-                await page.setContent(
-                    createPhotoCoverTemplate('人接不住认知以外的流量，也赚不到认知以外的钱', {
-                        layout,
-                        headline: { fontPx, keepClauses: true },
-                        photo,
-                    }),
-                    { waitUntil: 'load' },
-                );
-                expect(await lines(page), familyName).toEqual([
-                    '人接不住认知以外的流量，',
-                    '也赚不到认知以外的钱',
-                ]);
-
-                await page.setContent(
-                    createPhotoCoverTemplate(
-                        '没有标点的很长中文标题也要能在画布里自己换行'.repeat(2),
-                        { layout, headline: { fontPx, keepClauses: false }, photo },
-                    ),
-                    { waitUntil: 'load' },
-                );
-                const copy = await page.locator('.copy').boundingBox();
-                expect(copy).not.toBeNull();
-                expect((copy?.x ?? 0) + (copy?.width ?? 0)).toBeLessThanOrEqual(
-                    layout.textArea.x + layout.textArea.width,
-                );
-                expect((await lines(page)).length).toBeGreaterThan(1);
-                await page.close();
-            }
-        } finally {
-            await browser.close();
-        }
-    }, 30_000);
-});
 
 // 某一族按它的全部平台合成时的版式：可见区是裁切框的交集，遮挡区是各平台的界面矩形，
 // 和 composeCovers 填的一样。
@@ -428,7 +248,7 @@ describe('callout geometry', () => {
                 'youtube, bilibili',
             ),
         ).toThrowError(
-            '--callout cannot mark the subject on youtube, bilibili: the red circle would run into the headline. Pick a photo where the subject is small and has empty space around it, or drop --callout.',
+            'The callout cannot mark the subject on youtube, bilibili: the red circle would run into the headline. Pick a photo where the subject is small and has empty space around it, or use another --template.',
         );
     });
 });
@@ -465,7 +285,7 @@ describe('callout layout', () => {
     it('refuses when the band left below the ring is shallower than a fifth of the text area', () => {
         const focus = { x: 0.5, y: 0.5, width: 0.3, height: 0.3, source: 'saliency' as const };
         expect(() => calloutLayout(base, photo, focus, 'youtube')).toThrowError(
-            '--callout cannot mark the subject on youtube: the red circle would leave no room for the headline below it. Pick a photo where the subject is small and has empty space around it, or drop --callout.',
+            'The callout cannot mark the subject on youtube: the red circle would leave no room for the headline below it. Pick a photo where the subject is small and has empty space around it, or use another --template.',
         );
     });
 });

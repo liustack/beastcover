@@ -35,6 +35,8 @@ const SHADOW_EM = 0.05;
 // 双层描边：白内圈外扩约 8.5%，黑外圈总外扩约 14%（日本设计师示例折算）。
 const RING_EM = 0.085;
 const DOUBLE_OUTER_EM = 0.14;
+// 双层描边的外圈宽，行距不拉开时上下两行的白圈会粘成一片。
+const DOUBLE_LINE_HEIGHT = 1.2;
 // 软投影只往下偏一点，模糊比偏移大。
 const SOFT_OFFSET_EM = 0.04;
 const SOFT_BLUR_EM = 0.14;
@@ -153,9 +155,17 @@ const LAYERS: Readonly<Record<TypeStyle, readonly string[]>> = {
     ink: [],
 };
 
-/** 叠好的标题：描边层在下（只给眼睛看，读屏跳过），填色层 .copy 在最上 */
-export function headlineLayers(text: string, headline: Headline, spec: TypeSpec): string {
-    const markup = emphasisMarkup(text, headline);
+/**
+ * 叠好的标题：描边层在下（只给眼睛看，读屏跳过），填色层 .copy 在最上。
+ * prefix 是放在标题同一段里的小标签（痛点标签），跟标题一起量字号，不会被挤出安全区。
+ */
+export function headlineLayers(
+    text: string,
+    headline: Headline,
+    spec: TypeSpec,
+    prefix = '',
+): string {
+    const markup = prefix + emphasisMarkup(text, headline);
     const under = LAYERS[spec.style]
         .map((layer) => `<p class="copy-layer ${layer}" aria-hidden="true">${markup}</p>`)
         .join('');
@@ -215,6 +225,7 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
             font-weight: ${heavy ? 900 : 400};
             letter-spacing: ${em(spacing)};
             padding: ${em(extent)};
+            ${spec.style === 'double' ? `line-height: ${DOUBLE_LINE_HEIGHT};` : ''}
         }
 
         .copy-layer {
@@ -238,10 +249,14 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
         }
 
         .copy {
-            position: relative;
             color: ${colors.fill};
             ${synthetic}
             ${softShadow}
+        }
+
+        /* 量字号的探针也带 .copy，不能被拉回文档流，只给真正的标题加定位 */
+        .copy:not(.probe) {
+            position: relative;
         }
 
         ${highlight}`;
