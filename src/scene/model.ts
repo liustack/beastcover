@@ -1,7 +1,7 @@
 // 用户自己的图像模型 API key 画场景：GPT Image（openai）或 Nano Banana（gemini）。
 // key 只进请求头，服务端回显的 key 在报错前脱敏（openai.ts）。各家返回的分辨率不一定等于
 // 要的尺寸（Gemini 按 1K/2K 档），统一归一到要的尺寸再存。
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import sharp from 'sharp';
 import { MODEL_DEFAULTS, type ModelConfig, type ModelProvider } from '../config.ts';
@@ -46,9 +46,13 @@ export async function paintWithModel(input: {
     width: number;
     height: number;
     generatedPath: string;
+    /** 照着改的那张图的路径（前后对比的「后」照着「前」画） */
+    referencePath?: string;
     fetch?: ModelFetch;
 }): Promise<void> {
     const { painter } = input;
+    const reference =
+        input.referencePath === undefined ? {} : { reference: readFileSync(input.referencePath) };
     const fetcher: ModelFetch =
         input.fetch ?? ((url, init) => globalThis.fetch(url, init) as Promise<Response>);
     const bytes =
@@ -59,6 +63,7 @@ export async function paintWithModel(input: {
                   prompt: input.prompt,
                   width: input.width,
                   height: input.height,
+                  ...reference,
                   fetch: fetcher,
               })
             : await generateGeminiImage({
@@ -66,6 +71,7 @@ export async function paintWithModel(input: {
                   model: painter.model,
                   prompt: input.prompt,
                   aspectRatio: aspectRatioOf(input.width, input.height),
+                  ...reference,
                   fetch: fetcher,
               });
     mkdirSync(dirname(input.generatedPath), { recursive: true });

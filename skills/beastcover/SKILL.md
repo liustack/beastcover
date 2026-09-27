@@ -62,7 +62,7 @@ Platforms with close ratios share one master and are cropped from it. The CLI ke
 | `face-text` | A cut-out person on one side, 2 to 4 big words on the other | `--subject`, optional `--tag` | YouTube, Bilibili, Douyin |
 | `face-stakes` | The person inside the scene of the story, the stakes on a tilted sign | `--subject`, one `--photo` or `--scene`, optional `--number` | YouTube challenges, vlogs |
 | `versus` | Two equal halves, a price tag on each, a VS badge in the seam | two `--photo`, `--labels "¥15,¥150"` | YouTube, Bilibili, Xiaohongshu reviews |
-| `before-after` | Before on the left (top on portrait), after on the right, an arrow between | two `--photo`, optional `--labels "改前,改后"` | Xiaohongshu, Douyin, makeovers |
+| `before-after` | Before on the left (top on portrait), after on the right, an arrow between. Both halves show the same place | two `--photo` of the same place, or two `--scene`, optional `--labels "改前,改后"` | Xiaohongshu, Douyin, makeovers |
 | `scene-title` | A full-bleed scene with an outlined title in its quiet part | one `--photo` or `--scene` | Bilibili, travel, documentary |
 | `callout` | A red circle and arrow on the photo's subject, with a short question | one `--photo` with a small, clear subject | YouTube science, Bilibili knowledge |
 | `collage` | Two to four photos in a grid with the title on a colour band | 2 to 4 `--photo` | Xiaohongshu lists, food, trips |
@@ -120,7 +120,7 @@ beastcover stock search "harbour dawn" --orientation landscape
 
 Pick by the title and creator in each line, not the first result. When the harness can show images, fetch the thumbnail URL and look for one strong subject and a calm area for the words. Pass the ref straight to `gen --photo openverse:<id>`. The photo lands in the temp staging area. Repeat the `Credit` line to the user when it is printed. Use a short concrete English query of two to four words.
 
-`--photo` also takes a local path, and repeats for `versus`, `before-after`, and `collage`. Photos are framed around their own subject (faces first on macOS) and kept clear of the headline. `--look mono|duotone|punch` grades every photo the same way, which keeps a collage or a comparison looking like one set. `--fit extend` keeps a whole photo on a full-bleed type and fills the rest with a blurred copy. Use it when the output says `Photo: the subject falls outside the ... crop`.
+`--photo` also takes a local path, and repeats for `versus`, `before-after`, and `collage`. A before-after only works when both photos show the same place or thing: two unrelated stock photos of desks are not a before and after. Use the user's own pair, or paint the pair with two `--scene`. Photos are framed around their own subject (faces first on macOS) and kept clear of the headline. `--look mono|duotone|punch` grades every photo the same way, which keeps a collage or a comparison looking like one set. `--fit extend` keeps a whole photo on a full-bleed type and fills the rest with a blurred copy. Use it when the output says `Photo: the subject falls outside the ... crop`.
 
 ### Painted scenes
 
@@ -131,8 +131,16 @@ beastcover gen "在火山口*住*了一晚" --subject /abs/me.jpg --scene "an ac
 ```
 
 The CLI uses what this machine has, in order: the user's image model key (`model.openai.apiKey`, `model.gemini.apiKey`), then their `codex` or `agy` CLI. `--via openai|gemini|codex|agy` (or `scene.via` in the config) names one painter, and a missing key or CLI is then an error, never a switch to another. With no painter at all, the scene is a plain colour gradient and a `Scene:` line says what to install. Tell the user when that happens: the cover no longer shows the story. Describe one concrete picture in English: the place, the subject, the light. The painter is told to draw a real photograph with no text in it, because the words are set by BeastCover.
+`before-after` takes two `--scene`: the before, then what changes. The after picture is painted from the before picture, so it is the same place from the same camera. Describe the change, not a new scene:
 
-Only the scene is painted. The words, the person, the layout, and the checks are always BeastCover's own, so a painted scene gets the same QC as a photo. Tell the user the privacy line the run prints: the scene description goes to their image API with their key, or through their own CLI.
+```bash
+beastcover gen "桌面*改造*" --template before-after --scene "a cluttered home office desk, tangled cables, stacked papers" --scene "the same desk cleared: cables hidden, papers gone, one plant" --labels "改前,改后"
+```
+
+Each half is painted in its own shape: tall halves on a landscape cover, wide halves on a portrait one. A before-after needs a real painter. With none, it stops and says so, because two gradients compare nothing.
+
+
+Only the scene is painted. The words, the person, the layout, and the checks are always BeastCover's own, so a painted scene gets the same QC as a photo. Tell the user the privacy line the run prints: the scene description (and for a before-after, the painted before picture) goes to their image API with their key, or through their own CLI.
 
 ### People
 

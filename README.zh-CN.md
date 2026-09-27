@@ -105,7 +105,7 @@ Chromium 要用 beastcover 自带的 Playwright 装：裸的 `npx playwright` �
 | 渲染 | 什么都不会 |
 | `stock search`、`--photo openverse:<id>` | 搜索词，和下载所选照片的那一个请求 |
 | `--subject` | 什么都不会，抠图在你的 Mac 上跑 |
-| `--scene` | 场景描述带着你的 key 发给 OpenAI 或 Gemini，或交给你自己的 Codex、agy CLI，不上传任何本地文件 |
+| `--scene` | 场景描述带着你的 key 发给 OpenAI 或 Gemini，或交给你自己的 Codex、agy CLI，不上传你的任何文件。前后对比会把刚画好的「前」一起发过去，让「后」照着它画 |
 
 照片下载直连图片主机，只走 https，私网地址被拦，单张上限 40 MB。
 

@@ -105,7 +105,7 @@ Install Chromium through the Playwright that ships with beastcover: a bare `npx 
 | Rendering | Nothing |
 | `stock search`, `--photo openverse:<id>` | The search words, and the request that downloads the chosen photo |
 | `--subject` | Nothing. The cutout runs on your Mac |
-| `--scene` | Your scene description goes to OpenAI or Gemini with your API key, or through your own Codex or agy CLI. No local file is uploaded |
+| `--scene` | Your scene description goes to OpenAI or Gemini with your API key, or through your own Codex or agy CLI. None of your files is uploaded. For a before-after, the painted before picture goes along so the after picture matches it |
 
 Photo downloads connect straight to the image host, over https only, with private addresses blocked and a 40 MB cap per photo.
 

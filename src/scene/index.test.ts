@@ -69,9 +69,17 @@ describe('scene painter', () => {
         const prompt = scenePrompt('a harbour at dawn');
         expect(prompt).toContain('a harbour at dawn');
         expect(prompt).toContain('No text');
+        expect(prompt).toContain('lower third calm');
+        // 分两半时标题在色带上，画面让主体占满。
+        expect(scenePrompt('a messy desk', true)).toContain('fill the frame');
+        expect(scenePrompt('a messy desk', true)).not.toContain('lower third');
         expect(sceneOrientation('landscape')).toBe('landscape');
         expect(sceneOrientation('ultrawide')).toBe('landscape');
         expect(sceneOrientation('portrait')).toBe('portrait');
+        // 分两半的类型看半边的形状。
+        expect(sceneOrientation('landscape', true)).toBe('portrait');
+        expect(sceneOrientation('ultrawide', true)).toBe('landscape');
+        expect(sceneOrientation('portrait', true)).toBe('landscape');
         expect(() => parseScene('  ')).toThrow('--scene must not be empty.');
     });
 
@@ -93,12 +101,10 @@ describe('scene painter', () => {
         );
         const path = await paintScene(
             { kind: 'model', provider: 'openai', apiKey: 'k', model: 'm' },
-            'a harbour at dawn',
-            'portrait',
-            tempDir(),
+            { scene: 'a harbour at dawn', orientation: 'portrait', runDir: tempDir(), index: 0 },
             { fetch },
         );
-        expect(path.endsWith('scene-portrait.png')).toBe(true);
+        expect(path.endsWith('scene-portrait-1.png')).toBe(true);
         const body = JSON.parse(String(fetch.mock.calls[0]?.[1].body)) as {
             prompt: string;
             size: string;
@@ -121,13 +127,68 @@ describe('scene painter', () => {
         });
         const path = await paintScene(
             { kind: 'agent', provider: 'codex', commandPath: '/fake/codex' },
-            'a harbour at dawn',
-            'landscape',
-            tempDir(),
+            { scene: 'a harbour at dawn', orientation: 'landscape', runDir: tempDir(), index: 0 },
             { spawn },
         );
         expect(existsSync(path)).toBe(true);
         expect(spawn.mock.calls[0]?.[0].args[2]).toContain('Landscape 1536x1024');
+    });
+
+    it('edits the before picture into the after picture, keeping the place', async () => {
+        const runDir = tempDir();
+        const before = join(runDir, 'before.png');
+        await sharp({
+            create: { width: 1024, height: 1536, channels: 3, background: '#553322' },
+        })
+            .png()
+            .toFile(before);
+        const spawn = vi.fn(async (request: { args: readonly string[] }) => {
+            const envelope = request.args[2] as string;
+            const target = /save it to (\S+)\. /.exec(envelope)?.[1] as string;
+            await sharp(before).toFile(target);
+        });
+        await paintScene(
+            { kind: 'agent', provider: 'codex', commandPath: '/fake/codex' },
+            {
+                scene: 'the same desk, tidy',
+                orientation: 'portrait',
+                runDir,
+                index: 1,
+                reference: before,
+            },
+            { spawn },
+        );
+        const args = spawn.mock.calls[0]?.[0].args ?? [];
+        // codex 的参考图挂在最后，提示词里说清楚是照着它改。
+        expect(args.slice(-2)).toEqual(['--image', before]);
+        expect(args[2]).toContain(`edit the reference image at ${before}`);
+        expect(args[2]).toContain('Change only this: the same desk, tidy.');
+        expect(args[2]).toContain('camera position');
+
+        const returned = await sharp(before).png().toBuffer();
+        const fetch = vi.fn(
+            async (_url: string, _init: RequestInit) =>
+                new Response(
+                    JSON.stringify({ data: [{ b64_json: returned.toString('base64') }] }),
+                    { status: 200 },
+                ),
+        );
+        await paintScene(
+            { kind: 'model', provider: 'openai', apiKey: 'k', model: 'm' },
+            {
+                scene: 'the same desk, tidy',
+                orientation: 'portrait',
+                runDir,
+                index: 1,
+                reference: before,
+            },
+            { fetch },
+        );
+        expect(fetch.mock.calls[0]?.[0]).toBe('https://api.openai.com/v1/images/edits');
+        const form = fetch.mock.calls[0]?.[1].body as FormData;
+        expect(form.get('prompt')).toContain('Change only this: the same desk, tidy.');
+        expect(form.get('size')).toBe('1024x1536');
+        expect((form.get('image') as Blob).type).toBe('image/png');
     });
 
     it('uses the configured model id, else the default', () => {

@@ -14,7 +14,7 @@ Phase one currently ships these working surfaces:
 
 - `gen --template <type>` renders one of ten cover types locally: `big-type`, `number`, `face-text`, `face-stakes`, `versus`, `before-after`, `scene-title`, `callout`, `collage`, `mood`. Without `--template` the type is picked from the inputs (person, photo count)
 - `--photo` (repeatable) takes stock refs or local paths, `--subject` a person (transparent PNG, or a photo cut out on macOS 14+ with Vision), `--scheme` one of six colour schemes, `--tag`, `--number`, `--labels`, `--look`, `--fit` per type. A `*keyword*` in the headline gets the accent treatment
-- `--scene "<description>"` paints the picture for `scene-title`, `mood`, and `face-stakes` when there is no photo: the user's image model key (GPT Image or Nano Banana, `model.<provider>.apiKey`) first, then their codex or agy CLI, else a colour gradient with a printed note. `--via` or `scene.via` names one painter and nothing else is tried. Only the scene is painted: words, people, layout, and QC stay BeastCover's own
+- `--scene "<description>"` paints the picture for `scene-title`, `mood`, and `face-stakes` when there is no photo, and twice for `before-after` (the after picture is an edit of the before picture, so both show the same place): the user's image model key (GPT Image or Nano Banana, `model.<provider>.apiKey`) first, then their codex or agy CLI, else a colour gradient with a printed note. `--via` or `scene.via` names one painter and nothing else is tried. Only the scene is painted: words, people, layout, and QC stay BeastCover's own
 - Every render is checked after rendering (QC): failures print in red and the files are still written, a template's other placement is tried when the first fails, and a feed preview sheet is saved and printed
 - `stock search` and `stock fetch` find and download free photos from Openverse (cc0 and pdm only, no key) or Pexels (needs `stock.pexels.apiKey`)
 - The default path is completely free (free stock photos plus local HTML rendering). Scene painting is an opt-in the user already pays for elsewhere
@@ -90,7 +90,7 @@ src/
 │   ├── preview.ts          # Feed preview sheet
 │   └── index.test.ts
 ├── scene/
-│   ├── index.ts            # --scene painter discovery, photo prompt, paint, gradient fallback
+│   ├── index.ts            # --scene painter discovery, photo and edit prompts, paint, gradient fallback
 │   ├── model.ts            # Key-based model painter, normalize to the native size
 │   ├── openai.ts           # GPT Image generations call, key only in the header
 │   ├── gemini.ts           # Nano Banana generateContent call, aspect ratio config

@@ -54,6 +54,42 @@ describe('gemini image generation', () => {
         expect(init.body as string).not.toContain('g-secret');
     });
 
+    it('sends the reference picture as an inline image before the prompt', async () => {
+        const reference = Buffer.concat([
+            Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+            Buffer.from('rest-of-png'),
+        ]);
+        const fetcher = vi.fn(async (_url: string, _init: RequestInit) =>
+            jsonResponse(200, {
+                candidates: [
+                    {
+                        content: {
+                            parts: [{ inlineData: { mimeType: 'image/png', data: 'AA==' } }],
+                        },
+                    },
+                ],
+            }),
+        );
+        await generateGeminiImage({
+            apiKey: 'g-secret',
+            model: 'gemini-3-pro-image-preview',
+            prompt: 'Change only this: tidy.',
+            aspectRatio: '2:3',
+            reference,
+            fetch: fetcher,
+        });
+        const [, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+        const body = JSON.parse(init.body as string) as {
+            contents: {
+                parts: { text?: string; inlineData?: { mimeType: string; data: string } }[];
+            }[];
+        };
+        expect(body.contents[0]?.parts).toEqual([
+            { inlineData: { mimeType: 'image/png', data: reference.toString('base64') } },
+            { text: 'Change only this: tidy.' },
+        ]);
+    });
+
     it('redacts the key when the error body echoes it', async () => {
         const make = () =>
             generateGeminiImage({

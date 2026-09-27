@@ -1,4 +1,5 @@
-// 故事画面：封面类型要一张场景照片、用户又没给 --photo 时，用 --scene 描述的画面现画一张。
+// 故事画面：封面类型要场景照片、用户又没给 --photo 时，用 --scene 描述的画面现画。
+// 前后对比画两张，第二张照着第一张改，保证是同一个地方。
 // 按本机能力分级：配了图像模型 API key 用模型，装了 agent CLI 用 agent，都没有就退到配色渐变，
 // 并打印一行说明装什么能画出来。点名了后端（--via 或 scene.via）就只用它，没有就报错，不换家。
 import { mkdirSync } from 'node:fs';
@@ -88,20 +89,42 @@ export function findScenePainter(input: {
     return undefined;
 }
 
-/** 这一族的场景画成横的还是竖的 */
-export function sceneOrientation(family: FamilyName): SceneOrientation {
+/**
+ * 这一族的场景画成横的还是竖的。满版的类型跟着画布走。分两半的类型（前后对比）看半边的形状：
+ * 横版左右分，半边偏竖，画竖图；竖版上下分，半边偏横，画横图；超宽版左右分，半边还是横的。
+ */
+export function sceneOrientation(family: FamilyName, halves = false): SceneOrientation {
+    if (halves) {
+        return family === 'landscape' ? 'portrait' : 'landscape';
+    }
     return family === 'portrait' ? 'portrait' : 'landscape';
 }
 
 /**
- * 场景照片的提示词：真实照片，一个清楚的主体，给标题留一块安静的地方，不要任何字。
- * 封面的字由 BeastCover 排，画里有字会和标题打架。
+ * 场景照片的提示词：真实照片，一个清楚的主体，不要任何字（封面的字由 BeastCover 排，画里有字
+ * 会和标题打架）。满版的类型标题压在画上，要留一块安静的地方。分两半的类型标题在中间的色带上，
+ * 画面就让主体占满，别留一大片空桌面。
  */
-export function scenePrompt(scene: string): string {
+export function scenePrompt(scene: string, halves = false): string {
     return [
         `A real photograph, not an illustration: ${scene}.`,
         'One clear subject with natural light and real textures, shot like a documentary still.',
-        'Keep the lower third calm and uncluttered so a headline can sit there.',
+        halves
+            ? 'Let the subject fill the frame, with no large empty area.'
+            : 'Keep the lower third calm and uncluttered so a headline can sit there.',
+        'No text, letters, numbers, logos, captions, or watermarks anywhere in the image.',
+    ].join(' ');
+}
+
+/**
+ * 照着参考图改的提示词：前后对比的「后」必须是同一个地方，机位、取景、光线、没变的东西都不动，
+ * 只改描述里说的。两张不是同一处，对比就不成立。
+ */
+export function sceneEditPrompt(change: string): string {
+    return [
+        'Edit the reference photograph. Keep the same place, camera position, framing, lens, and light, and keep every object the change does not touch exactly where it is.',
+        `Change only this: ${change}.`,
+        'It stays a real photograph, not an illustration.',
         'No text, letters, numbers, logos, captions, or watermarks anywhere in the image.',
     ].join(' ');
 }
@@ -114,31 +137,53 @@ export interface PaintOptions {
     spawn?: (request: AgentSpawnRequest) => Promise<void>;
 }
 
+export interface SceneRequest {
+    /** 画什么。给了 reference 时是要改成什么样 */
+    scene: string;
+    orientation: SceneOrientation;
+    runDir: string;
+    /** 第几张（从 0 起），进文件名，一次画几张不会互相覆盖 */
+    index: number;
+    /** 照着改的那张图：前后对比的「后」照着「前」画 */
+    reference?: string;
+    /** 画的是分两半的类型的一半：标题不压在画上，不用留空 */
+    halves?: boolean;
+}
+
 /** 画一张场景，返回原图路径。一个朝向画一次，同朝向的各族都从它构图 */
 export async function paintScene(
     painter: ScenePainter,
-    scene: string,
-    orientation: SceneOrientation,
-    runDir: string,
+    request: SceneRequest,
     options: PaintOptions = {},
 ): Promise<string> {
+    const { orientation, runDir, reference } = request;
     mkdirSync(runDir, { recursive: true });
-    const generatedPath = join(runDir, `scene-${orientation}.png`);
+    const generatedPath = join(runDir, `scene-${orientation}-${request.index + 1}.png`);
     const size = SCENE_SIZE[orientation];
-    const prompt = scenePrompt(scene);
+    const prompt =
+        reference === undefined
+            ? scenePrompt(request.scene, request.halves)
+            : sceneEditPrompt(request.scene);
     if (painter.kind === 'model') {
         await paintWithModel({
             painter,
             prompt,
             ...size,
             generatedPath,
+            ...(reference === undefined ? {} : { referencePath: reference }),
             ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
         });
     } else {
         await paintWithAgent({
             provider: painter.provider,
             commandPath: painter.commandPath,
-            prompt: sceneEnvelope({ prompt, generatedPath, ...size }),
+            prompt: sceneEnvelope({
+                prompt,
+                generatedPath,
+                ...size,
+                ...(reference === undefined ? {} : { referencePath: reference }),
+            }),
+            ...(reference === undefined ? {} : { referencePath: reference }),
             generatedPath,
             ...(options.verbose === undefined ? {} : { verbose: options.verbose }),
             ...(options.backendOutput === undefined

@@ -17,6 +17,7 @@ import {
     genrePage,
     joinLayers,
     type Layers,
+    photoForLayout,
     photoLayers,
     photoSubject,
     rectCss,
@@ -189,7 +190,10 @@ function splitGeometry(
     kind: 'versus' | 'before-after',
     photos: readonly [GenrePhoto, GenrePhoto],
 ): SplitGeometry {
-    const landscapePhotos = photos.every((photo) => photo.width >= photo.height * LANDSCAPE_PHOTO);
+    const landscapePhotos = photos.every((each) => {
+        const photo = photoForLayout(each, layout);
+        return photo.width >= photo.height * LANDSCAPE_PHOTO;
+    });
     if (kind === 'before-after' && familyOf(layout) === 'portrait' && landscapePhotos) {
         return rowsGeometry(layout);
     }
@@ -374,7 +378,8 @@ async function panelPhotos(
 ): Promise<{ dataUri: string; rect: Rect; brightness: number; focusBox?: Rect }[]> {
     const prepared = await Promise.all(
         geometry.panels.map(async (panel, index) => {
-            const photo = photos[index] as GenrePhoto;
+            // 现画的场景每个族一张（半边偏竖画竖图，偏横画横图），取这一族的。
+            const photo = photoForLayout(photos[index] as GenrePhoto, layout);
             const seen = seenPart(panel, layout);
             // 标签挂在这一截上边时，主体往下让开标签那一段。
             const label = geometry.labels[index] as ChipAnchor;

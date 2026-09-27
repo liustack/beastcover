@@ -41,6 +41,11 @@ export type GenreOption = 'tag' | 'number' | 'labels' | 'look' | 'fit';
 interface GenreSpec {
     /** 照片张数的下限和上限 */
     photos: [number, number];
+    /**
+     * --scene 能现画几张。0 是要真照片：圈注要圈真实的主体，对比和拼图要真实的几样东西。
+     * 前后对比画两张，第二张照着第一张改，是同一个地方。
+     */
+    scenes: 0 | 1 | 2;
     /** 要不要抠好的人 */
     subject: boolean;
     options: readonly GenreOption[];
@@ -55,6 +60,7 @@ interface GenreSpec {
 export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     'big-type': {
         photos: [0, 0],
+        scenes: 0,
         subject: false,
         options: ['tag'],
         flatGround: true,
@@ -62,6 +68,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     number: {
         photos: [0, 0],
+        scenes: 0,
         subject: false,
         options: ['tag', 'number'],
         requires: { number: '--template number needs --number <figure>, like --number 3.' },
@@ -70,6 +77,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     'face-text': {
         photos: [0, 0],
+        scenes: 0,
         subject: true,
         options: ['tag'],
         flatGround: true,
@@ -77,6 +85,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     'face-stakes': {
         photos: [1, 1],
+        scenes: 1,
         subject: true,
         options: ['number', 'look', 'fit'],
         flatGround: false,
@@ -85,6 +94,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     versus: {
         photos: [2, 2],
+        scenes: 0,
         subject: false,
         options: ['labels', 'look'],
         requires: {
@@ -95,6 +105,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     'before-after': {
         photos: [2, 2],
+        scenes: 2,
         subject: false,
         options: ['labels', 'look'],
         flatGround: true,
@@ -102,6 +113,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     'scene-title': {
         photos: [1, 1],
+        scenes: 1,
         subject: false,
         options: ['look', 'fit'],
         flatGround: false,
@@ -109,6 +121,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     callout: {
         photos: [1, 1],
+        scenes: 0,
         subject: false,
         options: ['look'],
         flatGround: false,
@@ -116,6 +129,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     collage: {
         photos: [COLLAGE_MIN, COLLAGE_MAX],
+        scenes: 0,
         subject: false,
         options: ['look'],
         flatGround: true,
@@ -123,6 +137,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
     },
     mood: {
         photos: [1, 1],
+        scenes: 1,
         subject: false,
         options: ['look', 'fit'],
         flatGround: false,

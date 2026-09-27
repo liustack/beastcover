@@ -17,6 +17,7 @@ import { createProgram, runCli } from './main.ts';
 import type { CoverRenderer, RenderPage } from './render/index.ts';
 import { familyLayout } from './render/layout.ts';
 import { calloutGeometry, calloutLayout, framedFocusBox } from './render/photo-cover.ts';
+import type { SceneRequest } from './scene/index.ts';
 
 const tempDirectories: string[] = [];
 
@@ -88,20 +89,14 @@ async function testPngBytes(width: number, height: number): Promise<Buffer> {
 
 /** 假画家：不发请求、不起进程，在运行目录里放一张对应朝向尺寸的图 */
 function fakePainter() {
-    return vi.fn(
-        async (
-            _painter: unknown,
-            _scene: string,
-            orientation: 'landscape' | 'portrait',
-            runDir: string,
-        ) => {
-            const path = join(runDir, `scene-${orientation}.png`);
-            mkdirSync(runDir, { recursive: true });
-            const [width, height] = orientation === 'portrait' ? [1024, 1536] : [1536, 1024];
-            await sharp(await testPngBytes(width, height)).toFile(path);
-            return path;
-        },
-    );
+    return vi.fn(async (_painter: unknown, request: SceneRequest) => {
+        const { orientation, runDir } = request;
+        const path = join(runDir, `scene-${orientation}-${request.index + 1}.png`);
+        mkdirSync(runDir, { recursive: true });
+        const [width, height] = orientation === 'portrait' ? [1024, 1536] : [1536, 1024];
+        await sharp(await testPngBytes(width, height)).toFile(path);
+        return path;
+    });
 }
 
 describe('BeastCover CLI', () => {
@@ -1211,14 +1206,70 @@ describe('BeastCover CLI', () => {
         // 横版和超宽共用一张横图，只画一次，画家是配了 key 的 openai。
         expect(paintScene).toHaveBeenCalledOnce();
         expect(paintScene.mock.calls[0]?.[0]).toMatchObject({ kind: 'model', provider: 'openai' });
-        expect(paintScene.mock.calls[0]?.[1]).toBe('a harbour at dawn');
-        expect(paintScene.mock.calls[0]?.[2]).toBe('landscape');
+        expect(paintScene.mock.calls[0]?.[1]).toMatchObject({
+            scene: 'a harbour at dawn',
+            orientation: 'landscape',
+            index: 0,
+        });
+        expect(paintScene.mock.calls[0]?.[1].reference).toBeUndefined();
         expect(renderHtml.mock.calls[0]?.[0].html).toContain('data:image/jpeg;base64,');
         const out = stdout.chunks.join('');
         expect(out).toContain('Template: scene-title');
         expect(out).toContain('Scene: painted by openai');
         expect(out).toContain(
             'Privacy: the scene description went to openai with your API key. Render stayed on this machine.',
+        );
+    });
+
+    it('paints the after picture from the before picture, in the shape of each half', async () => {
+        const cwd = tempDir('beastcover-cli-scene-pair-');
+        const configPath = join(cwd, 'config.json');
+        writeFileSync(configPath, '{"model":{"gemini":{"apiKey":"g-key"}}}\n', 'utf8');
+        const paintScene = fakePainter();
+        const stdout = captureOutput();
+        const exitCode = await runCli(
+            [
+                'node',
+                'beastcover',
+                'gen',
+                '桌面改造',
+                '--scene',
+                'a cluttered home office desk',
+                '--scene',
+                'the same desk, cleared and tidy',
+                '--preset',
+                'youtube,xiaohongshu',
+                '--output',
+                join(cwd, 'pair.png'),
+            ],
+            {
+                cwd,
+                configPath,
+                openRenderer: mockRender().open,
+                qc: undefined,
+                paintScene,
+                photoFocus: centreFocus,
+                lookupCommand: () => undefined,
+                stdout,
+            },
+        );
+        expect(exitCode).toBe(0);
+        const requests = paintScene.mock.calls.map((call) => call[1]);
+        // YouTube 左右分，半边偏竖，画竖图。小红书上下分，半边偏横，画横图。每个朝向前后各一张。
+        expect(requests.map((request) => [request.orientation, request.index])).toEqual([
+            ['portrait', 0],
+            ['portrait', 1],
+            ['landscape', 0],
+            ['landscape', 1],
+        ]);
+        expect(requests[0]?.reference).toBeUndefined();
+        expect(requests.every((request) => request.halves === true)).toBe(true);
+        expect(requests[1]?.reference).toBe(await paintScene.mock.results[0]?.value);
+        expect(requests[3]?.reference).toBe(await paintScene.mock.results[2]?.value);
+        const out = stdout.chunks.join('');
+        expect(out).toContain('Template: before-after');
+        expect(out).toContain(
+            'Privacy: the scene descriptions and the before picture went to gemini with your API key.',
         );
     });
 
@@ -1297,7 +1348,19 @@ describe('BeastCover CLI', () => {
             ],
             [
                 ['--scene', 'x', '--template', 'versus'],
-                '--scene paints the picture for --template scene-title, mood, face-stakes. versus needs real photos.',
+                '--scene paints the picture for --template face-stakes, before-after, scene-title, mood. versus needs real photos.',
+            ],
+            [
+                ['--scene', 'x', '--template', 'before-after'],
+                '--template before-after paints two scenes: --scene "<before>" --scene "<after>". It got 1.',
+            ],
+            [
+                ['--scene', 'x', '--scene', 'y', '--template', 'mood'],
+                '--template mood paints one --scene. It got 2.',
+            ],
+            [
+                ['--scene', 'a messy desk', '--scene', 'the same desk, tidy'],
+                'before-after paints its two scenes with an image model key or an agent CLI, and this machine has neither. Pass two --photo images, set model.openai.apiKey or model.gemini.apiKey, or install codex or agy.',
             ],
             [
                 ['--scene', 'x', '--via', 'codex'],

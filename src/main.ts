@@ -51,6 +51,7 @@ import { parseLabels } from './genres/split.ts';
 import { newRunDir, tempCacheDir, tempRefsDir } from './paths.ts';
 import {
     FAMILY_NAMES,
+    type FamilyName,
     getPlatform,
     PLATFORM_NAMES,
     type PlatformName,
@@ -75,6 +76,7 @@ import {
     paintScene,
     parseScene,
     SCENE_DEGRADED,
+    type SceneOrientation,
     type ScenePainter,
     sceneOrientation,
 } from './scene/index.ts';
@@ -604,8 +606,91 @@ function photoLines(photos: readonly LoadedPhoto[]): string[] {
     ]);
 }
 
-// 能用 --scene 现画场景的类型：一张满版的场景照片。圈注要圈真实的主体，对比和拼图要真实的几张。
-const SCENE_GENRES: ReadonlySet<GenreName> = new Set(['scene-title', 'mood', 'face-stakes']);
+/** 自定义画布按宽高比归到最近的族，和分屏类型的换算一致 */
+function canvasFamily(canvas: { width: number; height: number }): FamilyName {
+    const ratio = canvas.width / canvas.height;
+    return ratio >= 2 ? 'ultrawide' : ratio >= 1 ? 'landscape' : 'portrait';
+}
+
+/**
+ * 按 --scene 现画场景照片，每个要用到的朝向画一套。前后对比画两张，第二张照着同朝向的第一张改。
+ * 画不了时单张场景退到配色渐变并说明，两张的前后对比直接报错：两块渐变对比不出任何东西。
+ */
+async function paintStoryScenes(input: {
+    runtime: CliRuntime;
+    painter: ScenePainter | undefined;
+    scenes: readonly string[];
+    render: EffectiveRender;
+    colors: { base: string; deep: string };
+    verbose: boolean;
+}): Promise<{ photos: GenrePhoto[]; lines: string[] }> {
+    const { runtime, painter, scenes, render } = input;
+    const halves = scenes.length === 2;
+    if (painter === undefined && halves) {
+        throw new Error(
+            'before-after paints its two scenes with an image model key or an agent CLI, and this machine has neither. Pass two --photo images, set model.openai.apiKey or model.gemini.apiKey, or install codex or agy.',
+        );
+    }
+    const families =
+        render.canvas === undefined
+            ? [...new Set(render.presets.map((name) => getPlatform(name).family))]
+            : [canvasFamily(render.canvas)];
+    const orientations = [...new Set(families.map((family) => sceneOrientation(family, halves)))];
+    const runDir = newRunDir();
+    const lines: string[] = [];
+    const painted: { orientation: SceneOrientation; photos: GenrePhoto[] }[] = [];
+    for (const orientation of orientations) {
+        const photos: GenrePhoto[] = [];
+        for (const [index, scene] of scenes.entries()) {
+            const reference = index === 0 ? undefined : photos[0]?.path;
+            const path =
+                painter === undefined
+                    ? await gradientScene(input.colors, orientation, runDir)
+                    : await runtime.paintScene(
+                          painter,
+                          {
+                              scene,
+                              orientation,
+                              runDir,
+                              index,
+                              halves,
+                              ...(reference === undefined ? {} : { reference }),
+                          },
+                          { verbose: input.verbose, backendOutput: runtime.stderr },
+                      );
+            // 渐变底没有主体，不去找，质检也就不会拿一块渐变当主体去核对。
+            photos.push({
+                path,
+                ...(await imageSize(path)),
+                ...(painter === undefined ? {} : { focus: await runtime.photoFocus(path) }),
+            });
+            if (painter !== undefined) {
+                lines.push(`Scene: painted by ${painterLabel(painter)}, saved at ${path}`);
+            }
+        }
+        painted.push({ orientation, photos });
+    }
+    if (painter === undefined) {
+        lines.push(SCENE_DEGRADED);
+    }
+    const photos = scenes.map((_, index): GenrePhoto => {
+        const byFamily = Object.fromEntries(
+            FAMILY_NAMES.flatMap((family) => {
+                const match = painted.find(
+                    (entry) => entry.orientation === sceneOrientation(family, halves),
+                );
+                const photo = match?.photos[index];
+                return photo === undefined ? [] : [[family, photo]];
+            }),
+        );
+        const primary = painted[0]?.photos[index];
+        if (primary === undefined) {
+            throw new Error('No scene was painted.');
+        }
+        return { ...primary, byFamily };
+    });
+    return { photos, lines };
+}
 
 // 只有一张满版照片的类型：照片放大和主体被裁的提醒按整张画布算。
 const FULL_BLEED: ReadonlySet<GenreName> = new Set([
@@ -658,7 +743,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         )
         .option(
             '--scene <description>',
-            'scene-title, mood, face-stakes with no --photo: the picture to paint with your image model key or agent CLI',
+            'Paint the picture instead of --photo, with your image model key or agent CLI: once for scene-title, mood, face-stakes, twice for before-after (before, then after)',
+            collectRefs,
+            [],
         )
         .option('--via <painter>', `Who paints --scene: ${PAINTERS.join(', ')}`)
         .option('--template <name>', `Cover type: ${GENRE_NAMES.join(', ')}`)
@@ -694,7 +781,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     guides?: boolean;
                     via?: string;
                     photo?: string[];
-                    scene?: string;
+                    scene?: string[];
                     subject?: string;
                     template?: string;
                     scheme?: string;
@@ -711,7 +798,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 const fileConfig = loadConfigFile(runtime.configPath);
                 const effective = resolveEffectiveConfig(fileConfig, flags);
                 const guides = Boolean(options.guides);
-                if (options.via !== undefined && options.scene === undefined) {
+                const scenes = (options.scene ?? []).map(parseScene);
+                if (options.via !== undefined && scenes.length === 0) {
                     throw new Error('--via names who paints --scene. Add --scene or drop --via.');
                 }
                 const via =
@@ -722,22 +810,30 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 if (photoValues.some((value) => value === '')) {
                     throw new Error('--photo must not be empty.');
                 }
-                const scene = options.scene === undefined ? undefined : parseScene(options.scene);
-                if (scene !== undefined && photoValues.length > 0) {
+                if (scenes.length > 0 && photoValues.length > 0) {
                     throw new Error(
                         'Use --photo or --scene, not both. --scene paints the picture when there is no photo.',
                     );
                 }
-                // 现画的场景算一张照片。
-                const pictures = photoValues.length + (scene === undefined ? 0 : 1);
+                // 现画的场景一张算一张照片。
+                const pictures = photoValues.length + scenes.length;
                 const hasSubject = options.subject !== undefined;
                 const genre =
                     options.template === undefined
                         ? defaultGenre({ photos: pictures, subject: hasSubject })
                         : parseGenre(options.template);
-                if (scene !== undefined && !SCENE_GENRES.has(genre)) {
+                const wantedScenes = GENRES[genre].scenes;
+                if (scenes.length > 0 && wantedScenes === 0) {
+                    const painted = GENRE_NAMES.filter((name) => GENRES[name].scenes > 0);
                     throw new Error(
-                        `--scene paints the picture for --template ${[...SCENE_GENRES].join(', ')}. ${genre} needs real photos.`,
+                        `--scene paints the picture for --template ${painted.join(', ')}. ${genre} needs real photos.`,
+                    );
+                }
+                if (scenes.length > 0 && scenes.length !== wantedScenes) {
+                    throw new Error(
+                        wantedScenes === 2
+                            ? `--template ${genre} paints two scenes: --scene "<before>" --scene "<after>". It got ${scenes.length}.`
+                            : `--template ${genre} paints one --scene. It got ${scenes.length}.`,
                     );
                 }
                 const scheme: SchemeName | undefined =
@@ -778,75 +874,27 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 for (const value of photoValues) {
                     photos.push(await loadPhoto(runtime, value, stockRuntime));
                 }
-                // 故事画面：没给照片、给了 --scene，就按本机能力现画，画不了退到配色渐变并说明。
+                // 故事画面：没给照片、给了 --scene，就按本机能力现画。
                 const genrePhotos: GenrePhoto[] = photos.map((loaded) => loaded.photo);
                 const sceneLines: string[] = [];
                 let painter: ScenePainter | undefined;
-                if (scene !== undefined) {
+                if (scenes.length > 0) {
                     painter = findScenePainter({
                         ...(via === undefined ? {} : { via }),
                         ...(effective.model === undefined ? {} : { model: effective.model }),
                         lookup: runtime.lookupCommand,
                     });
-                    const canvas = effective.render.canvas;
-                    const orientations = [
-                        ...new Set(
-                            canvas === undefined
-                                ? effective.render.presets.map((name) =>
-                                      sceneOrientation(getPlatform(name).family),
-                                  )
-                                : [canvas.width >= canvas.height ? 'landscape' : 'portrait'],
-                        ),
-                    ] as ('landscape' | 'portrait')[];
-                    const runDir = newRunDir();
                     const colors = SCHEMES[scheme ?? 'navy'];
-                    const painted: { orientation: 'landscape' | 'portrait'; photo: GenrePhoto }[] =
-                        [];
-                    for (const orientation of orientations) {
-                        const path =
-                            painter === undefined
-                                ? await gradientScene(
-                                      { base: colors.base, deep: colors.baseDeep },
-                                      orientation,
-                                      runDir,
-                                  )
-                                : await runtime.paintScene(painter, scene, orientation, runDir, {
-                                      verbose: Boolean(options.verbose),
-                                      backendOutput: runtime.stderr,
-                                  });
-                        // 渐变底没有主体，不去找，质检也就不会拿一块渐变当主体去核对。
-                        painted.push({
-                            orientation,
-                            photo: {
-                                path,
-                                ...(await imageSize(path)),
-                                ...(painter === undefined
-                                    ? {}
-                                    : { focus: await runtime.photoFocus(path) }),
-                            },
-                        });
-                        if (painter !== undefined) {
-                            sceneLines.push(
-                                `Scene: painted by ${painterLabel(painter)}, saved at ${path}`,
-                            );
-                        }
-                    }
-                    if (painter === undefined) {
-                        sceneLines.push(SCENE_DEGRADED);
-                    }
-                    const byFamily = Object.fromEntries(
-                        FAMILY_NAMES.flatMap((family) => {
-                            const match = painted.find(
-                                (entry) => entry.orientation === sceneOrientation(family),
-                            );
-                            return match === undefined ? [] : [[family, match.photo]];
-                        }),
-                    );
-                    const primary = painted[0]?.photo;
-                    if (primary === undefined) {
-                        throw new Error('No scene was painted.');
-                    }
-                    genrePhotos.push({ ...primary, byFamily });
+                    const story = await paintStoryScenes({
+                        runtime,
+                        painter,
+                        scenes,
+                        render: effective.render,
+                        colors: { base: colors.base, deep: colors.baseDeep },
+                        verbose: Boolean(options.verbose),
+                    });
+                    genrePhotos.push(...story.photos);
+                    sceneLines.push(...story.lines);
                 }
                 const single = photos.length === 1 ? photos[0] : undefined;
                 if (genre === 'callout' && single !== undefined) {
@@ -912,9 +960,9 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         ...photoLines(photos),
                         ...sceneLines,
                         painter?.kind === 'model'
-                            ? `Privacy: the scene description went to ${painter.provider} with your API key. Render stayed on this machine.`
+                            ? `Privacy: the scene ${scenes.length === 1 ? 'description' : 'descriptions and the before picture'} went to ${painter.provider} with your API key. Render stayed on this machine.`
                             : painter?.kind === 'agent'
-                              ? `Privacy: the scene was painted by your own ${painter.provider} CLI. Render stayed on this machine.`
+                              ? `Privacy: the ${scenes.length === 1 ? 'scene was' : 'scenes were'} painted by your own ${painter.provider} CLI. Render stayed on this machine.`
                               : provider
                                 ? `Privacy: the ${photos.length === 1 ? 'photo was' : 'photos were'} downloaded from ${provider}. Render stayed on this machine.`
                                 : 'Privacy: render stayed on this machine.',

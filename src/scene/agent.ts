@@ -16,25 +16,39 @@ export const AGENT_TIMEOUT_MS = 300_000;
 
 const ENVELOPE_CLOSER = 'Generate the image file only, do not do anything else.';
 
-/** 交给 agent 的整句要求：用生图能力画一张、存到哪、画什么、多大 */
+/** 交给 agent 的整句要求：用生图能力画一张（或照着参考图改一张）、存到哪、画什么、多大 */
 export function sceneEnvelope(input: {
     prompt: string;
     generatedPath: string;
     width: number;
     height: number;
+    referencePath?: string;
 }): string {
     const size =
         input.height > input.width
             ? `Portrait ${input.width}x${input.height}`
             : `Landscape ${input.width}x${input.height}`;
-    return `Use your image generation capability to create one image and save it to ${input.generatedPath}. ${input.prompt} ${size}. ${ENVELOPE_CLOSER}`;
+    const task =
+        input.referencePath === undefined
+            ? 'create one image'
+            : `edit the reference image at ${input.referencePath} into one new image`;
+    return `Use your image generation capability to ${task} and save it to ${input.generatedPath}. ${input.prompt} ${size}. ${ENVELOPE_CLOSER}`;
 }
 
-/** codex 和 agy 的调用参数：提示词整句作为一个参数 */
-export function agentArgs(provider: AgentProvider, prompt: string): string[] {
-    return provider === 'codex'
-        ? ['exec', '--skip-git-repo-check', prompt]
-        : ['-p', prompt, '--dangerously-skip-permissions'];
+/**
+ * codex 和 agy 的调用参数：提示词整句作为一个参数。codex 的参考图挂 --image，放最后，
+ * 它能收好几张图，放在提示词前面会把提示词也当成图。agy 没有图片参数，路径已写在提示词里。
+ */
+export function agentArgs(
+    provider: AgentProvider,
+    prompt: string,
+    referencePath?: string,
+): string[] {
+    if (provider === 'codex') {
+        const args = ['exec', '--skip-git-repo-check', prompt];
+        return referencePath === undefined ? args : [...args, '--image', referencePath];
+    }
+    return ['-p', prompt, '--dangerously-skip-permissions'];
 }
 
 export interface AgentSpawnRequest {
@@ -49,6 +63,8 @@ export interface AgentPaintInput {
     commandPath: string;
     /** 完整的信封提示词（sceneEnvelope） */
     prompt: string;
+    /** 照着改的那张图，codex 挂成附图 */
+    referencePath?: string;
     /** agent 把图存到这里 */
     generatedPath: string;
     timeoutMs?: number;
@@ -223,7 +239,7 @@ export async function paintWithAgent(input: AgentPaintInput): Promise<void> {
     removeTarget(input.generatedPath);
     const request: AgentSpawnRequest = {
         command: input.commandPath,
-        args: agentArgs(input.provider, input.prompt),
+        args: agentArgs(input.provider, input.prompt, input.referencePath),
         stdin: 'ignore',
         timeoutMs,
     };
