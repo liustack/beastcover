@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.2 (2026-09-27)
+
+BeastCover now finishes and leaves. There is no workspace, no setup command, and nothing left behind in your project or your git.
+
+- **`gen` runs anywhere.** The cover lands in the directory you run from (or `--output`), `--style <name>` picks a catalog style per run with the fallback style otherwise, and the removed `new` and `project` commands fail pointing at `gen`. `project.json` and `history.jsonl` are gone.
+- **Intermediates stage in the system temp folder.** Downloaded photos with their license records, model originals, and the cutout cache go to `$TMPDIR/beastcover/`, each run in its own subdirectory so two runs from different directories can never crop each other's image. Every staged path is printed: the `Photo:` line names the download, agent and model print an `Original:` line per platform family, and the `Subject:` line names the cutout file. Copy what you want to keep; the system cleans the rest.
+- **Sandboxed agents can always run it.** Verified against the codex workspace-write sandbox and Claude Code: the working directory and the temp dir are writable in both, so the whole flow works with no permission grants. The compiled macOS cutout tool still prefers `~/.beastcover/bin` and falls back to the temp dir with a printed note that tells the agent how to ask for a persistent grant. The Swift source now ships inside the skill at `skills/beastcover/scripts/vision-tool.swift`.
+- **agent accepts off-size images.** agy sometimes returns a same-ratio smaller frame; it is now normalized to the generate plan and cropped, matching the model source, instead of being refused after the model already ran.
+- **Breakout-grade examples.** The examples folder is now a portfolio made by single commands: an expressive face on a loud poster, a lava photo with a numbered hook, a red-circle callout, a before-and-after of the product itself, and two agent paintings. `pnpm examples` regenerates the free-path covers as the visual regression baseline.
+
 ## 0.7.0 (2026-09-27)
 
 BeastCover is free by default: free stock photos plus local rendering. The two painted-cover paths are opt-ins you already pay for elsewhere, and this release renames one and adds the other.
