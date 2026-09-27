@@ -1,5 +1,6 @@
 import { type Browser, chromium, type Page } from 'playwright';
 import type { Rect } from '../platforms/index.ts';
+import type { FontProbe, FontScript } from './fonts.ts';
 
 export interface RenderPage {
     html: string;
@@ -23,7 +24,13 @@ export interface CoverRenderer {
     /** 在 [minPx, maxPx] 里找标题放得进 box 的最大整数字号，最小字号也放不下时抛错 */
     fitText(request: FitTextRequest): Promise<number>;
     screenshot(page: RenderPage): Promise<Buffer>;
+    /** 探测候选字体装没装、覆不覆盖这句标题、多粗，结果和截图用的是同一个 Chromium */
+    probeFonts(text: string, families: Record<FontScript, string[]>): Promise<FontProbeResult[]>;
     close(): Promise<void>;
+}
+
+export interface FontProbeResult extends FontProbe {
+    script: FontScript;
 }
 
 export class TextDoesNotFitError extends Error {}
@@ -135,8 +142,96 @@ export async function openRenderer(): Promise<CoverRenderer> {
             });
         },
 
+        async probeFonts(text, families) {
+            // 探测页要跑 canvas，只有这个上下文开 JS，照样拦所有网络请求。
+            const context = await browser.newContext({ javaScriptEnabled: true });
+            try {
+                await context.route(/^https?:\/\//, async (route) => {
+                    await route.abort('blockedbyclient');
+                });
+                const page = await context.newPage();
+                await page.setContent('<canvas id="c" width="160" height="160"></canvas>');
+                return await page.evaluate(probeFontsInPage, { text, families });
+            } finally {
+                await context.close();
+            }
+        },
+
         async close() {
             await browser.close();
         },
     };
+}
+
+/**
+ * 在页面里跑的探测函数（会被序列化进浏览器，不能引用外部变量）。
+ * 覆盖：同一个字用「候选, sans-serif」和「候选, serif」各画一次，候选有这个字时两次都用它，
+ * 画出来一样；没有时两次各自回退到不同的系统字体，画出来不一样。中文字宽都是 1em，
+ * 只比宽度分不出来，所以比像素。密度：900 字重下墨迹像素 ÷（字数 × 字号²）。
+ */
+function probeFontsInPage(input: {
+    text: string;
+    families: Record<'cjk' | 'latin', string[]>;
+}): Array<{
+    family: string;
+    script: 'cjk' | 'latin';
+    installed: boolean;
+    covers: boolean;
+    density: number;
+}> {
+    const canvas = document.getElementById('c') as HTMLCanvasElement;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+    const SIZE = 120;
+    const signature = (font: string, char: string): string => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.font = font;
+        ctx.fillStyle = '#000';
+        ctx.fillText(char, 10, 128);
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let hash = 0;
+        for (let i = 3; i < data.length; i += 4) {
+            hash = (hash * 31 + (data[i] ?? 0) * ((i >> 2) % 997)) >>> 0;
+        }
+        return String(hash);
+    };
+    const has = (family: string, char: string): boolean =>
+        signature(`64px "${family}", sans-serif`, char) ===
+        signature(`64px "${family}", serif`, char);
+    const density = (family: string, sample: string): number => {
+        const wide = document.createElement('canvas');
+        wide.width = SIZE * (Array.from(sample).length + 1);
+        wide.height = SIZE * 1.5;
+        const w = wide.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D;
+        w.font = `900 ${SIZE}px "${family}", sans-serif`;
+        w.fillStyle = '#000';
+        w.fillText(sample, 4, SIZE * 1.2);
+        const data = w.getImageData(0, 0, wide.width, wide.height).data;
+        let ink = 0;
+        for (let i = 3; i < data.length; i += 4) {
+            ink += (data[i] ?? 0) > 128 ? 1 : 0;
+        }
+        return ink / (Array.from(sample).length * SIZE * SIZE);
+    };
+    const chars = Array.from(new Set(Array.from(input.text)));
+    const han = chars.filter((c) => /\p{Script=Han}/u.test(c));
+    const latin = chars.filter((c) => /[\p{Script=Latin}\p{N}]/u.test(c));
+    const out = [];
+    for (const script of ['cjk', 'latin'] as const) {
+        const own = script === 'cjk' ? han : latin;
+        const probeChar = script === 'cjk' ? '永' : 'R';
+        // 密度用固定样本量：用标题自己的字量，西文小写天然墨少，会把粗体误判成不够粗。
+        const sample = script === 'cjk' ? '国永点面' : 'HOOK93';
+        for (const family of input.families[script]) {
+            const installed = has(family, probeChar);
+            const covers = installed && own.every((c) => has(family, c));
+            out.push({
+                family,
+                script,
+                installed,
+                covers: own.length === 0 ? installed : covers,
+                density: installed ? density(family, sample) : 0,
+            });
+        }
+    }
+    return out;
 }

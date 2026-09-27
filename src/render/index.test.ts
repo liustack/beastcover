@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { coverPalette, packFor } from '../styles/pack.ts';
+import { chooseFont, proberFrom } from './fonts.ts';
 import { type CoverRenderer, openRenderer, TextDoesNotFitError } from './index.ts';
 import { customLayout, type Headline } from './layout.ts';
 import { createRenderTemplate } from './template.ts';
@@ -175,5 +176,47 @@ describe('cover renderer', () => {
         const after = await shot(overridden);
 
         expect(after.equals(before)).toBe(false);
+    }, 30_000);
+});
+
+describe('font probe', () => {
+    let renderer: CoverRenderer;
+
+    beforeAll(async () => {
+        renderer = await openRenderer();
+    });
+
+    afterAll(async () => {
+        await renderer.close();
+    });
+
+    it('reports every candidate, finds no phantom fonts, and feeds the chooser', async () => {
+        const families = {
+            cjk: ['BeastCover Missing CJK', 'PingFang SC'],
+            latin: ['BeastCover Missing Latin', 'Arial'],
+        };
+        const results = await renderer.probeFonts('封面没人点 HOOK 3', families);
+        expect(results.map((r) => `${r.script}:${r.family}`).sort()).toEqual(
+            [
+                'cjk:BeastCover Missing CJK',
+                'cjk:PingFang SC',
+                'latin:Arial',
+                'latin:BeastCover Missing Latin',
+            ].sort(),
+        );
+        for (const missing of results.filter((r) => r.family.startsWith('BeastCover Missing'))) {
+            expect(missing, missing.family).toMatchObject({
+                installed: false,
+                covers: false,
+                density: 0,
+            });
+        }
+        if (process.platform === 'darwin') {
+            const pingfang = results.find((r) => r.family === 'PingFang SC');
+            expect(pingfang).toMatchObject({ installed: true, covers: true });
+            expect(pingfang?.density).toBeGreaterThan(0.3);
+        }
+        const choice = chooseFont('heavy', proberFrom(results));
+        expect(choice.stack.length).toBeGreaterThan(0);
     }, 30_000);
 });
