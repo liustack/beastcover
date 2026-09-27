@@ -113,14 +113,16 @@ const BEFORE_AFTER: Readonly<Record<FamilyName, SplitGeometry>> = {
     portrait: {
         split: 'rows',
         band: { x: 0, y: 820, width: 1080, height: 300 },
-        textArea: { x: 86, y: 850, width: 842, height: 240 },
+        textArea: { x: 86, y: 845, width: 842, height: 205 },
         panels: [
             { x: 0, y: 0, width: 1080, height: 820 },
             { x: 0, y: 1120, width: 1080, height: 800 },
         ],
+        // 箭头骑在标题带下沿，朝下指向「后」。
+        badge: { x: 540, y: 1120, size: 124 },
         labels: [
             { x: 86, y: 300, anchor: 'start' },
-            { x: 86, y: 1160, anchor: 'start' },
+            { x: 86, y: 1210, anchor: 'start' },
         ],
         labelPx: 64,
     },
@@ -177,6 +179,100 @@ function geometryFor(layout: CoverLayout, table: Record<FamilyName, SplitGeometr
             { ...geometry.labels[1], x: geometry.labels[1].x * sx, y: geometry.labels[1].y * sy },
         ],
         labelPx: Math.round(geometry.labelPx * s),
+    };
+}
+
+// 标签的字宽（em）：汉字和全角字一个字宽，其余按 0.62（窄粗体的数字和字母更窄，按宽的算），
+// 再加左右内边距 0.72em，描边和硬投影共 0.21em。高度按 1.6em 估（行高、内边距、描边、倾斜）。
+const CHIP_PAD_EM = 0.93;
+const CHIP_HEIGHT_EM = 1.6;
+const WIDE_CHAR =
+    /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u3000-\u303f\uff00-\uffef]/u;
+
+export function chipWidthEm(text: string): number {
+    return (
+        Array.from(text).reduce((sum, char) => sum + (WIDE_CHAR.test(char) ? 1 : 0.62), 0) +
+        CHIP_PAD_EM
+    );
+}
+
+/** 标签在这个字号下大约占的框：居中的以锚点为中，靠左的从锚点起 */
+function chipRect(anchor: ChipAnchor, text: string, fontPx: number): Rect {
+    const width = chipWidthEm(text) * fontPx;
+    return {
+        x: anchor.anchor === 'center' ? anchor.x - width / 2 : anchor.x,
+        y: anchor.y,
+        width,
+        height: CHIP_HEIGHT_EM * fontPx,
+    };
+}
+
+/**
+ * 两个标签用同一个字号：各自放进自己面板里平台看得见的那一截，躲开平台界面（抖音右侧按钮列），
+ * 取两者里小的，最大是版式给的字号。长标签缩小，不会互相压住或被裁掉。
+ */
+export function labelFontPx(
+    geometry: SplitGeometry,
+    layout: CoverLayout,
+    labels: readonly [string, string],
+): number {
+    const visible = layout.visibleArea ?? {
+        x: 0,
+        y: 0,
+        width: layout.width,
+        height: layout.height,
+    };
+    const covered = layout.coveredAreas ?? [];
+    const fits = geometry.labels.map((anchor, index) => {
+        const panel = geometry.panels[index] as Rect;
+        const top = anchor.y;
+        const bottom = anchor.y + CHIP_HEIGHT_EM * geometry.labelPx;
+        let left = Math.max(panel.x, visible.x);
+        let right = Math.min(panel.x + panel.width, visible.x + visible.width);
+        for (const rect of covered) {
+            if (rect.y >= bottom || rect.y + rect.height <= top) {
+                continue;
+            }
+            if (rect.x >= anchor.x) {
+                right = Math.min(right, rect.x);
+            } else if (rect.x + rect.width <= anchor.x) {
+                left = Math.max(left, rect.x + rect.width);
+            }
+        }
+        const room =
+            anchor.anchor === 'center'
+                ? 2 * Math.min(anchor.x - left, right - anchor.x)
+                : right - anchor.x;
+        // 留一成余量给倾斜和字形宽度的误差。
+        return (room * 0.9) / chipWidthEm(labels[index] as string);
+    });
+    return Math.floor(Math.min(geometry.labelPx, ...fits));
+}
+
+/** 测试用：每族的分屏几何和标签框 */
+export function splitLabelRects(
+    kind: 'versus' | 'before-after',
+    layout: CoverLayout,
+    labels: readonly [string, string],
+): { rects: Rect[]; panels: readonly Rect[]; badge?: Rect; fontPx: number } {
+    const geometry = geometryFor(layout, kind === 'versus' ? VERSUS : BEFORE_AFTER);
+    const fontPx = labelFontPx(geometry, layout, labels);
+    return {
+        rects: geometry.labels.map((anchor, index) =>
+            chipRect(anchor, labels[index] as string, fontPx),
+        ),
+        panels: geometry.panels,
+        ...(geometry.badge === undefined
+            ? {}
+            : {
+                  badge: {
+                      x: geometry.badge.x - geometry.badge.size / 2,
+                      y: geometry.badge.y - geometry.badge.size / 2,
+                      width: geometry.badge.size,
+                      height: geometry.badge.size,
+                  },
+              }),
+        fontPx,
     };
 }
 
@@ -364,11 +460,12 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
         ...layout,
         textArea: { ...geometryFor(layout, table).textArea },
     });
-    const labelLayer = (geometry: SplitGeometry): Layers => {
+    const labelLayer = (geometry: SplitGeometry, layout: CoverLayout): Layers => {
         if (request.labels === undefined) {
             return { css: '', html: '' };
         }
         const labels = request.labels;
+        const fontPx = labelFontPx(geometry, layout, labels);
         const specs = geometry.labels.map((anchor, index): ChipSpec => {
             const second = index === 1;
             return {
@@ -376,7 +473,7 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
                 x: anchor.x,
                 y: anchor.y,
                 anchor: anchor.anchor,
-                fontPx: geometry.labelPx,
+                fontPx,
                 background: kind === 'versus' || second ? scheme.type.accent : '#FFFFFF',
                 ink: scheme.type.accentInk ?? '#111111',
                 edge: '#111111',
@@ -405,7 +502,7 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
                 band,
             );
             over = joinLayers(
-                labelLayer(geometry),
+                labelLayer(geometry, layout),
                 badgeLayer(
                     geometry,
                     kind === 'versus' ? 'vs' : 'arrow',

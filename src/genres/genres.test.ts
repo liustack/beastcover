@@ -32,6 +32,7 @@ import {
     parseGenre,
 } from './index.ts';
 import { fontKit, type GenrePhoto } from './page.ts';
+import { splitLabelRects } from './split.ts';
 
 function inside(inner: Rect, outer: Rect): boolean {
     return (
@@ -197,6 +198,39 @@ describe('cover type geometry', () => {
                         }
                     }
                 }
+            }
+        }
+    });
+
+    it('shrinks the longest labels to fit their own panel, clear of the app UI and the headline', () => {
+        const longest: [string, string] = ['一二三四五六七八', '¥1,500,00'];
+        for (const kind of ['versus', 'before-after'] as const) {
+            for (const family of FAMILY_NAMES) {
+                const framed = framedLayout(family);
+                const template = templateFor(kind, ['/a.png', '/b.png']);
+                const layout = { ...(template.layoutFor?.(framed) ?? framed) };
+                const { rects, panels, badge } = splitLabelRects(kind, layout, longest);
+                expect(badge, `${kind} ${family} has a seam badge`).toBeDefined();
+                expect(overlaps(badge as Rect, layout.textArea), `${kind} ${family} badge`).toBe(
+                    false,
+                );
+                const visible = layout.visibleArea as Rect;
+                rects.forEach((rect, index) => {
+                    const panel = panels[index] as Rect;
+                    const where = `${kind} ${family} label ${index}`;
+                    expect(rect.x, where).toBeGreaterThanOrEqual(Math.max(panel.x, visible.x));
+                    expect(rect.x + rect.width, where).toBeLessThanOrEqual(
+                        Math.min(panel.x + panel.width, visible.x + visible.width),
+                    );
+                    expect(overlaps(rect, layout.textArea), where).toBe(false);
+                    expect(overlaps(rect, badge as Rect), where).toBe(false);
+                    for (const covered of layout.coveredAreas ?? []) {
+                        expect(overlaps(rect, covered), where).toBe(false);
+                    }
+                });
+                expect(overlaps(rects[0] as Rect, rects[1] as Rect), `${kind} ${family}`).toBe(
+                    false,
+                );
             }
         }
     });
