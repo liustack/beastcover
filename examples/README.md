@@ -105,6 +105,18 @@ beastcover gen "慢一点的早晨" --template mood --photo openverse:278488ee-c
 
 <img src="mood-xiaohongshu.jpg" width="203">
 
+## Lettering styles
+
+The type decides the idea and the layout; `--style` decides how the words look. Variety-show 花字 on a Bilibili face cover, a magazine serif on a WeChat header, and a phone notes screen on Xiaohongshu:
+
+```bash
+beastcover gen "我看*傻*了" --subject your-photo.jpg --style variety --preset bilibili
+beastcover gen "慢慢来，*比较快*" --template big-type --style editorial --preset wechat
+beastcover gen "租房*避坑* 清单" --template big-type --style memo --tag 干货 --preset xiaohongshu
+```
+
+<img src="style-variety-bilibili.png" width="360"> <img src="style-editorial-wechat.png" width="420"> <img src="style-memo-xiaohongshu.png" width="203">
+
 ## Credits
 
 Photos via [Openverse](https://openverse.org), all CC0: [lava and helicopter](https://www.flickr.com/photos/27784370@N05/16285896735) by U.S. Geological Survey, [sailboat](https://stocksnap.io/photo/sailing-boat-6HIAAM72PR) by JJ Skys the Limit, [airplane](https://stocksnap.io/photo/airplane-sky-YNUT4JAZ0V) by Matt Bango, [ramen](https://www.rawpixel.com/image/5925771/photo-image-public-domain-food-free) via rawpixel, [ramen with egg](https://stocksnap.io/photo/ramen-noodles-KKMQPWQK6H) by Foodie Girl, [tsukemen](https://commons.wikimedia.org/w/index.php?curid=39923890) by Douglas Perkins, [night market](https://www.flickr.com/photos/101561334@N08/9870511026) by Gary Lee Todd, [coffee](https://www.flickr.com/photos/132795455@N08/17625638243) via Image Catalog. The demo face is AI-generated. No real person appears in these covers. The volcano scene and the two desks were painted by codex for these examples.

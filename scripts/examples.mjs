@@ -85,6 +85,10 @@ gen(['*出海*第一天', '--template', 'scene-title', '--photo', PHOTOS.sailboa
 gen(['这是什么？', '--template', 'callout', '--photo', PHOTOS.plane, '--preset', 'youtube', '--output', out('callout-youtube.png')]);
 gen(['一周吃了*7碗*面', '--template', 'collage', '--photo', PHOTOS.ramen, '--photo', PHOTOS.tsukemen, '--photo', PHOTOS.streetFood, '--photo', PHOTOS.ramenFancy, '--preset', 'xiaohongshu', '--output', out('collage-xiaohongshu.png')]);
 gen(['慢一点的早晨', '--template', 'mood', '--photo', PHOTOS.coffee, '--preset', 'xiaohongshu', '--output', out('mood-xiaohongshu.png')]);
+// 字的风格：同一套类型，字换个样子。圆体和书法要本机装了对应的中文字体，不在这里。
+gen(['我看*傻*了', '--subject', face, '--style', 'variety', '--preset', 'bilibili', '--output', out('style-variety-bilibili.png')], { optional: true });
+gen(['慢慢来，*比较快*', '--template', 'big-type', '--style', 'editorial', '--preset', 'wechat', '--output', out('style-editorial-wechat.png')]);
+gen(['租房*避坑* 清单', '--template', 'big-type', '--style', 'memo', '--tag', '干货', '--preset', 'xiaohongshu', '--output', out('style-memo-xiaohongshu.png')]);
 jpegs.push(
     'versus-youtube',
     'before-after-xiaohongshu',
