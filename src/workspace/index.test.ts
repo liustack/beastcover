@@ -305,7 +305,7 @@ describe('history paths', () => {
             },
             text: 'A figure on a shore',
             output: join(workspaceDir, 'out', 'beastcover.png'),
-            source: 'local-model' as const,
+            source: 'agent' as const,
             via: 'codex' as const,
         };
 

@@ -1,18 +1,18 @@
 import { renameSync, writeFileSync } from 'node:fs';
 import sharp from 'sharp';
-import type { LocalModelCanvasPlan } from './canvas.ts';
+import type { AgentCanvasPlan } from './canvas.ts';
 
-async function assertGenerateSize(sourcePath: string, plan: LocalModelCanvasPlan): Promise<void> {
+async function assertGenerateSize(sourcePath: string, plan: AgentCanvasPlan): Promise<void> {
     const image = sharp(sourcePath, { failOn: 'error' });
     const meta = await image.metadata();
     if (meta.width === undefined || meta.height === undefined) {
         throw new Error(
-            `local-model image size is missing, expected ${plan.generateWidth}x${plan.generateHeight}.`,
+            `agent image size is missing, expected ${plan.generateWidth}x${plan.generateHeight}.`,
         );
     }
     if (meta.width !== plan.generateWidth || meta.height !== plan.generateHeight) {
         throw new Error(
-            `local-model image is ${meta.width}x${meta.height}, expected ${plan.generateWidth}x${plan.generateHeight}.`,
+            `agent image is ${meta.width}x${meta.height}, expected ${plan.generateWidth}x${plan.generateHeight}.`,
         );
     }
 }
@@ -27,10 +27,7 @@ function writeFinishedPng(outputPath: string, bytes: Buffer, sourcePath: string)
     writeFileSync(outputPath, bytes);
 }
 
-export async function cropLocalModelImage(
-    sourcePath: string,
-    plan: LocalModelCanvasPlan,
-): Promise<Buffer> {
+export async function cropAgentImage(sourcePath: string, plan: AgentCanvasPlan): Promise<Buffer> {
     await assertGenerateSize(sourcePath, plan);
     return sharp(sourcePath)
         .extract({
@@ -43,10 +40,7 @@ export async function cropLocalModelImage(
         .toBuffer();
 }
 
-export async function resizeLocalModelImage(
-    cropped: Buffer,
-    plan: LocalModelCanvasPlan,
-): Promise<Buffer> {
+export async function resizeAgentImage(cropped: Buffer, plan: AgentCanvasPlan): Promise<Buffer> {
     // 裁切框取整后和成品比例差不到一个像素，resize 用 fill 拉满。
     return sharp(cropped)
         .resize(plan.outputWidth, plan.outputHeight, { fit: 'fill' })
@@ -54,18 +48,18 @@ export async function resizeLocalModelImage(
         .toBuffer();
 }
 
-export async function finishLocalModelImage(input: {
+export async function finishAgentImage(input: {
     sourcePath: string;
     outputPath: string;
-    plan: LocalModelCanvasPlan;
+    plan: AgentCanvasPlan;
 }): Promise<{
     cropWidth: number;
     cropHeight: number;
     outputWidth: number;
     outputHeight: number;
 }> {
-    const cropped = await cropLocalModelImage(input.sourcePath, input.plan);
-    const finished = await resizeLocalModelImage(cropped, input.plan);
+    const cropped = await cropAgentImage(input.sourcePath, input.plan);
+    const finished = await resizeAgentImage(cropped, input.plan);
     writeFinishedPng(input.outputPath, finished, input.sourcePath);
 
     return {

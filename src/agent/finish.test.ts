@@ -5,11 +5,11 @@ import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PLATFORM_NAMES } from '../platforms/index.ts';
 import {
-    cropLocalModelImage,
-    finishLocalModelImage,
-    getLocalModelCanvasPlan,
-    type LocalModelCanvasPlan,
-    resizeLocalModelImage,
+    type AgentCanvasPlan,
+    cropAgentImage,
+    finishAgentImage,
+    getAgentCanvasPlan,
+    resizeAgentImage,
 } from './index.ts';
 
 const tempDirectories: string[] = [];
@@ -27,7 +27,7 @@ function tempDir(prefix: string): string {
     return directory;
 }
 
-async function writeBandedPng(path: string, plan: LocalModelCanvasPlan): Promise<void> {
+async function writeBandedPng(path: string, plan: AgentCanvasPlan): Promise<void> {
     const width = plan.generateWidth;
     const height = plan.generateHeight;
     const topHeight = plan.cropTop;
@@ -62,7 +62,7 @@ async function writeBandedPng(path: string, plan: LocalModelCanvasPlan): Promise
     await sharp(raw, { raw: { width, height, channels } }).png().toFile(path);
 }
 
-async function extractCropped(sourcePath: string, plan: LocalModelCanvasPlan): Promise<Buffer> {
+async function extractCropped(sourcePath: string, plan: AgentCanvasPlan): Promise<Buffer> {
     return sharp(sourcePath)
         .extract({
             left: plan.cropLeft,
@@ -85,21 +85,21 @@ async function assertSolidGreen(source: string | Buffer): Promise<void> {
     expect(data.length).toBeGreaterThan(0);
 }
 
-describe('local-model finish', () => {
+describe('agent finish', () => {
     for (const preset of PLATFORM_NAMES) {
         it(`crops ${preset} to the centre box then resizes to production pixels`, async () => {
-            const plan = getLocalModelCanvasPlan(preset);
+            const plan = getAgentCanvasPlan(preset);
             const sourcePath = join(tempDir('beastcover-finish-crop-'), 'source.png');
             await writeBandedPng(sourcePath, plan);
 
-            const cropped = await cropLocalModelImage(sourcePath, plan);
+            const cropped = await cropAgentImage(sourcePath, plan);
             const cropMeta = await sharp(cropped).metadata();
             expect(cropMeta.width).toBe(plan.cropWidth);
             expect(cropMeta.height).toBe(plan.cropHeight);
             await assertSolidGreen(cropped);
 
             const extracted = await extractCropped(sourcePath, plan);
-            const resized = await resizeLocalModelImage(extracted, plan);
+            const resized = await resizeAgentImage(extracted, plan);
             const resizeMeta = await sharp(resized).metadata();
             expect(resizeMeta.width).toBe(plan.outputWidth);
             expect(resizeMeta.height).toBe(plan.outputHeight);
@@ -107,13 +107,13 @@ describe('local-model finish', () => {
         });
 
         it(`finish ${preset} writes production pixels`, async () => {
-            const plan = getLocalModelCanvasPlan(preset);
+            const plan = getAgentCanvasPlan(preset);
             const directory = tempDir('beastcover-finish-out-');
             const sourcePath = join(directory, 'source.png');
             const outputPath = join(directory, 'out.png');
             await writeBandedPng(sourcePath, plan);
 
-            const result = await finishLocalModelImage({ sourcePath, outputPath, plan });
+            const result = await finishAgentImage({ sourcePath, outputPath, plan });
             expect(result).toEqual({
                 cropWidth: plan.cropWidth,
                 cropHeight: plan.cropHeight,
@@ -128,7 +128,7 @@ describe('local-model finish', () => {
     }
 
     it('rejects a source whose pixels are not the generate size', async () => {
-        const plan = getLocalModelCanvasPlan('youtube');
+        const plan = getAgentCanvasPlan('youtube');
         const directory = tempDir('beastcover-finish-size-');
         const sourcePath = join(directory, 'wrong.png');
         await sharp({
@@ -144,7 +144,7 @@ describe('local-model finish', () => {
 
         let cropThrown: unknown;
         try {
-            await cropLocalModelImage(sourcePath, plan);
+            await cropAgentImage(sourcePath, plan);
         } catch (error) {
             cropThrown = error;
         }
@@ -154,7 +154,7 @@ describe('local-model finish', () => {
 
         let finishThrown: unknown;
         try {
-            await finishLocalModelImage({
+            await finishAgentImage({
                 sourcePath,
                 outputPath: join(directory, 'out.png'),
                 plan,
@@ -169,13 +169,13 @@ describe('local-model finish', () => {
     });
 
     it('rejects a source that is not an image', async () => {
-        const plan = getLocalModelCanvasPlan('youtube');
+        const plan = getAgentCanvasPlan('youtube');
         const directory = tempDir('beastcover-finish-not-image-');
         const sourcePath = join(directory, 'not-image.bin');
         writeFileSync(sourcePath, 'not-an-image');
         let thrown: unknown;
         try {
-            await finishLocalModelImage({
+            await finishAgentImage({
                 sourcePath,
                 outputPath: join(directory, 'out.png'),
                 plan,

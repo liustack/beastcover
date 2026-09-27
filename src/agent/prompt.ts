@@ -1,7 +1,7 @@
-import type { LocalModelProvider } from '../config.ts';
+import type { AgentProvider } from '../config.ts';
 import type { FamilyName } from '../platforms/index.ts';
 import type { PaletteSlotValue, StyleDefinition } from '../styles/schema.ts';
-import { getLocalModelGeneratePlan } from './canvas.ts';
+import { getAgentGeneratePlan } from './canvas.ts';
 
 const ENVELOPE_CLOSER = 'Generate the image file only, do not do anything else.';
 
@@ -86,12 +86,12 @@ export function buildEnvelopePrompt(input: {
     /** 模型把原图存到这里，之后再按族内各平台裁切 */
     generatedPath: string;
     family: FamilyName;
-    provider: LocalModelProvider;
+    provider: AgentProvider;
     referencePaths?: string[];
     /** 二创：restyle 按画风重绘参考图 1，place 把参考图 1 的人放进参考图 2 的场景 */
     remix?: RemixMode;
 }): string {
-    const plan = getLocalModelGeneratePlan(input.family);
+    const plan = getAgentGeneratePlan(input.family);
     const body = stylePromptWithPalette(input.style, input.mergedPalette);
     const size = formatSizePhrase(plan.generateWidth, plan.generateHeight);
     const remix = input.remix === undefined ? '' : `。${REMIX_INSTRUCTIONS[input.remix]}`;
@@ -104,7 +104,7 @@ export function buildEnvelopePrompt(input: {
         `${body}. ${subjectLine}. ${size}. ${ENVELOPE_CLOSER}`;
 
     if (
-        (input.provider === 'grok' || input.provider === 'claude') &&
+        input.provider === 'agy' &&
         input.referencePaths !== undefined &&
         input.referencePaths.length > 0
     ) {

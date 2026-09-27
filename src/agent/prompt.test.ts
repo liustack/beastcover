@@ -45,7 +45,7 @@ function colorParagraphs(text: string): string[] {
     return text.split('\n\n').filter((paragraph) => paragraph.trim().startsWith('配色'));
 }
 
-describe('local-model prompt assembly', () => {
+describe('agent prompt assembly', () => {
     it('keeps two segments: unchanged style prompt then 主体 when palette prompts match the catalog', () => {
         const cwd = tempDir('beastcover-prompt-default-');
         const created = createWorkspace(cwd, {
@@ -186,32 +186,30 @@ describe('local-model prompt assembly', () => {
         }
     });
 
-    it('appends grok and claude reference paths after the envelope closer, not inside it', () => {
+    it('appends agy reference paths after the envelope closer, not inside it', () => {
         const style = loadStyle('risograph_editorial');
         const outputPath = '/tmp/beastcover-out.png';
         const refs = ['/tmp/cover-ref-a.png', '/tmp/cover-ref-b.jpg'];
         const closer = 'Generate the image file only, do not do anything else.';
         const merged = paletteFromStyle(style);
 
-        for (const provider of ['grok', 'claude'] as const) {
-            const envelope = buildEnvelopePrompt({
-                style,
-                subject: '一只背对的人',
-                mergedPalette: merged,
-                generatedPath: outputPath,
-                family: 'landscape',
-                provider,
-                referencePaths: refs,
-            });
-            const closerIndex = envelope.indexOf(closer);
-            expect(closerIndex).toBeGreaterThan(-1);
-            const before = envelope.slice(0, closerIndex);
-            const after = envelope.slice(closerIndex + closer.length);
-            expect(before).not.toContain(refs[0]);
-            expect(before).not.toContain(refs[1]);
-            expect(after).toContain(refs[0]);
-            expect(after).toContain(refs[1]);
-        }
+        const envelope = buildEnvelopePrompt({
+            style,
+            subject: '一只背对的人',
+            mergedPalette: merged,
+            generatedPath: outputPath,
+            family: 'landscape',
+            provider: 'agy',
+            referencePaths: refs,
+        });
+        const closerIndex = envelope.indexOf(closer);
+        expect(closerIndex).toBeGreaterThan(-1);
+        const before = envelope.slice(0, closerIndex);
+        const after = envelope.slice(closerIndex + closer.length);
+        expect(before).not.toContain(refs[0]);
+        expect(before).not.toContain(refs[1]);
+        expect(after).toContain(refs[0]);
+        expect(after).toContain(refs[1]);
     });
 
     it('does not append codex reference paths inside the envelope prompt', () => {

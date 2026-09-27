@@ -1,7 +1,7 @@
 import { type FamilyName, getPlatform, type PlatformName } from '../platforms/index.ts';
 
 /** 一族只让模型生成一次：原生尺寸和构图提示按族定，族内各平台再各自裁切 */
-export interface LocalModelGeneratePlan {
+export interface AgentGeneratePlan {
     family: FamilyName;
     generateWidth: number;
     generateHeight: number;
@@ -9,7 +9,7 @@ export interface LocalModelGeneratePlan {
     subjectSuffix?: string;
 }
 
-export interface LocalModelCanvasPlan {
+export interface AgentCanvasPlan {
     preset: PlatformName;
     family: FamilyName;
     generateWidth: number;
@@ -23,7 +23,7 @@ export interface LocalModelCanvasPlan {
 }
 
 // 生成尺寸只用模型原生的 1536x1024 与 1024x1536，再从正中裁出各平台的比例。
-const LOCAL_MODEL_GENERATE_PLANS: Record<FamilyName, LocalModelGeneratePlan> = {
+const AGENT_GENERATE_PLANS: Record<FamilyName, AgentGeneratePlan> = {
     landscape: { family: 'landscape', generateWidth: 1536, generateHeight: 1024 },
     // X 裁掉上下各五分之一，公众号再裁掉左右各一窄条。
     ultrawide: {
@@ -65,7 +65,7 @@ const PORTRAIT_9X16 = {
     outputHeight: 1920,
 } as const;
 
-const LOCAL_MODEL_CANVAS_PLANS: Record<PlatformName, LocalModelCanvasPlan> = {
+const AGENT_CANVAS_PLANS: Record<PlatformName, AgentCanvasPlan> = {
     youtube: {
         preset: 'youtube',
         ...LANDSCAPE,
@@ -133,11 +133,11 @@ const LOCAL_MODEL_CANVAS_PLANS: Record<PlatformName, LocalModelCanvasPlan> = {
     },
 };
 
-export function getLocalModelCanvasPlan(preset: PlatformName): LocalModelCanvasPlan {
+export function getAgentCanvasPlan(preset: PlatformName): AgentCanvasPlan {
     getPlatform(preset);
-    return { ...LOCAL_MODEL_CANVAS_PLANS[preset] };
+    return { ...AGENT_CANVAS_PLANS[preset] };
 }
 
-export function getLocalModelGeneratePlan(family: FamilyName): LocalModelGeneratePlan {
-    return { ...LOCAL_MODEL_GENERATE_PLANS[family] };
+export function getAgentGeneratePlan(family: FamilyName): AgentGeneratePlan {
+    return { ...AGENT_GENERATE_PLANS[family] };
 }

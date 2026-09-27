@@ -1,6 +1,6 @@
 import { type Stats, statSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
-import { CONFIG_PATH, LOCAL_MODEL_PROVIDERS, type LocalModelProvider } from './config.ts';
+import { AGENT_PROVIDERS, type AgentProvider, CONFIG_PATH } from './config.ts';
 import { launchChromium } from './render/index.ts';
 import { visionCutoutUnavailable } from './subject/vision.ts';
 
@@ -9,7 +9,7 @@ const MINIMUM_NODE_VERSION = { major: 22, minor: 19, patch: 0 } as const;
 export type DoctorStatus = 'ok' | 'warn' | 'error';
 
 export interface DoctorCheck {
-    id: 'node' | 'chromium' | 'config-permissions' | 'cutout' | LocalModelProvider;
+    id: 'node' | 'chromium' | 'config-permissions' | 'cutout' | AgentProvider;
     label: string;
     status: DoctorStatus;
     message: string;
@@ -167,8 +167,8 @@ export function lookupCommandOnPath(
     return undefined;
 }
 
-function localModelCliCheck(
-    name: LocalModelProvider,
+function agentCliCheck(
+    name: AgentProvider,
     lookup: (commandName: string) => string | undefined,
 ): DoctorCheck {
     const found = lookup(name);
@@ -225,7 +225,7 @@ export async function runDoctor(options: DoctorOptions = {}): Promise<DoctorRepo
         await chromiumCheck(options.launchChromium ?? launchChromium),
         configPermissionsCheck(options.configPath ?? CONFIG_PATH, platform),
         cutoutCheck(platform, options.osRelease, options.configPath ?? CONFIG_PATH, lookup),
-        ...LOCAL_MODEL_PROVIDERS.map((name) => localModelCliCheck(name, lookup)),
+        ...AGENT_PROVIDERS.map((name) => agentCliCheck(name, lookup)),
     ];
 
     return {

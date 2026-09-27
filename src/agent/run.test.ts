@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-    LOCAL_MODEL_TIMEOUT_MS,
-    type LocalModelSpawnRequest,
-    runLocalModel,
+    AGENT_TIMEOUT_MS,
+    type AgentSpawnRequest,
+    runAgent,
     spawnCapturedProcess,
 } from './index.ts';
 
@@ -36,22 +36,22 @@ function baseInput(outputPath: string) {
     };
 }
 
-describe('local-model run', () => {
+describe('agent run', () => {
     it('exports a 5-minute default timeout', () => {
-        expect(LOCAL_MODEL_TIMEOUT_MS).toBe(300_000);
+        expect(AGENT_TIMEOUT_MS).toBe(300_000);
     });
 
     it('removes the target file before spawn so a stale PNG cannot count as success', async () => {
         const outputPath = join(tempDir('beastcover-run-stale-'), 'stale.png');
         writeFileSync(outputPath, Buffer.concat([PNG_MAGIC, Buffer.from('stale')]));
         let goneWhenSpawned = false;
-        const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
+        const spawn = vi.fn(async (_request: AgentSpawnRequest) => {
             goneWhenSpawned = !existsSync(outputPath);
         });
 
         let thrown: unknown;
         try {
-            await runLocalModel({
+            await runAgent({
                 ...baseInput(outputPath),
                 spawn,
             });
@@ -65,7 +65,7 @@ describe('local-model run', () => {
         expect(thrown).toBeInstanceOf(Error);
         const message = thrown instanceof Error ? thrown.message : String(thrown);
         expect(message).toMatch(/missing|not found|does not exist|invalid|empty/i);
-        expect(message).toMatch(/local-model|codex/);
+        expect(message).toMatch(/agent|codex/);
     });
 
     it('rejects missing, empty, and non-image output', async () => {
@@ -74,21 +74,21 @@ describe('local-model run', () => {
         const emptyPath = join(directory, 'empty.png');
         const randomPath = join(directory, 'random.png');
 
-        const missingError = await runLocalModel({
+        const missingError = await runAgent({
             ...baseInput(missingPath),
-            spawn: vi.fn(async (_request: LocalModelSpawnRequest) => undefined),
+            spawn: vi.fn(async (_request: AgentSpawnRequest) => undefined),
         }).then(
             () => undefined,
             (error: unknown) => error,
         );
         expect(missingError).toBeInstanceOf(Error);
         expect((missingError as Error).message).toMatch(/missing|not found|does not exist/i);
-        expect((missingError as Error).message).toMatch(/local-model|codex/);
+        expect((missingError as Error).message).toMatch(/agent|codex/);
 
-        const emptySpawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
+        const emptySpawn = vi.fn(async (_request: AgentSpawnRequest) => {
             writeFileSync(emptyPath, Buffer.alloc(0));
         });
-        const emptyError = await runLocalModel({
+        const emptyError = await runAgent({
             ...baseInput(emptyPath),
             spawn: emptySpawn,
         }).then(
@@ -97,12 +97,12 @@ describe('local-model run', () => {
         );
         expect(emptyError).toBeInstanceOf(Error);
         expect((emptyError as Error).message).toMatch(/empty/i);
-        expect((emptyError as Error).message).toMatch(/local-model|codex/);
+        expect((emptyError as Error).message).toMatch(/agent|codex/);
 
-        const randomSpawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
+        const randomSpawn = vi.fn(async (_request: AgentSpawnRequest) => {
             writeFileSync(randomPath, 'not-an-image');
         });
-        const randomError = await runLocalModel({
+        const randomError = await runAgent({
             ...baseInput(randomPath),
             spawn: randomSpawn,
         }).then(
@@ -111,16 +111,16 @@ describe('local-model run', () => {
         );
         expect(randomError).toBeInstanceOf(Error);
         expect((randomError as Error).message).toMatch(/invalid/i);
-        expect((randomError as Error).message).toMatch(/local-model|codex/);
+        expect((randomError as Error).message).toMatch(/agent|codex/);
     });
 
-    it('rejects a hung local-model spawn after the injected timeout', async () => {
+    it('rejects a hung agent spawn after the injected timeout', async () => {
         const outputPath = join(tempDir('beastcover-run-timeout-'), 'out.png');
-        const spawn = vi.fn((_request: LocalModelSpawnRequest) => new Promise<void>(() => {}));
+        const spawn = vi.fn((_request: AgentSpawnRequest) => new Promise<void>(() => {}));
 
         let thrown: unknown;
         try {
-            await runLocalModel({
+            await runAgent({
                 ...baseInput(outputPath),
                 timeoutMs: 50,
                 spawn,
@@ -130,7 +130,7 @@ describe('local-model run', () => {
         }
         expect(thrown).toBeInstanceOf(Error);
         const message = thrown instanceof Error ? thrown.message : String(thrown);
-        expect(message).toContain('local-model');
+        expect(message).toContain('agent');
         expect(message).toContain('codex');
         expect(message).toContain('50');
     }, 3000);
@@ -193,12 +193,12 @@ describe('spawnCapturedProcess', () => {
         expect(chunks.join('')).toContain('BACKEND_NOISE');
         expect(thrown).toBeInstanceOf(Error);
         expect(thrown instanceof Error ? thrown.message : String(thrown)).toBe(
-            'local-model via codex exited with code 2.',
+            'agent via codex exited with code 2.',
         );
     });
 });
 
-describe('local-model finish after verify', () => {
+describe('agent finish after verify', () => {
     async function generate(outputPath: string, width: number, height: number, jpeg = false) {
         const image = sharp({
             create: { width, height, channels: 3, background: { r: 0, g: 255, b: 0 } },
@@ -208,11 +208,11 @@ describe('local-model finish after verify', () => {
 
     it('crops and resizes a verified PNG in place to youtube production pixels', async () => {
         const outputPath = join(tempDir('beastcover-run-finish-png-'), 'out.png');
-        const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
+        const spawn = vi.fn(async (_request: AgentSpawnRequest) => {
             await generate(outputPath, 1536, 1024);
         });
 
-        await expect(runLocalModel({ ...baseInput(outputPath), spawn })).resolves.toEqual({
+        await expect(runAgent({ ...baseInput(outputPath), spawn })).resolves.toEqual({
             outputPaths: [outputPath],
         });
         const meta = await sharp(outputPath).metadata();
@@ -221,11 +221,11 @@ describe('local-model finish after verify', () => {
 
     it('rewrites JPEG bytes saved under the .png target as a PNG at youtube size', async () => {
         const outputPath = join(tempDir('beastcover-run-finish-jpeg-'), 'out.png');
-        const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
+        const spawn = vi.fn(async (_request: AgentSpawnRequest) => {
             await generate(outputPath, 1536, 1024, true);
         });
 
-        await runLocalModel({ ...baseInput(outputPath), spawn });
+        await runAgent({ ...baseInput(outputPath), spawn });
         const meta = await sharp(outputPath).metadata();
         expect([meta.format, meta.width, meta.height]).toEqual(['png', 1280, 720]);
     });
@@ -233,7 +233,7 @@ describe('local-model finish after verify', () => {
     it('crops every platform of one family from a single generation', async () => {
         const directory = tempDir('beastcover-run-family-');
         const generatedPath = join(directory, 'cache', 'raw.png');
-        const spawn = vi.fn(async (_request: LocalModelSpawnRequest) => {
+        const spawn = vi.fn(async (_request: AgentSpawnRequest) => {
             await generate(generatedPath, 1024, 1536);
         });
         const targets = [
@@ -242,7 +242,7 @@ describe('local-model finish after verify', () => {
         ];
 
         await expect(
-            runLocalModel({ ...baseInput(generatedPath), generatedPath, targets, spawn }),
+            runAgent({ ...baseInput(generatedPath), generatedPath, targets, spawn }),
         ).resolves.toEqual({ outputPaths: targets.map((target) => target.outputPath) });
         expect(spawn).toHaveBeenCalledOnce();
         const sizes = await Promise.all(
@@ -262,7 +262,7 @@ describe('local-model finish after verify', () => {
         const directory = tempDir('beastcover-run-mixed-');
         const spawn = vi.fn(async () => undefined);
         await expect(
-            runLocalModel({
+            runAgent({
                 ...baseInput(join(directory, 'raw.png')),
                 targets: [
                     { preset: 'youtube', outputPath: join(directory, 'a.png') },
@@ -270,7 +270,7 @@ describe('local-model finish after verify', () => {
                 ],
                 spawn,
             }),
-        ).rejects.toThrowError('runLocalModel crops one family per generation.');
+        ).rejects.toThrowError('runAgent crops one family per generation.');
         expect(spawn).not.toHaveBeenCalled();
     });
 });

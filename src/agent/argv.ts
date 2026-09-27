@@ -1,9 +1,9 @@
 import { type Stats, statSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { LocalModelProvider } from '../config.ts';
+import type { AgentProvider } from '../config.ts';
 
-export function buildLocalModelArgv(input: {
-    provider: LocalModelProvider;
+export function buildAgentArgv(input: {
+    provider: AgentProvider;
     prompt: string;
     referencePaths: string[];
 }): { command: string; args: string[]; stdin: 'ignore' } {
@@ -15,18 +15,9 @@ export function buildLocalModelArgv(input: {
         return { command: 'codex', args, stdin: 'ignore' };
     }
 
-    if (input.provider === 'grok') {
-        // grok CLI 帮助里没有与 codex 对等的 -i。参考图写进提示词末尾，这个写法未经实战验证。
-        return {
-            command: 'grok',
-            args: ['-p', input.prompt, '--permission-mode', 'bypassPermissions', '--verbatim'],
-            stdin: 'ignore',
-        };
-    }
-
-    // claude CLI 帮助里没有与 codex 对等的 -i（Issue #10195 仍在要这个旗标）。参考图写进提示词末尾，这个写法未经实战验证。
+    // agy 没有与 codex 对等的图片旗标。参考图路径写进提示词末尾，agy 用自己的文件工具读。
     return {
-        command: 'claude',
+        command: 'agy',
         args: ['-p', input.prompt, '--dangerously-skip-permissions'],
         stdin: 'ignore',
     };
