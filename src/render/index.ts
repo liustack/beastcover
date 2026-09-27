@@ -18,6 +18,8 @@ export interface FitTextRequest {
     box: Rect;
     minPx: number;
     maxPx: number;
+    /** 标题最多折成几行，不给就不限 */
+    maxLines?: number;
 }
 
 export interface CoverRenderer {
@@ -107,6 +109,43 @@ async function withPage<T>(
     }
 }
 
+/**
+ * 标题排出来有几行：按文字的行框数不同的上沿。页面自己的脚本是关着的，这段跑在 Playwright
+ * 的隔离环境里。比半个字号还矮的框（标题前的小标签、空白）不算一行。
+ */
+function countLines(page: Page, fontPx: number): Promise<number> {
+    return page.locator('.copy:not(.probe)').evaluate((element, size) => {
+        // 工程不带 DOM 类型库，这里只描述用到的那几个成员。
+        interface LineBox {
+            top: number;
+            width: number;
+            height: number;
+        }
+        const doc = (
+            globalThis as unknown as {
+                document: {
+                    createRange(): {
+                        selectNodeContents(node: unknown): void;
+                        getClientRects(): ArrayLike<LineBox>;
+                    };
+                };
+            }
+        ).document;
+        const range = doc.createRange();
+        range.selectNodeContents(element);
+        const tops: number[] = [];
+        for (const rect of Array.from(range.getClientRects())) {
+            if (rect.width === 0 || rect.height < size * 0.6) {
+                continue;
+            }
+            if (!tops.some((top) => Math.abs(top - rect.top) < size * 0.5)) {
+                tops.push(rect.top);
+            }
+        }
+        return tops.length;
+    }, fontPx);
+}
+
 /** render 启动 Chromium 的唯一方式，doctor 用同一个函数检查，两边不会各说各话 */
 export function launchChromium(): Promise<Browser> {
     return chromium.launch({ headless: true });
@@ -143,7 +182,8 @@ export async function openRenderer(): Promise<CoverRenderer> {
                             return false;
                         }
                     }
-                    return true;
+                    const { maxLines } = request;
+                    return maxLines === undefined || (await countLines(page, fontPx)) <= maxLines;
                 };
 
                 if (!(await fits(request.minPx))) {

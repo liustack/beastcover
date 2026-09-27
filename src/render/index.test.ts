@@ -136,6 +136,28 @@ describe('cover renderer', () => {
         expect(bigger).toBeInstanceOf(TextDoesNotFitError);
     }, 30_000);
 
+    it('counts the lines the headline wraps to and keeps within the limit', async () => {
+        // 窄高的一栏：不限行数时九个字会折成很多行，限两行时字号小一些但只有两行。
+        const html = (px: number) =>
+            `<html><body style="margin:0"><p class="copy" style="position:absolute;left:0;top:0;width:240px;margin:0;font:900 ${px}px sans-serif;line-height:1.1">个习惯救了我的时间</p></body></html>`;
+        const fitWithin = (maxLines?: number) =>
+            renderer.fitText({
+                html,
+                width: 400,
+                height: 800,
+                box: { x: 0, y: 0, width: 240, height: 800 },
+                minPx: 16,
+                maxPx: 240,
+                ...(maxLines === undefined ? {} : { maxLines }),
+            });
+        const free = await fitWithin();
+        const two = await fitWithin(2);
+        expect(two).toBeLessThan(free);
+        // 两行放 9 个字，一行至少 5 个字：字号不超过栏宽的五分之一。
+        expect(two).toBeLessThanOrEqual(240 / 5);
+        expect(two).toBeGreaterThan(240 / 6);
+    }, 30_000);
+
     it('keeps the longest word unbroken when it measures the font size', async () => {
         const layout = customLayout(800, 800);
         const measure = (text: string) =>

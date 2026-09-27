@@ -35,8 +35,6 @@ const SHADOW_EM = 0.05;
 // 双层描边：白内圈外扩约 8.5%，黑外圈总外扩约 14%（日本设计师示例折算）。
 const RING_EM = 0.085;
 const DOUBLE_OUTER_EM = 0.14;
-// 双层描边的外圈宽，行距不拉开时上下两行的白圈会粘成一片。
-const DOUBLE_LINE_HEIGHT = 1.2;
 // 软投影只往下偏一点，模糊比偏移大。
 const SOFT_OFFSET_EM = 0.04;
 const SOFT_BLUR_EM = 0.14;
@@ -185,6 +183,8 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
     const spacing = spec.style === 'outline' || spec.style === 'double' ? 0.02 : -0.02;
     const accentInk = colors.accentInk ?? colors.stroke;
     const outer = spec.style === 'double' ? DOUBLE_OUTER_EM : OUTLINE_EM;
+    // 描边往外扩、投影往下落，行距不拉开这么多，上一行的描边和投影就压到下一行的描边上。
+    const outlined = spec.style === 'outline' || spec.style === 'double';
     const synthetic =
         font.syntheticBold > 0
             ? `-webkit-text-stroke: ${em(font.syntheticBold)} ${colors.fill};`
@@ -225,7 +225,7 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
             font-weight: ${heavy ? 900 : 400};
             letter-spacing: ${em(spacing)};
             padding: ${em(extent)};
-            ${spec.style === 'double' ? `line-height: ${DOUBLE_LINE_HEIGHT};` : ''}
+            ${outlined ? `line-height: ${Number((1 + outer + SHADOW_EM).toFixed(3))};` : ''}
         }
 
         .copy-layer {

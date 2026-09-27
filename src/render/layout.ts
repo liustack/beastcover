@@ -258,7 +258,9 @@ export interface Headline {
     accentPx?: number;
 }
 
-const CLAUSE_END = /(?<=[，。！？；：、,.!?;:])\s*/u;
+// 短句的分界：标点后面，或者两个汉字中间的空格（「3个习惯 救了我的时间」里写标题的人
+// 用空格标出了词组）。英文单词之间的空格不算。
+const CLAUSE_END = /(?<=[，。！？；：、,.!?;:])\s*|(?<=\p{Script=Han})\s+(?=\p{Script=Han})/u;
 
 export function headlineClauses(text: string): string[] {
     return text

@@ -223,7 +223,33 @@ describe('cover composition', () => {
             targets: [{ platform: 'youtube', outputPath: join(tempDir(), 'one.png') }],
             scale: 1,
         });
-        expect(fits).toEqual([false]);
+        expect(fits).not.toContain(true);
+    });
+
+    it('wraps to fewer lines when that keeps at least 70% of the size, never past three', async () => {
+        const lines: (number | undefined)[] = [];
+        const html = vi.spyOn(template, 'renderHtml');
+        for (const [sizes, chosen] of [
+            // 两行还有三行时的 75%，折两行。一行只剩四成，不要。
+            [{ 1: 80, 2: 150, 3: 200 }, 150],
+            // 两行只剩六成，还是三行。
+            [{ 1: 60, 2: 120, 3: 200 }, 200],
+        ] as const) {
+            const { renderer } = fakeRenderer((request) => {
+                lines.push(request.maxLines);
+                return sizes[request.maxLines as 1 | 2 | 3];
+            });
+            await composeCovers({
+                renderer,
+                template,
+                text: '人接不住认知以外的流量',
+                targets: [{ platform: 'youtube', outputPath: join(tempDir(), 'lines.png') }],
+                scale: 1,
+            });
+            expect(html.mock.calls.at(-1)?.[1]).toEqual({ fontPx: chosen, keepClauses: false });
+        }
+        html.mockRestore();
+        expect(lines.every((max) => max !== undefined && max <= 3)).toBe(true);
     });
 
     it('names the platforms when the headline cannot fit their safe area', async () => {
@@ -251,7 +277,7 @@ describe('cover composition', () => {
                 scale: 1,
             }),
         ).rejects.toThrowError(
-            'The headline is too long to fit the wechat, x safe area even at 16px. Shorten it.',
+            'The headline is too long to fit the wechat, x safe area in 3 lines even at 16px. Shorten it.',
         );
         expect(renderer.screenshot).not.toHaveBeenCalled();
         expect(existsSync(join(directory, 'long-wechat.png'))).toBe(false);

@@ -84,6 +84,7 @@ beastcover gen "东京吃了*7天*" --photo a.jpg --photo b.jpg --photo c.jpg --
 ## 4. Write the words
 
 - **The cover carries a label, not the title.** The title sits right next to the cover in every feed, so repeating it wastes half the space. YouTube covers carry a few words at most (`DAY 6`, `How?`, a figure). Chinese platforms take more words (Bilibili breakout covers carry about 8 characters, 10 at most), but still a rewrite, shorter and louder than the title.
+- **Mark where a line may break.** A headline wraps to at most three lines and prefers fewer. Put punctuation or a space between Chinese phrases where a break reads naturally: `个习惯 救了我的时间` breaks as 个习惯 / 救了我的时间, not in the middle of a phrase.
 - **Mark one keyword with `*asterisks*`.** It gets the accent colour, a marker stroke, or a colour block, depending on the type. Without a mark, figures (`3`, `90%`, `¥150`) are highlighted automatically. Mark one word, not three.
 - **`--hook` for mixed runs.** WeChat and X article cards show the title beside the cover, so a full line is fine there. When one run covers both, pass the full line as the headline and the short label as `--hook`: video and note covers get the hook, WeChat and X keep the headline.
 - **`--tag`** is a small label above the headline (`新手必看`, `干货`, `2026`), for `big-type`, `number`, and `face-text`.
@@ -130,7 +131,6 @@ When a scene type (`scene-title`, `mood`, `face-stakes`) has no photo, `--scene 
 beastcover gen "在火山口*住*了一晚" --subject /abs/me.jpg --scene "an active volcano crater at dusk, a small tent on the rim" --number "50米" --preset youtube,xiaohongshu
 ```
 
-The CLI uses what this machine has, in order: the user's image model key (`model.openai.apiKey`, `model.gemini.apiKey`), then their `codex` or `agy` CLI. `--via openai|gemini|codex|agy` (or `scene.via` in the config) names one painter, and a missing key or CLI is then an error, never a switch to another. With no painter at all, the scene is a plain colour gradient and a `Scene:` line says what to install. Tell the user when that happens: the cover no longer shows the story. Describe one concrete picture in English: the place, the subject, the light. The painter is told to draw a real photograph with no text in it, because the words are set by BeastCover.
 `before-after` takes two `--scene`: the before, then what changes. The after picture is painted from the before picture, so it is the same place from the same camera. Describe the change, not a new scene:
 
 ```bash
@@ -139,6 +139,7 @@ beastcover gen "桌面*改造*" --template before-after --scene "a cluttered hom
 
 Each half is painted in its own shape: tall halves on a landscape cover, wide halves on a portrait one. A before-after needs a real painter. With none, it stops and says so, because two gradients compare nothing.
 
+The CLI uses what this machine has, in order: the user's image model key (`model.openai.apiKey`, `model.gemini.apiKey`), then their `codex` or `agy` CLI. `--via openai|gemini|codex|agy` (or `scene.via` in the config) names one painter, and a missing key or CLI is then an error, never a switch to another. With no painter at all, the scene is a plain colour gradient and a `Scene:` line says what to install. Tell the user when that happens: the cover no longer shows the story. Describe one concrete picture in English: the place, the subject, the light. The painter is told to draw a real photograph with no text in it, because the words are set by BeastCover.
 
 Only the scene is painted. The words, the person, the layout, and the checks are always BeastCover's own, so a painted scene gets the same QC as a photo. Tell the user the privacy line the run prints: the scene description (and for a before-after, the painted before picture) goes to their image API with their key, or through their own CLI.
 

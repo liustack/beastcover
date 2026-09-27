@@ -218,12 +218,17 @@ function maxHeadlinePx(area: Rect): number {
 
 // 整句不拆时字号不小于自由换行的 70%，就按标点换行，否则优先保证字大。
 const KEEP_CLAUSES_MIN_RATIO = 0.7;
+// 标题最多三行，再多就得一截一截拼着读。
+const MAX_HEADLINE_LINES = 3;
+// 少折一行只要字号不小于三行时的 70%，就少折一行：一眼读完比大一号更要紧。
+const FEWER_LINES_MIN_RATIO = 0.7;
 
 async function fitFontPx(
     renderer: CoverRenderer,
     template: CoverTemplate,
     layout: CoverLayout,
     keepClauses: boolean,
+    maxLines: number,
 ): Promise<number | undefined> {
     try {
         return await renderer.fitText({
@@ -233,6 +238,7 @@ async function fitFontPx(
             box: layout.textArea,
             minPx: MIN_HEADLINE_PX,
             maxPx: maxHeadlinePx(layout.textArea),
+            maxLines,
         });
     } catch (error) {
         if (error instanceof TextDoesNotFitError) {
@@ -282,14 +288,23 @@ async function fitHeadline(
 ): Promise<Headline> {
     const accentPx = await fitAccent(renderer, template, layout, where);
     const accent = accentPx === undefined ? {} : { accentPx };
-    const free = await fitFontPx(renderer, template, layout, false);
-    if (free === undefined) {
+    const largest = await fitFontPx(renderer, template, layout, false, MAX_HEADLINE_LINES);
+    if (largest === undefined) {
         throw new Error(
-            `The headline is too long to fit ${where} even at ${MIN_HEADLINE_PX}px. Shorten it.`,
+            `The headline is too long to fit ${where} in ${MAX_HEADLINE_LINES} lines even at ${MIN_HEADLINE_PX}px. Shorten it.`,
         );
     }
+    // 从一行试起，第一个字号够大的行数就是它。
+    let free = largest;
+    for (let lines = 1; lines < MAX_HEADLINE_LINES; lines += 1) {
+        const size = await fitFontPx(renderer, template, layout, false, lines);
+        if (size !== undefined && size >= largest * FEWER_LINES_MIN_RATIO) {
+            free = size;
+            break;
+        }
+    }
     if (headlineClauses(text).length > 1) {
-        const clauses = await fitFontPx(renderer, template, layout, true);
+        const clauses = await fitFontPx(renderer, template, layout, true, MAX_HEADLINE_LINES);
         if (clauses !== undefined && clauses >= free * KEEP_CLAUSES_MIN_RATIO) {
             return { fontPx: clauses, keepClauses: true, ...accent };
         }
