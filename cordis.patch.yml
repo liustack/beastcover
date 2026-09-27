@@ -1,4 +1,0 @@
-# dsh bundle layer: mount the BeastCover plugin through the package root export.
-- insert:
-    - id: beastcover
-      name: '@liustack/beastcover'

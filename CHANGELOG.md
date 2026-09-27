@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.5 (unreleased)
+
+- **The DeepSeek Harness plugin is gone.** DSH loads skills, so it uses the same `skills/beastcover` skill as every other agent and gets every cover type, not just a headline on the default one. The package no longer exports a plugin entry or ships `cordis.patch.yml`.
+
 ## 0.7.4 (2026-09-28)
 
 0.7.3 was tagged but never published: its release checks failed on the font probe. Everything planned for 0.7.3 ships here, plus:

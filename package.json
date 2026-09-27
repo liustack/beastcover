@@ -12,8 +12,8 @@
         "typecheck": "tsc --noEmit",
         "test": "vitest run",
         "coverage": "vitest run --coverage",
-        "lint": "biome check src dsh scripts",
-        "format": "biome check --write src dsh scripts",
+        "lint": "biome check src scripts",
+        "format": "biome check --write src scripts",
         "check": "pnpm typecheck && pnpm lint && pnpm test",
         "release": "node scripts/release.mjs",
         "prepublishOnly": "pnpm build",
@@ -24,8 +24,6 @@
     "files": [
         "dist",
         "skills/beastcover/SKILL.md",
-        "dsh/index.js",
-        "cordis.patch.yml",
         "docs",
         "README.md",
         "README.zh-CN.md",
@@ -73,16 +71,6 @@
         "typescript": "^5.9.3",
         "vite": "^6.4.1",
         "vitest": "^3.2.7"
-    },
-    "exports": {
-        ".": "./dsh/index.js",
-        "./dsh": "./dsh/index.js",
-        "./package.json": "./package.json"
-    },
-    "dsh": {
-        "bundle": {
-            "patch": "./cordis.patch.yml"
-        }
     },
     "publishConfig": {
         "access": "public"
