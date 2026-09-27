@@ -13,6 +13,7 @@ import {
 } from '../platforms/index.ts';
 import {
     checkBrightness,
+    checkEdges,
     checkOverlaps,
     checkQuietZone,
     detailUnder,
@@ -135,6 +136,7 @@ async function findingsFor(
                   pictureText: qc.pictureText,
                   contents: qc.contents,
               })),
+        ...checkEdges(target, qc.text, crop),
         ...checkQuietZone(target, await detailUnder(qc.background, qc.text, crop)),
         ...checkBrightness(target, await meanLuma(png)),
     ];

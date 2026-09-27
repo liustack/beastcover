@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 import {
     checkBrightness,
+    checkEdges,
     checkOverlaps,
     formatFindings,
     maskFromRects,
@@ -152,6 +153,26 @@ describe('text on the picture', () => {
             "the headline covers the picture's main subject.",
         ]);
         expect(checkOverlaps({ ...input, pictureText: onPhoto })).toEqual([]);
+    });
+});
+
+describe('edges', () => {
+    it('fails when ink reaches the edge of a crop and passes when it stays inside', () => {
+        const youtube = { x: 0, y: 60, width: 1920, height: 1080 };
+        expect(
+            checkEdges('youtube', mask([{ x: 192, y: 132, width: 900, height: 200 }]), youtube),
+        ).toEqual([]);
+        // 标签伸到 youtube 裁切框的右边外面。
+        const cut = checkEdges(
+            'youtube',
+            mask([{ x: 1700, y: 400, width: 400, height: 120 }]),
+            youtube,
+        );
+        expect(cut.map((finding) => finding.level)).toEqual(['fail']);
+        // 字在母版上碰到顶，但 youtube 从 y 60 开始裁：碰的是裁切框的上沿。
+        expect(
+            checkEdges('youtube', mask([{ x: 400, y: 0, width: 300, height: 61 }]), youtube),
+        ).toHaveLength(1);
     });
 });
 

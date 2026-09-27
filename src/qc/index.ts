@@ -295,6 +295,38 @@ export async function detailUnder(background: Buffer, text: TextMask, crop: Rect
 }
 
 /** 字要压在安静区：压在细碎的地方既可能盖住东西，缩小以后也更难读 */
+// 贴着成品四边查这么宽的一条（像素）。字块掩膜已经往外膨胀了约 1% 短边，
+// 字离边还有十来个像素就会碰到这条带，那已经近到会被裁掉或贴边难看。
+const EDGE_BAND = 2;
+
+/** 字碰到成品的边：多半被裁掉了一截（标签太长、特效伸出安全区） */
+export function checkEdges(target: QcTarget, text: TextMask, crop: Rect): QcFinding[] {
+    const x0 = Math.max(0, Math.ceil(crop.x));
+    const y0 = Math.max(0, Math.ceil(crop.y));
+    const x1 = Math.min(text.width, Math.floor(crop.x + crop.width)) - 1;
+    const y1 = Math.min(text.height, Math.floor(crop.y + crop.height)) - 1;
+    const inked = (x: number, y: number) => text.data[y * text.width + x] === 1;
+    let touches = false;
+    for (let band = 0; band < EDGE_BAND && !touches; band += 1) {
+        for (let x = x0; x <= x1 && !touches; x += 1) {
+            touches = inked(x, y0 + band) || inked(x, y1 - band);
+        }
+        for (let y = y0; y <= y1 && !touches; y += 1) {
+            touches = inked(x0 + band, y) || inked(x1 - band, y);
+        }
+    }
+    return touches
+        ? [
+              {
+                  level: 'fail',
+                  platform: target,
+                  message:
+                      'words run into the edge of the cover and are likely cut off. Shorten the headline or the labels.',
+              },
+          ]
+        : [];
+}
+
 export function checkQuietZone(platform: QcTarget, detail: number): QcFinding[] {
     return detail > BUSY_DETAIL
         ? [
