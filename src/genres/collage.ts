@@ -19,6 +19,7 @@ import {
     seenPart,
 } from './page.ts';
 import { isLightScheme, SCHEMES, type SchemeName } from './schemes.ts';
+import { type StyleName, styledType } from './styles.ts';
 
 export const COLLAGE_MIN = 2;
 export const COLLAGE_MAX = 4;
@@ -154,6 +155,7 @@ export interface CollageRequest {
     photos: readonly GenrePhoto[];
     scheme?: SchemeName;
     look?: PhotoLook;
+    style?: StyleName;
 }
 
 export function collageTemplate(request: CollageRequest): CoverTemplate {
@@ -164,9 +166,15 @@ export function collageTemplate(request: CollageRequest): CoverTemplate {
     const schemeName = request.scheme ?? 'lemon';
     const scheme = SCHEMES[schemeName];
     const light = isLightScheme(schemeName);
-    const type: TypeSpec = light
+    const bold: TypeSpec = light
         ? { style: 'ink', font: request.fonts.choose('heavy'), highlight: 'block' }
         : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
+    const { type, colors } = styledType(request.style ?? 'bold', {
+        fonts: request.fonts,
+        ground: { light, picture: false },
+        colors: scheme.type,
+        bold,
+    });
     const band = (geometry: CollageGeometry): Layers => ({
         css: `
         .band {
@@ -220,7 +228,7 @@ export function collageTemplate(request: CollageRequest): CoverTemplate {
                 headline,
                 text: request.text,
                 type,
-                colors: scheme.type,
+                colors,
                 background: scheme.base,
                 measure: scale === undefined,
                 align: { x: family === 'portrait' ? 'center' : 'start', y: 'center' },
@@ -240,7 +248,7 @@ export function collageTemplate(request: CollageRequest): CoverTemplate {
                 headline,
                 text: request.text,
                 type,
-                colors: scheme.type,
+                colors,
                 background: scheme.base,
                 measure: true,
                 align: { x: familyOf(layout) === 'portrait' ? 'center' : 'start', y: 'center' },

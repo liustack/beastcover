@@ -48,6 +48,7 @@ import { parseFigure, parseHook, parseTag } from './genres/options.ts';
 import { type FontKit, fontKit, type GenrePhoto } from './genres/page.ts';
 import { parseScheme, SCHEME_NAMES, SCHEMES, type SchemeName } from './genres/schemes.ts';
 import { parseLabels } from './genres/split.ts';
+import { parseStyle, STYLE_NAMES, type StyleName } from './genres/styles.ts';
 import { newRunDir, tempCacheDir, tempRefsDir } from './paths.ts';
 import {
     FAMILY_NAMES,
@@ -750,6 +751,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         .option('--via <painter>', `Who paints --scene: ${PAINTERS.join(', ')}`)
         .option('--template <name>', `Cover type: ${GENRE_NAMES.join(', ')}`)
         .option('--scheme <name>', `Colour scheme: ${SCHEME_NAMES.join(', ')}`)
+        .option(
+            '--style <name>',
+            `How the words look: ${STYLE_NAMES.join(', ')} (memo is big-type only)`,
+        )
         .option('--tag <text>', 'big-type, number, face-text: a short label above the headline')
         .option(
             '--number <figure>',
@@ -785,6 +790,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     subject?: string;
                     template?: string;
                     scheme?: string;
+                    style?: string;
                     hook?: string;
                     look?: string;
                     fit?: string;
@@ -838,6 +844,8 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                 }
                 const scheme: SchemeName | undefined =
                     options.scheme === undefined ? undefined : parseScheme(options.scheme);
+                const style: StyleName | undefined =
+                    options.style === undefined ? undefined : parseStyle(options.style);
                 checkGenreInputs(genre, {
                     photos: pictures,
                     subject: hasSubject,
@@ -849,6 +857,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         fit: options.fit,
                     },
                     ...(scheme === undefined ? {} : { scheme }),
+                    ...(style === undefined ? {} : { style }),
                 });
                 parseEmphasis(text);
                 const hook = options.hook === undefined ? undefined : parseHook(options.hook);
@@ -912,6 +921,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         photos: genrePhotos,
                         ...(subject === undefined ? {} : { subject: subject.layer }),
                         ...(scheme === undefined ? {} : { scheme }),
+                        ...(style === undefined ? {} : { style }),
                         ...(tag === undefined ? {} : { tag }),
                         ...(figure === undefined ? {} : { figure }),
                         ...(labels === undefined ? {} : { labels }),

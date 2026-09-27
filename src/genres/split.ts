@@ -25,6 +25,7 @@ import {
     seenPart,
 } from './page.ts';
 import { isLightScheme, SCHEMES, type SchemeName } from './schemes.ts';
+import { type StyleName, styledType } from './styles.ts';
 
 export const MAX_LABEL_LENGTH = 8;
 
@@ -534,15 +535,22 @@ export interface SplitRequest {
     labels?: [string, string];
     scheme?: SchemeName;
     look?: PhotoLook;
+    style?: StyleName;
 }
 
 function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): CoverTemplate {
     const schemeName = request.scheme ?? 'night';
     const scheme = SCHEMES[schemeName];
     const light = isLightScheme(schemeName);
-    const type: TypeSpec = light
+    const bold: TypeSpec = light
         ? { style: 'ink', font: request.fonts.choose('heavy'), highlight: 'block' }
         : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
+    const { type, colors } = styledType(request.style ?? 'bold', {
+        fonts: request.fonts,
+        ground: { light, picture: false },
+        colors: scheme.type,
+        bold,
+    });
     const labelFont =
         kind === 'versus' ? request.fonts.choose('condensed') : request.fonts.choose('heavy');
     const withGeometry = (layout: CoverLayout): CoverLayout => ({
@@ -618,7 +626,7 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
                 headline,
                 text: request.text,
                 type,
-                colors: scheme.type,
+                colors,
                 background: scheme.baseDeep,
                 measure: scale === undefined,
                 align: { x: 'center', y: 'center' },
@@ -637,7 +645,7 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
                 headline,
                 text: request.text,
                 type,
-                colors: scheme.type,
+                colors,
                 background: scheme.base,
                 measure: true,
                 align: { x: 'center', y: 'center' },

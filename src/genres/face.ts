@@ -39,6 +39,7 @@ import {
     rectCss,
 } from './page.ts';
 import { isLightScheme, SCHEMES, type SchemeName, schemeGradient } from './schemes.ts';
+import { type StyleName, styledType } from './styles.ts';
 
 // 脸高占无遮挡区高度的比例。爆款要求脸高至少三分之一，四到五成更好（research.md 第 2.1 节）。
 const FACE_TEXT_SHARE = 0.42;
@@ -137,6 +138,7 @@ export interface FaceTextRequest {
     subject: SubjectLayer;
     scheme?: SchemeName;
     tag?: string;
+    style?: StyleName;
 }
 
 export function faceTextTemplate(request: FaceTextRequest): CoverTemplate {
@@ -144,9 +146,16 @@ export function faceTextTemplate(request: FaceTextRequest): CoverTemplate {
     const schemeName = request.scheme ?? 'teal';
     const scheme = SCHEMES[schemeName];
     // 浅底方案是深色字直接压底，描边和字同色会糊成一团，改用荧光笔标重点。
-    const type: TypeSpec = isLightScheme(schemeName)
+    const light = isLightScheme(schemeName);
+    const bold: TypeSpec = light
         ? { style: 'ink', font: request.fonts.choose('heavy'), highlight: 'marker' }
         : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
+    const { type, colors } = styledType(request.style ?? 'bold', {
+        fonts: request.fonts,
+        ground: { light, picture: false },
+        colors: scheme.type,
+        bold,
+    });
     const tag = eyebrow(request.tag, { background: scheme.type.accent, ink: scheme.type.stroke });
     const page = (layout: CoverLayout, headline: Headline, subject: SubjectLayer | undefined) => {
         const measure = subject === undefined;
@@ -164,7 +173,7 @@ export function faceTextTemplate(request: FaceTextRequest): CoverTemplate {
             headline,
             text: request.text,
             type,
-            colors: scheme.type,
+            colors,
             background: schemeGradient(scheme, angle),
             measure,
             prefix: tag.prefix,
@@ -199,6 +208,7 @@ export interface FaceStakesRequest {
     scheme?: SchemeName;
     look?: PhotoLook;
     fit?: PhotoFit;
+    style?: StyleName;
 }
 
 // 赌注牌占标题一侧的上面这一截，倾斜这么多度。
@@ -284,11 +294,12 @@ function stakeMarkup(
 export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
     const scheme = SCHEMES[request.scheme ?? 'navy'];
     const stakeFont = request.fonts.choose('condensed');
-    const type: TypeSpec = {
-        style: 'outline',
-        font: request.fonts.choose('heavy'),
-        highlight: 'color',
-    };
+    const { type, colors } = styledType(request.style ?? 'bold', {
+        fonts: request.fonts,
+        ground: { light: false, picture: true },
+        colors: scheme.type,
+        bold: { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' },
+    });
     const stake = request.stake;
     const layoutFor = stake === undefined ? faceLayout : stakesLayout;
     const page = async (
@@ -383,7 +394,7 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                 headline,
                 text: request.text,
                 type,
-                colors: scheme.type,
+                colors,
                 background: scheme.baseDeep,
                 measure,
                 align: { x: 'start', y: 'start' },
@@ -435,7 +446,7 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                 headline: { fontPx: headline.fontPx, keepClauses: headline.keepClauses },
                 text: request.text,
                 type,
-                colors: scheme.type,
+                colors,
                 background: scheme.baseDeep,
                 measure: true,
                 align: { x: 'start', y: 'start' },

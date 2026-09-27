@@ -7,7 +7,8 @@ import type { FontChoice } from './fonts.ts';
 import { escapeHtml, type Headline, headlineClauses } from './layout.ts';
 
 export type TypeStyle = 'outline' | 'double' | 'soft' | 'ink';
-export type HighlightMode = 'color' | 'block' | 'marker';
+/** color 换色，block 实色底块，marker 荧光笔，swap 关键词把字色和内圈色对调（花字） */
+export type HighlightMode = 'color' | 'block' | 'marker' | 'swap';
 
 export interface TypeSpec {
     style: TypeStyle;
@@ -27,6 +28,8 @@ export interface TypeColors {
     accent: string;
     /** 实色底块上的字色，默认用 stroke */
     accentInk?: string;
+    /** 硬投影的颜色，默认和外描边同色。花字是白外描边加深色投影 */
+    shadow?: string;
 }
 
 // 外描边 8% 字号（教程常见 5-10%），硬投影往右下 5%，模糊 0。
@@ -180,19 +183,21 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
     const extent = typeExtentEm(spec);
     const heavy =
         font.role === 'heavy' || font.role === 'condensed' || font.degradedFrom !== undefined;
+    // 圆体、宋体常规体太细，缩到信息流里就没了，用粗体。书法字只有一个字重，合成加粗会糊。
+    const weight = heavy ? 900 : font.role === 'brush' ? 400 : 700;
     const spacing = spec.style === 'outline' || spec.style === 'double' ? 0.02 : -0.02;
     const accentInk = colors.accentInk ?? colors.stroke;
     const outer = spec.style === 'double' ? DOUBLE_OUTER_EM : OUTLINE_EM;
     // 描边往外扩、投影往下落，行距不拉开这么多，上一行的描边和投影就压到下一行的描边上。
     const outlined = spec.style === 'outline' || spec.style === 'double';
+    // 合成加粗是给填色层加一圈和字同色的描边（currentColor：换了色的关键词描它自己的颜色），
+    // 字往外胖了半圈。描边层和内圈层也跟着加宽同样的量，
+    // 露在字外面的描边和内圈才还是原来那么宽，不会被胖出来的字盖掉。
     const synthetic =
         font.syntheticBold > 0
             ? `-webkit-text-stroke: ${em(font.syntheticBold)} currentColor;`
             : '';
     const highlight = (() => {
-    // 合成加粗是给填色层加一圈和字同色的描边（currentColor：换了色的关键词描它自己的颜色），
-    // 字往外胖了半圈。描边层和内圈层也跟着加宽同样的量，
-    // 露在字外面的描边和内圈才还是原来那么宽，不会被胖出来的字盖掉。
         switch (spec.highlight ?? 'color') {
             case 'color':
                 return `.copy .hl { color: ${colors.accent}; }`;
@@ -210,6 +215,9 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
             -webkit-box-decoration-break: clone;
             box-decoration-break: clone;
         }`;
+            case 'swap':
+                return `.copy .hl { color: ${colors.ring}; }
+        .copy-ring .hl { color: ${colors.fill}; -webkit-text-stroke-color: ${colors.fill}; }`;
         }
     })();
     const softShadow =
@@ -225,7 +233,7 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
         .copy,
         .copy-layer {
             font-family: ${font.stack};
-            font-weight: ${heavy ? 900 : 400};
+            font-weight: ${weight};
             letter-spacing: ${em(spacing)};
             padding: ${em(extent)};
             ${outlined ? `line-height: ${Number((1 + outer + SHADOW_EM).toFixed(3))};` : ''}
@@ -242,7 +250,7 @@ export function headlineTypeCss(spec: TypeSpec, colors: TypeColors): string {
             color: ${colors.stroke};
             -webkit-text-stroke: ${em(outer * 2 + font.syntheticBold)} ${colors.stroke};
             paint-order: stroke fill;
-            filter: drop-shadow(${em(SHADOW_EM)} ${em(SHADOW_EM)} 0 ${colors.stroke});
+            filter: drop-shadow(${em(SHADOW_EM)} ${em(SHADOW_EM)} 0 ${colors.shadow ?? colors.stroke});
         }
 
         .copy-ring {

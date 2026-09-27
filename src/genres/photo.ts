@@ -17,7 +17,6 @@ import {
     photoTextLayout,
     preparePhotoLayer,
 } from '../render/photo-cover.ts';
-import type { TypeSpec } from '../render/type.ts';
 import type { PhotoFocus } from '../subject/vision.ts';
 import {
     type FontKit,
@@ -31,6 +30,7 @@ import {
     photoSubject,
 } from './page.ts';
 import { SCHEMES, type SchemeName } from './schemes.ts';
+import { type StyleName, styledType } from './styles.ts';
 
 export interface PhotoGenreRequest {
     text: string;
@@ -39,6 +39,7 @@ export interface PhotoGenreRequest {
     scheme?: SchemeName;
     look?: PhotoLook;
     fit?: PhotoFit;
+    style?: StyleName;
 }
 
 // 氛围单图的字只占标题区左下角这一小块：字小，照片是主角。
@@ -92,10 +93,13 @@ type PhotoMode =
 function photoTemplate(request: PhotoGenreRequest, mode: PhotoMode): CoverTemplate {
     const { kind } = mode;
     const scheme = SCHEMES[request.scheme ?? 'navy'];
-    const type: TypeSpec =
-        kind === 'mood'
-            ? { style: 'soft', font: request.fonts.choose('serif'), highlight: 'color' }
-            : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
+    // 氛围单图默认是安静的衬线小字（editorial），其余默认 bold。
+    const { type, colors } = styledType(request.style ?? (kind === 'mood' ? 'editorial' : 'bold'), {
+        fonts: request.fonts,
+        ground: { light: false, picture: true },
+        colors: kind === 'mood' ? { ...scheme.type, accent: '#FFFFFF' } : scheme.type,
+        bold: { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' },
+    });
     const photo = request.photo;
     const layoutFor =
         mode.kind === 'callout'
@@ -103,7 +107,6 @@ function photoTemplate(request: PhotoGenreRequest, mode: PhotoMode): CoverTempla
             : kind === 'mood'
               ? moodLayout
               : photoTextLayout;
-    const colors = kind === 'mood' ? { ...scheme.type, accent: '#FFFFFF' } : scheme.type;
     const moodCss =
         kind === 'mood'
             ? `

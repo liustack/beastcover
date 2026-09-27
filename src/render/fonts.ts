@@ -101,11 +101,19 @@ const CANDIDATES: Readonly<Record<FontRole, Candidates>> = {
             'Kaiti SC',
             'STKaiti',
             'KaiTi',
+            'AR PL UKai CN',
         ],
         latin: ['Bangers', 'Permanent Marker'],
     },
     round: {
-        cjk: ['ZCOOL KuaiLe', 'Yuanti SC', 'HanziPen SC', 'Hannotate SC', 'Source Han Rounded'],
+        cjk: [
+            'ZCOOL KuaiLe',
+            'Yuanti SC',
+            'HanziPen SC',
+            'Hannotate SC',
+            'Source Han Rounded',
+            'YouYuan',
+        ],
         latin: ['Baloo 2', 'Nunito', 'Arial Rounded MT Bold'],
     },
     serif: {

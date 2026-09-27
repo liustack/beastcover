@@ -34,6 +34,7 @@ import {
 import { fontKit, type GenrePhoto } from './page.ts';
 import { isLightScheme, SCHEME_NAMES, SCHEMES } from './schemes.ts';
 import { splitLabelRects } from './split.ts';
+import { parseStyle, STYLE_NAMES, type StyleName, styledType } from './styles.ts';
 
 function inside(inner: Rect, outer: Rect): boolean {
     return (
@@ -83,11 +84,13 @@ const SUBJECT: SubjectLayer = {
     bust: false,
 };
 
-function templateFor(name: GenreName, paths: readonly string[]): CoverTemplate {
+function templateFor(name: GenreName, paths: readonly string[], style?: StyleName): CoverTemplate {
+    const styled = style === undefined ? {} : { style };
     const photos = paths.map(photo);
     switch (name) {
         case 'big-type':
             return genreTemplate(name, {
+                ...styled,
                 text: '三个错误*毁了*我的频道',
                 fonts: FONTS,
                 photos: [],
@@ -95,6 +98,7 @@ function templateFor(name: GenreName, paths: readonly string[]): CoverTemplate {
             });
         case 'number':
             return genreTemplate(name, {
+                ...styled,
                 text: '个习惯*救了*我',
                 fonts: FONTS,
                 photos: [],
@@ -102,6 +106,7 @@ function templateFor(name: GenreName, paths: readonly string[]): CoverTemplate {
             });
         case 'face-text':
             return genreTemplate(name, {
+                ...styled,
                 text: '我看*傻*了',
                 fonts: FONTS,
                 photos: [],
@@ -109,6 +114,7 @@ function templateFor(name: GenreName, paths: readonly string[]): CoverTemplate {
             });
         case 'face-stakes':
             return genreTemplate(name, {
+                ...styled,
                 text: '在火山口住了一晚',
                 fonts: FONTS,
                 photos: photos.slice(0, 1),
@@ -118,6 +124,7 @@ function templateFor(name: GenreName, paths: readonly string[]): CoverTemplate {
         case 'versus':
         case 'before-after':
             return genreTemplate(name, {
+                ...styled,
                 text: '15元和150元的拉面',
                 fonts: FONTS,
                 photos: photos.slice(0, 2),
@@ -125,12 +132,14 @@ function templateFor(name: GenreName, paths: readonly string[]): CoverTemplate {
             });
         case 'collage':
             return genreTemplate(name, {
+                ...styled,
                 text: '东京吃了*7天*',
                 fonts: FONTS,
                 photos: photos.slice(0, 3),
             });
         default:
             return genreTemplate(name, {
+                ...styled,
                 text: '离岩浆*50米*',
                 fonts: FONTS,
                 photos: photos.slice(0, 1),
@@ -182,6 +191,60 @@ describe('cover type registry', () => {
                 options: {},
                 scheme: 'lemon',
             }),
+        ).not.toThrow();
+    });
+});
+
+describe('styles', () => {
+    it('parses every style and refuses anything else', () => {
+        expect(STYLE_NAMES.map(parseStyle)).toEqual([...STYLE_NAMES]);
+        expect(() => parseStyle('poster')).toThrow('Unknown style "poster"');
+    });
+
+    it('keeps the type as it is for bold and sets the words for the others', () => {
+        const bold = {
+            style: 'outline' as const,
+            font: FONTS.choose('heavy'),
+            highlight: 'color' as const,
+        };
+        const colors = SCHEMES.navy.type;
+        const on = (style: StyleName, light: boolean, picture: boolean) =>
+            styledType(style, { fonts: FONTS, ground: { light, picture }, colors, bold });
+        expect(on('bold', false, false)).toEqual({ type: bold, colors });
+        expect(on('variety', false, false).type).toMatchObject({
+            style: 'double',
+            highlight: 'swap',
+        });
+        expect(on('round', false, true).type).toMatchObject({
+            style: 'outline',
+            highlight: 'marker',
+        });
+        // 衬线和书法不描边：浅底深字直接压底，照片上白字软投影。
+        expect(on('editorial', true, false).type.style).toBe('ink');
+        expect(on('editorial', false, true).type.style).toBe('soft');
+        expect(on('brush', false, true).type.font.role).toBe(FONTS.choose('brush').role);
+    });
+
+    it('keeps memo to big-type and its own colours', () => {
+        expect(() =>
+            checkGenreInputs('number', {
+                photos: 0,
+                subject: false,
+                options: { number: '3' },
+                style: 'memo',
+            }),
+        ).toThrow('--style memo draws a phone notes screen for --template big-type.');
+        expect(() =>
+            checkGenreInputs('big-type', {
+                photos: 0,
+                subject: false,
+                options: {},
+                style: 'memo',
+                scheme: 'navy',
+            }),
+        ).toThrow("--style memo uses the notes app's own colours. Drop --scheme.");
+        expect(() =>
+            checkGenreInputs('big-type', { photos: 0, subject: false, options: {}, style: 'memo' }),
         ).not.toThrow();
     });
 });
@@ -442,6 +505,36 @@ describe('cover type rendering', () => {
         await renderer.close();
         rmSync(directory, { recursive: true, force: true });
     });
+
+    // 每种字的风格放到每个类型上，出图后质检不能有不合格：字要读得出、不贴边、不压主体。
+    it('renders every style on every type without a QC failure', async () => {
+        const failures: string[] = [];
+        for (const style of STYLE_NAMES) {
+            const names = style === 'memo' ? (['big-type'] as const) : GENRE_NAMES;
+            for (const name of names) {
+                const platform = style === 'memo' ? 'xiaohongshu' : 'youtube';
+                const composed = await composeCovers({
+                    renderer,
+                    template: templateFor(name, paths, style),
+                    text: 'unused',
+                    targets: [
+                        { platform, outputPath: join(directory, `style-${style}-${name}.png`) },
+                    ],
+                    scale: 1,
+                    qc: {},
+                }).catch((error: unknown) => {
+                    failures.push(`${style} ${name}: ${(error as Error).message}`);
+                    return [];
+                });
+                for (const finding of composed[0]?.findings ?? []) {
+                    if (finding.level === 'fail') {
+                        failures.push(`${style} ${name}: ${finding.message}`);
+                    }
+                }
+            }
+        }
+        expect(failures).toEqual([]);
+    }, 600_000);
 
     // 量字号的页面和截图的页面是两份 HTML，任何一处排法不一致（标签、倾斜、照片层），
     // 截图里的标题就会跑出标题区。这里拿真 Chromium 渲出成品页面，量标题的实际外框。

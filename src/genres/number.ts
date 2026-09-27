@@ -9,6 +9,7 @@ import { coverDocument } from '../render/template.ts';
 import type { TypeColors, TypeSpec } from '../render/type.ts';
 import { eyebrow, type FontKit, genrePage, rectCss } from './page.ts';
 import { isLightScheme, SCHEMES, type SchemeName, schemeGradient } from './schemes.ts';
+import { type StyleName, styledType } from './styles.ts';
 
 export interface NumberRequest {
     text: string;
@@ -16,6 +17,7 @@ export interface NumberRequest {
     fonts: FontKit;
     scheme?: SchemeName;
     tag?: string;
+    style?: StyleName;
 }
 
 // 数字的描边、硬投影和它们往外伸出的量（em），量字号时算进内边距。
@@ -145,9 +147,15 @@ export function numberGenreTemplate(request: NumberRequest): CoverTemplate {
     const scheme = SCHEMES[schemeName];
     const light = isLightScheme(schemeName);
     const figureFont = request.fonts.choose('condensed');
-    const type: TypeSpec = light
+    const bold: TypeSpec = light
         ? { style: 'ink', font: request.fonts.choose('heavy'), highlight: 'marker' }
         : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
+    const { type, colors } = styledType(request.style ?? 'bold', {
+        fonts: request.fonts,
+        ground: { light, picture: false },
+        colors: scheme.type,
+        bold,
+    });
     const background = light ? scheme.base : schemeGradient(scheme);
     const tag = eyebrow(
         request.tag,
@@ -174,7 +182,7 @@ export function numberGenreTemplate(request: NumberRequest): CoverTemplate {
             headline,
             text: request.text,
             type,
-            colors: scheme.type,
+            colors,
             background,
             measure,
             // 竖版数字在上、短话在下，都居中；横版短话贴着数字左对齐。

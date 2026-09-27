@@ -12,6 +12,7 @@ import type { FontKit, GenrePhoto } from './page.ts';
 import { calloutTemplate, moodTemplate, sceneTitleTemplate } from './photo.ts';
 import { isLightScheme, type SchemeName } from './schemes.ts';
 import { beforeAfterTemplate, versusTemplate } from './split.ts';
+import type { StyleName } from './styles.ts';
 
 export const GENRE_NAMES = [
     'big-type',
@@ -171,9 +172,20 @@ export function checkGenreInputs(
         subject: boolean;
         options: Readonly<Partial<Record<GenreOption, unknown>>>;
         scheme?: SchemeName;
+        style?: StyleName;
     },
 ): void {
     const spec = GENRES[name];
+    if (inputs.style === 'memo') {
+        if (name !== 'big-type') {
+            throw new Error(
+                `--style memo draws a phone notes screen for --template big-type. ${name} has its own picture.`,
+            );
+        }
+        if (inputs.scheme !== undefined) {
+            throw new Error("--style memo uses the notes app's own colours. Drop --scheme.");
+        }
+    }
     if (inputs.scheme !== undefined && isLightScheme(inputs.scheme) && !spec.flatGround) {
         const flat = GENRE_NAMES.filter((genre) => GENRES[genre].flatGround);
         throw new Error(
@@ -226,6 +238,7 @@ export interface GenreInput {
     labels?: [string, string];
     look?: PhotoLook;
     fit?: PhotoFit;
+    style?: StyleName;
 }
 
 function first<T>(items: readonly T[], what: string): T {
@@ -256,6 +269,7 @@ export function genreTemplate(name: GenreName, input: GenreInput): CoverTemplate
         text: input.text,
         fonts: input.fonts,
         ...(input.scheme === undefined ? {} : { scheme: input.scheme }),
+        ...(input.style === undefined ? {} : { style: input.style }),
     };
     const look = input.look === undefined ? {} : { look: input.look };
     const fit = input.fit === undefined ? {} : { fit: input.fit };
