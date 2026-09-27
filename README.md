@@ -38,7 +38,7 @@ Works with Claude Code, Codex, and any agent that reads a skill folder. Then tel
 
 Every platform has several cover types that keep winning, not one. BeastCover makes ten of them, and picks one from what you give it when you do not say. The banner at the top is all ten:
 
-Big type, number hook, face with big words, face with stakes, versus, before and after, scene title, callout, collage, and mood. Every one is a single command, collected with the commands that made them in [examples/](examples/).
+Big type, number hook, face with big words, face with stakes, versus, before and after, scene title, callout, collage, and mood. The words on any of them come in six styles: bold, variety-show 花字, rounded sticker, magazine serif, calligraphy, and a phone notes screen for big type. Every one is a single command, collected with the commands that made them in [examples/](examples/).
 
 ## Why these get clicked
 
@@ -89,6 +89,7 @@ npx --yes --package @liustack/beastcover playwright install chromium
 
 beastcover gen "我看*傻*了" --subject me.jpg --preset youtube,xiaohongshu
 beastcover gen "个习惯 多出两小时" --template number --number 3 --preset all
+beastcover gen "租房*避坑* 清单" --template big-type --style memo --preset xiaohongshu
 beastcover stock search "ramen bowl" --orientation landscape
 beastcover gen "15元和150元的拉面" --template versus --photo openverse:<id> --photo openverse:<id> --labels "¥15,¥150"
 beastcover gen "在火山口*住*了一晚" --subject me.jpg --scene "a volcano crater at dusk, a tent on the rim" --number "50米"
@@ -96,7 +97,7 @@ beastcover gen "在火山口*住*了一晚" --subject me.jpg --scene "a volcano 
 
 Install Chromium through the Playwright that ships with beastcover: a bare `npx playwright` can pick up an older copy and download a browser that does not match.
 
-`--template` picks the cover type and `--scheme` the colours. The [skill](skills/beastcover/SKILL.md) explains which type fits which content. `--subject` takes your photo: a transparent PNG is used as is, and on macOS 14+ a normal photo is cut out on your machine with the system's own segmentation, so nothing is uploaded and your face is never redrawn by a model. `--guides` draws every safe area on the cover when you want to check a layout. `--scale 3` renders a 4K YouTube thumbnail.
+`--template` picks the cover type, `--scheme` the colours, and `--style` how the words look. The [skill](skills/beastcover/SKILL.md) explains which type fits which content. `--subject` takes your photo: a transparent PNG is used as is, and on macOS 14+ a normal photo is cut out on your machine with the system's own segmentation, so nothing is uploaded and your face is never redrawn by a model. `--guides` draws every safe area on the cover when you want to check a layout. `--scale 3` renders a 4K YouTube thumbnail.
 
 ## Network and privacy
 

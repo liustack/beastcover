@@ -38,7 +38,7 @@ Claude Code、Codex 以及任何认技能目录的 agent 都能用。装完对�
 
 每个平台的爆款封面都不止一种。BeastCover 做其中十种，你没指定时按你给的素材挑一种。顶部横幅就是这十种：
 
-大字报、数字冲击、人物大字、人物加赌注、档位对比、前后对比、场景题字、圈注科普、拼图、氛围单图。每张都是一条命令，命令和成品都收在 [examples/](examples/)。
+大字报、数字冲击、人物大字、人物加赌注、档位对比、前后对比、场景题字、圈注科普、拼图、氛围单图。每种类型上的字有六种风格：粗描边、综艺花字、圆体贴纸字、杂志衬线、书法题字，大字报还能做成手机备忘录。每张都是一条命令，命令和成品都收在 [examples/](examples/)。
 
 ## 为什么这些图有人点
 
@@ -89,6 +89,7 @@ npx --yes --package @liustack/beastcover playwright install chromium
 
 beastcover gen "我看*傻*了" --subject me.jpg --preset youtube,xiaohongshu
 beastcover gen "个习惯 多出两小时" --template number --number 3 --preset all
+beastcover gen "租房*避坑* 清单" --template big-type --style memo --preset xiaohongshu
 beastcover stock search "ramen bowl" --orientation landscape
 beastcover gen "15元和150元的拉面" --template versus --photo openverse:<id> --photo openverse:<id> --labels "¥15,¥150"
 beastcover gen "在火山口*住*了一晚" --subject me.jpg --scene "a volcano crater at dusk, a tent on the rim" --number "50米"
@@ -96,7 +97,7 @@ beastcover gen "在火山口*住*了一晚" --subject me.jpg --scene "a volcano 
 
 Chromium 要用 beastcover 自带的 Playwright 装：裸的 `npx playwright` 可能解析到旧版本，下载一个对不上的浏览器。
 
-`--template` 选封面类型，`--scheme` 选配色，什么内容配什么类型见[技能说明](skills/beastcover/SKILL.md)。`--subject` 收你的照片：透明 PNG 直接用，macOS 14+ 上普通照片用系统自带的抠图在本机抠，什么都不上传，脸也绝不会被模型重画。`--guides` 把所有安全区画在封面上供检查。`--scale 3` 出 4K 的 YouTube 缩略图。
+`--template` 选封面类型，`--scheme` 选配色，`--style` 选字的风格，什么内容配什么类型见[技能说明](skills/beastcover/SKILL.md)。`--subject` 收你的照片：透明 PNG 直接用，macOS 14+ 上普通照片用系统自带的抠图在本机抠，什么都不上传，脸也绝不会被模型重画。`--guides` 把所有安全区画在封面上供检查。`--scale 3` 出 4K 的 YouTube 缩略图。
 
 ## 联网与隐私
 

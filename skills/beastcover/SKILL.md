@@ -109,7 +109,24 @@ When the output has a `Headline:` line, the text is long for a YouTube or Bilibi
 
 Bright beats dark in feeds. Photo types take their headline colours from the scheme too.
 
-## 6. Pictures
+## 6. Lettering style
+
+The type decides the idea and the layout. `--style` decides how the words look, on any type. Keep one style for every platform version of the same piece, and change it between pieces so a channel does not look like one template.
+
+| Style | Looks like | Suits |
+| :-- | :-- | :-- |
+| `bold` | Heavy type with an outline and a hard shadow, or heavy ink on a light ground | The default everywhere except `mood`. YouTube, reviews, anything loud |
+| `variety` | Variety-show 花字: red type in a white ring and a dark edge, the keyword swapped to white, tilted on flat grounds | Bilibili and Douyin entertainment, reactions, challenges |
+| `round` | Rounded sticker lettering: dark type in a white outline, the keyword on a marker | Xiaohongshu lifestyle, food, cute and casual |
+| `editorial` | Magazine serif, no outline, a soft shadow on pictures | `mood` default. Lifestyle, travel, WeChat, design and luxury |
+| `brush` | A calligraphy title with a soft shadow | Bilibili documentary, travel, guofeng, food culture |
+| `memo` | A phone notes screen: black type on white, a yellow marker (`big-type` only, own colours, no `--scheme`) | Xiaohongshu 干货, checklists, tips |
+
+`round` and `brush` need a rounded or brush Chinese font, which most Macs do not have until one is installed. Without it the words fall back to the heavy font and a `Font:` line names the free font to install (ZCOOL KuaiLe, Ma Shan Zheng). Tell the user. Windows ships YouYuan and KaiTi, so they work there as is. A `memo` cover is white on purpose, so its `nearly grey` warning is expected.
+
+Thin handwriting is not offered: it disappears at feed size.
+
+## 7. Pictures
 
 ### Free stock photos
 
@@ -147,7 +164,7 @@ Only the scene is painted. The words, the person, the layout, and the checks are
 
 A face helps when there is one, but a product close-up or a striking object also tops the charts. Prefer the user's own photo over stock for people. `--subject` takes a transparent PNG as is. On macOS 14 or newer a normal photo is cut out on the machine. Other systems ask for a transparent PNG: tell the user to cut the photo out first (iPhone or macOS "Copy Subject", remove.bg). Never pass the photo to a model to remove the background: it redraws the face. When the photo has several people close together, crop it to one person first.
 
-## 7. Check every cover before you hand it over
+## 8. Check every cover before you hand it over
 
 QC is part of the job, not an option. After rendering, the CLI checks each cover and prints:
 
