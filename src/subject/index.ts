@@ -119,35 +119,38 @@ async function transparentShare(imagePath: string): Promise<number> {
     return transparent / (info.width * info.height);
 }
 
-async function cutoutCached(imagePath: string, runtime: SubjectRuntime): Promise<string> {
+/** 抠好的人：图的内容，和它在缓存里的位置（打印给用户看） */
+async function cutoutCached(
+    imagePath: string,
+    runtime: SubjectRuntime,
+): Promise<{ path: string; bytes: Buffer }> {
     const hash = createHash('sha256').update(readFileSync(imagePath)).digest('hex').slice(0, 16);
     const cached = join(runtime.cacheDir, `subject-v${CUTOUT_CACHE_VERSION}-${hash}.png`);
     if (existsSync(cached)) {
-        return cached;
+        return { path: cached, bytes: readFileSync(cached) };
     }
     mkdirSync(runtime.cacheDir, { recursive: true });
-    // 每次调用写自己的临时文件，写完原子替换到缓存位置。同时抠同一张图时互不干扰，
-    // 谁后写完谁覆盖，内容一样。
+    // 每次调用写自己的临时文件，先读进内存再往缓存放。之后只用内存里这份，不去读缓存里
+    // 那个可能正被另一次运行替换的文件。
     const partial = `${cached}.${randomUUID()}.partial.png`;
     try {
         await runtime.cutout(imagePath, partial);
+        const bytes = readFileSync(partial);
         try {
             renameSync(partial, cached);
         } catch (error) {
-            // POSIX 的 rename 原子覆盖，Windows 上覆盖一个正被对方读着或锁住的缓存会报
-            // EPERM/EBUSY/EACCES/EEXIST。并发抠同一张图写出的内容相同，这几类错误且对方
-            // 已经写好时就用对方的。其他错误码（如 EIO）是真实故障，照抛。
+            // Windows 上两次同时抠同一张图，后放的那次去替换对方正在放或正在读的缓存，会报
+            // EPERM/EBUSY/EACCES/EEXIST，替换的那一瞬缓存文件甚至可能不在。两次抠出来的一样，
+            // 这次没放进缓存不要紧。其他错误码（如 EIO）是真实故障，照抛。
             const code = (error as NodeJS.ErrnoException).code;
-            const lostToTwin =
-                code === 'EPERM' || code === 'EBUSY' || code === 'EACCES' || code === 'EEXIST';
-            if (!lostToTwin || !existsSync(cached)) {
+            if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES' && code !== 'EEXIST') {
                 throw error;
             }
         }
+        return { path: cached, bytes };
     } finally {
         rmSync(partial, { force: true });
     }
-    return cached;
 }
 
 export async function prepareSubject(
@@ -158,11 +161,14 @@ export async function prepareSubject(
         (await transparentShare(imagePath)) >= MIN_TRANSPARENT_SHARE
             ? 'transparent'
             : 'macos-vision';
-    const sourcePath =
-        method === 'transparent' ? imagePath : await cutoutCached(imagePath, runtime);
+    const cutout = method === 'transparent' ? undefined : await cutoutCached(imagePath, runtime);
 
     // 去掉四周的全透明边，主体才能贴着版位底边和侧边放。
-    const trimmed = await sharp(sourcePath).rotate().trim({ threshold: 1 }).png().toBuffer();
+    const trimmed = await sharp(cutout?.bytes ?? imagePath)
+        .rotate()
+        .trim({ threshold: 1 })
+        .png()
+        .toBuffer();
     const shaped = await bustCrop(trimmed, runtime.findFace, runtime.cacheDir);
     const bytes = await sharp(shaped.bytes)
         .resize(MAX_SUBJECT_EDGE, MAX_SUBJECT_EDGE, { fit: 'inside', withoutEnlargement: true })
@@ -179,7 +185,7 @@ export async function prepareSubject(
         method,
         bust: shaped.bust,
         ...(shaped.face === undefined ? {} : { face: shaped.face }),
-        ...(method === 'transparent' ? {} : { cutoutPath: sourcePath }),
+        ...(cutout === undefined ? {} : { cutoutPath: cutout.path }),
     };
 }
 

@@ -6,7 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // 只在这个文件里劫持 renameSync：并发抠图的缓存 rename 在 Windows 上会报 EPERM，
 // 其他错误码必须照抛，不能因为对方写好了缓存就吞掉真实 I/O 故障。
-const control = vi.hoisted(() => ({ renameError: undefined as NodeJS.ErrnoException | undefined }));
+const control = vi.hoisted(() => ({
+    renameError: undefined as NodeJS.ErrnoException | undefined,
+    // 对方已经把缓存放好了；为 false 时模拟 Windows 替换的那一瞬缓存文件不在。
+    twinWrote: true,
+}));
 
 vi.mock('node:fs', async (importOriginal) => {
     const actual = await importOriginal<typeof import('node:fs')>();
@@ -16,8 +20,9 @@ vi.mock('node:fs', async (importOriginal) => {
             if (control.renameError !== undefined) {
                 const error = control.renameError;
                 control.renameError = undefined;
-                // 模拟对方已把缓存写好：先真的放一份，再抛错。
-                actual.copyFileSync(from, to);
+                if (control.twinWrote) {
+                    actual.copyFileSync(from, to);
+                }
                 throw error;
             }
             actual.renameSync(from, to);
@@ -31,6 +36,7 @@ const tempDirectories: string[] = [];
 
 afterEach(() => {
     control.renameError = undefined;
+    control.twinWrote = true;
     for (const directory of tempDirectories.splice(0)) {
         rmSync(directory, { recursive: true, force: true });
     }
@@ -62,13 +68,22 @@ async function setup(): Promise<{
 }
 
 describe('cutout cache rename', () => {
-    it('reuses the twin cache on EPERM but rethrows other errors', async () => {
+    it('keeps its own cutout when it loses the race to the cache, but rethrows other errors', async () => {
         const { photo, cacheDir, cutout } = await setup();
 
         control.renameError = errnoError('EPERM');
         await expect(prepareSubject(photo, { cacheDir, cutout })).resolves.toMatchObject({
             method: 'macos-vision',
         });
+
+        // Windows 替换缓存的那一瞬文件不在：这次照样用自己抠好的那份。
+        rmSync(cacheDir, { recursive: true, force: true });
+        control.renameError = errnoError('EPERM');
+        control.twinWrote = false;
+        await expect(prepareSubject(photo, { cacheDir, cutout })).resolves.toMatchObject({
+            method: 'macos-vision',
+        });
+        control.twinWrote = true;
 
         rmSync(cacheDir, { recursive: true, force: true });
         control.renameError = errnoError('EIO');
