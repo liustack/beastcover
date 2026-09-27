@@ -18,6 +18,7 @@
         "release": "node scripts/release.mjs",
         "prepublishOnly": "pnpm build",
         "examples": "node scripts/examples.mjs",
+        "brand": "node scripts/brand.mjs",
         "docs:list": "node scripts/docs-list.js"
     },
     "files": [

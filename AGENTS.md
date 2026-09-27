@@ -126,6 +126,7 @@ src/
 
 examples/                   # Real covers with their commands, also the visual regression set
 scripts/examples.mjs        # pnpm examples: regenerate the free-path examples
+scripts/brand.mjs           # pnpm brand: README banners and GitHub social preview from examples/
 skills/beastcover/SKILL.md      # Agent skill and routing contract
 dsh/index.js                # DeepSeek Harness plugin backed by the bundled CLI
 cordis.patch.yml            # DSH bundle mount

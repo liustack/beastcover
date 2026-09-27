@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.jpg" alt="One poster cover with a roaring lion, cut for YouTube, Xiaohongshu, TikTok, an X article, and WeChat from the same headline" width="100%"></p>
+<p align="center"><img src="assets/banner.jpg" alt="A wall of ten real covers made by BeastCover: face with big words, versus, number hook, callout, scene title, face with stakes, big type, collage, before and after, and mood, each labelled with its type and platform" width="100%"></p>
 
 <h1 align="center">BeastCover</h1>
 
@@ -36,25 +36,7 @@ Works with Claude Code, Codex, and any agent that reads a skill folder. Then tel
 
 ## What it makes
 
-Every platform has several cover types that keep winning, not one. BeastCover makes ten of them, and picks one from what you give it when you do not say:
-
-<p align="center">
-  <img src="examples/face-text-youtube.png" alt="Face with big words: a shocked face on teal, 我看傻了" width="32%">
-  <img src="examples/versus-youtube.jpg" alt="Versus: a ¥15 bowl of ramen against a ¥150 one with a VS badge" width="32%">
-  <img src="examples/number-youtube.png" alt="Number hook: a huge yellow 3 on orange beside a short line" width="32%">
-</p>
-<p align="center">
-  <img src="examples/callout-youtube.jpg" alt="Callout: a small airplane circled in red with an arrow, 这是什么？" width="32%">
-  <img src="examples/scene-title-youtube.jpg" alt="Scene title: a sailboat on open water, 出海第一天 in outlined yellow and white" width="32%">
-  <img src="examples/face-stakes-youtube.jpg" alt="Face with stakes: a face beside a blurred lava field, a DAY 1 sign" width="32%">
-</p>
-<p align="center">
-  <img src="examples/big-type-xiaohongshu.png" alt="Big type: heavy black characters on cream with a yellow marker stroke" width="19%">
-  <img src="examples/collage-xiaohongshu.jpg" alt="Collage: four noodle photos with 一周吃了7碗面 on a yellow band" width="19%">
-  <img src="examples/before-after-xiaohongshu.jpg" alt="Before and after: a cluttered desk above a clean one" width="19%">
-  <img src="examples/mood-xiaohongshu.jpg" alt="Mood: a cup of coffee on red with a small quiet line" width="19%">
-  <img src="examples/face-text-xiaohongshu.png" alt="Face with big words, portrait: the words above, the face below" width="19%">
-</p>
+Every platform has several cover types that keep winning, not one. BeastCover makes ten of them, and picks one from what you give it when you do not say. The banner at the top is all ten:
 
 Big type, number hook, face with big words, face with stakes, versus, before and after, scene title, callout, collage, and mood. Every one is a single command, collected with the commands that made them in [examples/](examples/).
 

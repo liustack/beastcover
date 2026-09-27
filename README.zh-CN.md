@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.zh-CN.jpg" alt="同一句标题配一头咆哮的狮子，裁成 YouTube、小红书、抖音、X 文章和公众号五种封面" width="100%"></p>
+<p align="center"><img src="assets/banner.zh-CN.jpg" alt="一面封面墙，十张 BeastCover 真实出的封面：人物大字、档位对比、数字冲击、圈注科普、场景题字、人物加赌注、大字报、拼图、前后对比、氛围单图，每张标着类型和平台" width="100%"></p>
 
 <h1 align="center">BeastCover</h1>
 
@@ -36,25 +36,7 @@ Claude Code、Codex 以及任何认技能目录的 agent 都能用。装完对�
 
 ## 它做出来的东西
 
-每个平台的爆款封面都不止一种。BeastCover 做其中十种，你没指定时按你给的素材挑一种：
-
-<p align="center">
-  <img src="examples/face-text-youtube.png" alt="人物大字：青底上一张惊讶的脸，我看傻了" width="32%">
-  <img src="examples/versus-youtube.jpg" alt="档位对比：15 元和 150 元的拉面，中缝 VS 徽章" width="32%">
-  <img src="examples/number-youtube.png" alt="数字冲击：橙底上一个巨大的黄色 3，旁边一句短话" width="32%">
-</p>
-<p align="center">
-  <img src="examples/callout-youtube.jpg" alt="圈注科普：红圈加箭头圈出一架小飞机，这是什么？" width="32%">
-  <img src="examples/scene-title-youtube.jpg" alt="场景题字：海上一艘帆船，出海第一天" width="32%">
-  <img src="examples/face-stakes-youtube.jpg" alt="人物加赌注：虚化的岩浆场景前一张脸，DAY 1 牌子" width="32%">
-</p>
-<p align="center">
-  <img src="examples/big-type-xiaohongshu.png" alt="大字报：奶油底上的粗黑大字，一个词压黄色荧光笔" width="19%">
-  <img src="examples/collage-xiaohongshu.jpg" alt="拼图：四张面的照片，中间黄色色带写一周吃了7碗面" width="19%">
-  <img src="examples/before-after-xiaohongshu.jpg" alt="前后对比：上面是乱桌面，下面是整洁的桌面" width="19%">
-  <img src="examples/mood-xiaohongshu.jpg" alt="氛围单图：红底上一杯咖啡，一句安静的小字" width="19%">
-  <img src="examples/face-text-xiaohongshu.png" alt="人物大字竖版：字在上，人在下" width="19%">
-</p>
+每个平台的爆款封面都不止一种。BeastCover 做其中十种，你没指定时按你给的素材挑一种。顶部横幅就是这十种：
 
 大字报、数字冲击、人物大字、人物加赌注、档位对比、前后对比、场景题字、圈注科普、拼图、氛围单图。每张都是一条命令，命令和成品都收在 [examples/](examples/)。
 
