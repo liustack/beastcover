@@ -531,6 +531,16 @@ export function calloutGeometry(
             continue;
         }
         const wings = arrowWings(candidate, tip, stroke);
+        // 起点、箭尖和两翼端点连圆头白边都要留在可见区内。起点虽然夹进了可见区，但小画布上
+        // 线宽有下限，白边和翼长不随短边同比缩小，箭尖和翼端可能伸出边界被切掉。
+        const insideVisible = (point: Point): boolean =>
+            point.x >= visible.x + shaftPad &&
+            point.x <= visible.x + visible.width - shaftPad &&
+            point.y >= visible.y + shaftPad &&
+            point.y <= visible.y + visible.height - shaftPad;
+        if (![candidate, tip, ...wings].every(insideVisible)) {
+            continue;
+        }
         if (
             strokeMeetsRects(candidate, tip, shaftPad, blocked) ||
             wings.some((wing) => strokeMeetsRects(wing, tip, shaftPad, blocked))
