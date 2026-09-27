@@ -16,7 +16,10 @@ import {
     checkEdges,
     checkOverlaps,
     checkQuietZone,
+    checkSubjects,
+    clearCrop,
     detailUnder,
+    type PictureSubject,
     type QcFinding,
     type QcTarget,
     realObjects,
@@ -55,7 +58,13 @@ export interface CoverTemplate {
         headline: Headline,
         pixelWidth: number,
         pixelHeight: number,
-    ): Promise<string>;
+    ): Promise<RenderedPage>;
+}
+
+/** 截图用的页面，和画面里必须完整露出来的主体（照片主体、人脸），质检逐个平台核对 */
+export interface RenderedPage {
+    html: string;
+    subjects: readonly PictureSubject[];
 }
 
 export interface CoverTarget {
@@ -123,10 +132,13 @@ async function inspectMaster(
 async function findingsFor(
     target: QcTarget,
     crop: Rect,
+    covered: readonly Rect[],
+    page: RenderedPage,
     qc: MasterInspection,
     png: Buffer,
 ): Promise<QcFinding[]> {
     return [
+        ...checkSubjects(target, page.subjects, crop, covered),
         ...(qc.contents === undefined
             ? []
             : checkOverlaps({
@@ -312,9 +324,6 @@ export function familyVisibleArea(family: FamilyName, platforms: readonly Platfo
     return crops.slice(1).reduce(intersect, { ...first });
 }
 
-// 横跨可见区域这么宽的遮挡才算顶栏或底栏（抖音右侧那一列按钮不算）。
-const BAR_WIDTH_SHARE = 0.8;
-
 /** 本次要出的这一族平台的界面遮挡区（时长角标、点赞栏、按钮列），母版坐标 */
 export function familyCoveredAreas(
     family: FamilyName,
@@ -328,21 +337,7 @@ export function familyCoveredAreas(
 
 /** 可见区域去掉请求平台顶部和底部的界面栏：抖音的顶栏和底栏、B 站底部的数据栏 */
 export function familyClearArea(family: FamilyName, platforms: readonly PlatformName[]): Rect {
-    const visible = familyVisibleArea(family, platforms);
-    let top = visible.y;
-    let bottom = visible.y + visible.height;
-    for (const covered of familyCoveredAreas(family, platforms)) {
-        if (covered.width < visible.width * BAR_WIDTH_SHARE) {
-            continue;
-        }
-        const middle = covered.y + covered.height / 2;
-        if (middle < visible.y + visible.height / 2) {
-            top = Math.max(top, covered.y + covered.height);
-        } else {
-            bottom = Math.min(bottom, covered.y);
-        }
-    }
-    return { x: visible.x, y: top, width: visible.width, height: bottom - top };
+    return clearCrop(familyVisibleArea(family, platforms), familyCoveredAreas(family, platforms));
 }
 
 /** 多个平台时每个文件名后面加平台名，只有一个平台时原样返回 */
@@ -403,14 +398,14 @@ export async function composeCovers(input: {
                 input.text,
                 where,
             );
-            const masterHtml = await input.template.renderHtml(
+            const page = await input.template.renderHtml(
                 layout,
                 headline,
                 Math.round(family.masterWidth * masterScale),
                 Math.round(family.masterHeight * masterScale),
             );
             const master = await input.renderer.screenshot({
-                html: masterHtml,
+                html: page.html,
                 width: family.masterWidth,
                 height: family.masterHeight,
                 scale: masterScale,
@@ -419,7 +414,7 @@ export async function composeCovers(input: {
                 input.qc === undefined
                     ? undefined
                     : await inspectMaster(input.renderer, input.qc, {
-                          html: masterHtml,
+                          html: page.html,
                           width: family.masterWidth,
                           height: family.masterHeight,
                       });
@@ -462,7 +457,14 @@ export async function composeCovers(input: {
                 const findings =
                     qc === undefined
                         ? []
-                        : await findingsFor(platform.name, platform.crop, qc, png);
+                        : await findingsFor(
+                              platform.name,
+                              platform.crop,
+                              platform.covered,
+                              page,
+                              qc,
+                              png,
+                          );
                 outputs.push({ platform, outputPath, png, findings });
             }
             return { headline, outputs };
@@ -517,7 +519,8 @@ export async function composeCustomCover(input: {
             input.text,
             `a ${input.width}x${input.height} canvas`,
         );
-        const html = await input.template.renderHtml(layout, headline, pixelWidth, pixelHeight);
+        const page = await input.template.renderHtml(layout, headline, pixelWidth, pixelHeight);
+        const html = page.html;
         const png = await input.renderer.screenshot({
             html,
             width: input.width,
@@ -530,6 +533,8 @@ export async function composeCustomCover(input: {
                 : await findingsFor(
                       'canvas',
                       canvas,
+                      [],
+                      page,
                       await inspectMaster(input.renderer, input.qc, {
                           html,
                           width: input.width,
@@ -688,6 +693,7 @@ export function focusCropWarnings(
         const layout = {
             ...familyLayout(familyName),
             visibleArea: familyVisibleArea(familyName, members),
+            clearArea: familyClearArea(familyName, members),
         };
         // 主体范围换到母版坐标。
         const fraction = framedFocusBox(photo, focus, layout, hasSubject);

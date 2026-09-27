@@ -1,8 +1,9 @@
 // 拼图：2 到 4 张同一趟、同一种调子的照片拼一格一格，标题压在一条实色带上。
 // 竖版（小红书）色带横在中间，照片分在上下；横版和超宽标题占左边一块，照片在右边排格子。
 // 几张照片统一过同一种调色，才像一套（research.md 第 5.1 节「拼图」）。
-import type { CoverTemplate } from '../compose/index.ts';
+import type { CoverTemplate, RenderedPage } from '../compose/index.ts';
 import type { FamilyName, Rect } from '../platforms/index.ts';
+import type { PictureSubject } from '../qc/index.ts';
 import type { CoverLayout, Headline } from '../render/layout.ts';
 import { type PhotoLook, preparePhotoLayer } from '../render/photo-cover.ts';
 import type { TypeSpec } from '../render/type.ts';
@@ -13,10 +14,11 @@ import {
     joinLayers,
     type Layers,
     photoLayers,
+    photoSubject,
     rectCss,
+    seenPart,
 } from './page.ts';
 import { isLightScheme, SCHEMES, type SchemeName } from './schemes.ts';
-import { panelVisibility } from './split.ts';
 
 export const COLLAGE_MIN = 2;
 export const COLLAGE_MAX = 4;
@@ -179,36 +181,27 @@ export function collageTemplate(request: CollageRequest): CoverTemplate {
         layout: CoverLayout,
         headline: Headline,
         scale: number | undefined,
-    ): Promise<string> => {
+    ): Promise<RenderedPage> => {
         const { family, geometry } = geometryFor(layout);
         let under = band(geometry);
+        let subjects: PictureSubject[] = [];
         if (scale !== undefined) {
-            const visibleArea = layout.visibleArea ?? {
-                x: 0,
-                y: 0,
-                width: layout.width,
-                height: layout.height,
-            };
             const rects = cells(family, geometry, count).map((cell) => inset(cell, GUTTER / 2));
             const photos = await Promise.all(
                 rects.map(async (rect, index) => {
                     const photo = request.photos[index] as GenrePhoto;
-                    const visible = panelVisibility(rect, visibleArea);
+                    const seen = seenPart(rect, layout);
                     const layer = await preparePhotoLayer(
                         photo.path,
-                        Math.round(rect.width * scale),
-                        Math.round(rect.height * scale),
-                        {
-                            focus: photo.focus,
-                            target: {
-                                x: visible.x + visible.width / 2,
-                                y: visible.y + visible.height / 2,
-                            },
-                            visible,
-                        },
+                        Math.round(seen.width * scale),
+                        Math.round(seen.height * scale),
+                        { focus: photo.focus, target: { x: 0.5, y: 0.5 } },
                     );
-                    return { dataUri: layer.dataUri, rect };
+                    return { dataUri: layer.dataUri, rect: seen, focusBox: layer.focusBox };
                 }),
+            );
+            subjects = photos.flatMap((photo, index) =>
+                photoSubject(`photo ${index + 1}'s subject`, photo.focusBox, photo.rect),
             );
             under = joinLayers(
                 photoLayers(photos, request.look ?? 'natural', {
@@ -218,17 +211,20 @@ export function collageTemplate(request: CollageRequest): CoverTemplate {
                 under,
             );
         }
-        return genrePage({
-            layout,
-            headline,
-            text: request.text,
-            type,
-            colors: scheme.type,
-            background: scheme.base,
-            measure: scale === undefined,
-            align: { x: family === 'portrait' ? 'center' : 'start', y: 'center' },
-            under,
-        });
+        return {
+            html: genrePage({
+                layout,
+                headline,
+                text: request.text,
+                type,
+                colors: scheme.type,
+                background: scheme.base,
+                measure: scale === undefined,
+                align: { x: family === 'portrait' ? 'center' : 'start', y: 'center' },
+                under,
+            }),
+            subjects,
+        };
     };
     return {
         layoutFor: (layout) => ({
@@ -248,14 +244,5 @@ export function collageTemplate(request: CollageRequest): CoverTemplate {
             }),
         renderHtml: (layout, headline, pixelWidth) =>
             page(layout, headline, pixelWidth / layout.width),
-    };
-}
-
-/** 测试用：每族的标题区 */
-export function collageTextAreas(): Record<FamilyName, Rect> {
-    return {
-        landscape: GEOMETRY.landscape.textArea,
-        portrait: GEOMETRY.portrait.textArea,
-        ultrawide: GEOMETRY.ultrawide.textArea,
     };
 }

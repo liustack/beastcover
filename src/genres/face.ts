@@ -9,11 +9,11 @@ import type { Rect } from '../platforms/index.ts';
 import type { FontChoice } from '../render/fonts.ts';
 import { type CoverLayout, escapeHtml, type Headline, withSubjectArea } from '../render/layout.ts';
 import {
+    framingFraction,
     type PhotoFit,
     type PhotoLook,
     photoFocusTarget,
     preparePhotoLayer,
-    visibleFraction,
 } from '../render/photo-cover.ts';
 import { coverDocument, subjectMarkup } from '../render/template.ts';
 import type { TypeColors, TypeSpec } from '../render/type.ts';
@@ -21,6 +21,7 @@ import type { SubjectLayer } from '../subject/index.ts';
 import {
     eyebrow,
     type FontKit,
+    faceSubject,
     type GenrePhoto,
     genrePage,
     joinLayers,
@@ -76,7 +77,10 @@ export function faceTextTemplate(request: FaceTextRequest): CoverTemplate {
     return {
         layoutFor: faceLayout,
         measureHtml: (layout, headline) => page(layout, headline, true),
-        renderHtml: async (layout, headline) => page(layout, headline, false),
+        renderHtml: async (layout, headline) => ({
+            html: page(layout, headline, false),
+            subjects: faceSubject(layout, request.subject, FACE_TEXT_SHARE),
+        }),
     };
 }
 
@@ -204,7 +208,7 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
         let under = { css: '', html: '' };
         let person = { css: '', html: '' };
         if (pixels !== undefined) {
-            const visible = visibleFraction(layout);
+            const visible = framingFraction(layout);
             const scene = photoForLayout(request.photo, layout);
             const photo = await preparePhotoLayer(scene.path, pixels.width, pixels.height, {
                 focus: scene.focus,
@@ -302,7 +306,9 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                 measure: true,
                 align: { x: 'start', y: 'start' },
             }),
-        renderHtml: (layout, headline, pixelWidth, pixelHeight) =>
-            page(layout, headline, { width: pixelWidth, height: pixelHeight }),
+        renderHtml: async (layout, headline, pixelWidth, pixelHeight) => ({
+            html: await page(layout, headline, { width: pixelWidth, height: pixelHeight }),
+            subjects: faceSubject(layout, request.subject, FACE_STAKES_SHARE),
+        }),
     };
 }

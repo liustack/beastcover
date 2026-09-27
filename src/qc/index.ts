@@ -295,6 +295,92 @@ export async function detailUnder(background: Buffer, text: TextMask, crop: Rect
 }
 
 /** 字要压在安静区：压在细碎的地方既可能盖住东西，缩小以后也更难读 */
+/** 画面里必须完整露出来的一样东西：照片的主体、人脸。母版坐标 */
+export interface PictureSubject {
+    /** 报错时的称呼，比如 the after photo's subject、the face */
+    name: string;
+    /** 主体的框，可以伸出画布 */
+    box: Rect;
+    /** 这张照片占的地方：面板、格子，或整张画布 */
+    frame: Rect;
+}
+
+// 横跨裁切框这么宽的遮挡才算顶栏或底栏（抖音右侧那一列按钮不算）。
+const BAR_WIDTH_SHARE = 0.8;
+// 显著性框的边本来就松，每条边允许偏出主体大小的这么多。
+const SUBJECT_TOLERANCE = 0.03;
+// 时长角标、侧边按钮列这类不横跨整幅的界面，盖住主体框这么多就算挡住了。
+const SUBJECT_COVERED_SHARE = 0.1;
+
+/** 平台真正让人看清的区域：裁切框去掉横跨整幅的顶栏和底栏 */
+export function clearCrop(crop: Rect, covered: readonly Rect[]): Rect {
+    let top = crop.y;
+    let bottom = crop.y + crop.height;
+    for (const rect of covered) {
+        if (rect.width < crop.width * BAR_WIDTH_SHARE) {
+            continue;
+        }
+        if (rect.y + rect.height / 2 < crop.y + crop.height / 2) {
+            top = Math.max(top, rect.y + rect.height);
+        } else {
+            bottom = Math.min(bottom, rect.y);
+        }
+    }
+    return { x: crop.x, y: top, width: crop.width, height: bottom - top };
+}
+
+/**
+ * 一条边上主体露得对不对：主体放得下这个窗口时，整个主体都要在窗口里；放不下时，
+ * 窗口里只能是主体，不能一边露空一边切掉主体。
+ */
+function shownAlong(s0: number, s1: number, v0: number, v1: number): boolean {
+    const tolerance = (s1 - s0) * SUBJECT_TOLERANCE;
+    return s1 - s0 <= v1 - v0
+        ? s0 >= v0 - tolerance && s1 <= v1 + tolerance
+        : v0 >= s0 - tolerance && v1 <= s1 + tolerance;
+}
+
+/** 照片的主体和人脸有没有被这个平台裁掉，或者压在顶栏底栏下面 */
+export function checkSubjects(
+    target: QcTarget,
+    subjects: readonly PictureSubject[],
+    crop: Rect,
+    covered: readonly Rect[],
+): QcFinding[] {
+    const clear = clearCrop(crop, covered);
+    return subjects.flatMap((subject): QcFinding[] => {
+        const window = intersect(subject.frame, clear);
+        const { box } = subject;
+        // 放得下的主体要整个露出来，不能压在角标、按钮列下面。比窗口还大的主体本来就只露一部分，
+        // 顶栏底栏已经从窗口里扣掉了。
+        const fits =
+            window !== undefined && box.width <= window.width && box.height <= window.height;
+        const underButtons =
+            fits &&
+            covered.some((rect) => {
+                if (rect.width >= crop.width * BAR_WIDTH_SHARE) {
+                    return false;
+                }
+                const hidden = intersect(box, rect);
+                return hidden !== undefined && area(hidden) > area(box) * SUBJECT_COVERED_SHARE;
+            });
+        const shown =
+            window !== undefined &&
+            !underButtons &&
+            shownAlong(box.x, box.x + box.width, window.x, window.x + window.width) &&
+            shownAlong(box.y, box.y + box.height, window.y, window.y + window.height);
+        return shown
+            ? []
+            : [
+                  {
+                      level: 'fail',
+                      platform: target,
+                      message: `${subject.name} is cut off or hidden under the app's buttons. Pick a photo with more room around its subject, or another type.`,
+                  },
+              ];
+    });
+}
+
 // 贴着成品四边查这么宽的一条（像素）。字块掩膜已经往外膨胀了约 1% 短边，
 // 字离边还有十来个像素就会碰到这条带，那已经近到会被裁掉或贴边难看。
 const EDGE_BAND = 2;

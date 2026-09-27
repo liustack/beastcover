@@ -221,7 +221,7 @@ export function numberGenreTemplate(request: NumberRequest): CoverTemplate {
             if (headline.accentPx === undefined) {
                 throw new Error('The number cover needs a fitted figure size.');
             }
-            return page(layout, headline, false);
+            return { html: page(layout, headline, false), subjects: [] };
         },
     };
 }

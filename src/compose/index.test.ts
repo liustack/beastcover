@@ -49,7 +49,10 @@ interface FakeLayoutPage {
 /** 页面内容就是版式的 JSON，假渲染器据此画一张红底、标题区涂绿的母版 */
 const template: CoverTemplate = {
     measureHtml: (layout, headline) => JSON.stringify({ layout, headline }),
-    renderHtml: async (layout, headline) => JSON.stringify({ layout, headline }),
+    renderHtml: async (layout, headline) => ({
+        html: JSON.stringify({ layout, headline }),
+        subjects: [],
+    }),
 };
 
 function fakeRenderer(fontFor: (request: FitTextRequest, keepClauses: boolean) => number) {

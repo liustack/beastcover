@@ -1,8 +1,15 @@
 // 各封面类型共用的页面：背景、图层（照片、面板、人物、标签）、按类型做好的标题。
 // 类型只决定「画面从哪来、字怎么做、怎么排」，页面骨架和量字号的约定在这里统一。
 import type { FamilyName, Rect } from '../platforms/index.ts';
+import type { PictureSubject } from '../qc/index.ts';
 import { chooseFont, type FontChoice, type FontProber, type FontRole } from '../render/fonts.ts';
-import { type CoverLayout, escapeHtml, type Headline, probeMarkup } from '../render/layout.ts';
+import {
+    type CoverLayout,
+    escapeHtml,
+    type Headline,
+    placeSubject,
+    probeMarkup,
+} from '../render/layout.ts';
 import type { PhotoLook } from '../render/photo-cover.ts';
 import { coverDocument, headlineCss } from '../render/template.ts';
 import {
@@ -12,6 +19,7 @@ import {
     type TypeColors,
     type TypeSpec,
 } from '../render/type.ts';
+import type { SubjectLayer } from '../subject/index.ts';
 import type { PhotoFocus } from '../subject/vision.ts';
 
 /** 按角色取字体，同一个角色只探测一次；降级说明攒起来最后一起打印 */
@@ -48,6 +56,54 @@ export interface GenrePhoto {
     byFamily?: Partial<Record<FamilyName, GenrePhoto>>;
 }
 
+/** 照片按主体构图放进一个框以后，主体在母版上的位置。没按主体构图（extend、没找到主体）就没有 */
+export function photoSubject(
+    name: string,
+    focusBox: Rect | undefined,
+    frame: Rect,
+): PictureSubject[] {
+    if (focusBox === undefined) {
+        return [];
+    }
+    return [
+        {
+            name,
+            box: {
+                x: frame.x + focusBox.x * frame.width,
+                y: frame.y + focusBox.y * frame.height,
+                width: focusBox.width * frame.width,
+                height: focusBox.height * frame.height,
+            },
+            frame,
+        },
+    ];
+}
+
+/** 人物的脸在母版上的位置：人可以被画面切掉，脸不行 */
+export function faceSubject(
+    layout: CoverLayout,
+    subject: SubjectLayer,
+    faceShare: number,
+): PictureSubject[] {
+    const face = subject.face;
+    if (face === undefined) {
+        return [];
+    }
+    const rect = placeSubject(layout, subject, faceShare);
+    return [
+        {
+            name: 'the face',
+            box: {
+                x: rect.x + (face.x - face.width / 2) * rect.width,
+                y: rect.y + (face.y - face.height / 2) * rect.height,
+                width: face.width * rect.width,
+                height: face.height * rect.height,
+            },
+            frame: { x: 0, y: 0, width: layout.width, height: layout.height },
+        },
+    ];
+}
+
 /** 这个版式用哪张：有这一族专门画的就用它 */
 export function photoForLayout(photo: GenrePhoto, layout: CoverLayout): GenrePhoto {
     const variant = layout.family === undefined ? undefined : photo.byFamily?.[layout.family];
@@ -66,6 +122,22 @@ export function joinLayers(...layers: readonly Layers[]): Layers {
         css: layers.map((layer) => layer.css).join('\n'),
         html: layers.map((layer) => layer.html).join('\n'),
     };
+}
+
+/**
+ * 一块照片区里平台真正看得清的那一截（和合成时的 clearArea 求交）。照片只铺这一截、按它构图，
+ * 被裁掉或压在顶栏底栏下面的部分只留底色，主体就不会落进看不见的地方。
+ */
+export function seenPart(rect: Rect, layout: CoverLayout): Rect {
+    const clear = layout.clearArea ?? { x: 0, y: 0, width: layout.width, height: layout.height };
+    const x = Math.max(rect.x, clear.x);
+    const y = Math.max(rect.y, clear.y);
+    const right = Math.min(rect.x + rect.width, clear.x + clear.width);
+    const bottom = Math.min(rect.y + rect.height, clear.y + clear.height);
+    if (right <= x || bottom <= y) {
+        throw new Error('A photo area has no visible part on the requested platforms.');
+    }
+    return { x, y, width: right - x, height: bottom - y };
 }
 
 export function rectCss(rect: Rect): string {

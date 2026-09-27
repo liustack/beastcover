@@ -3,18 +3,19 @@
 // 只压暗字那一侧，白字黑描边加双层外圈（B 站剧集、纪录片的题字做法）。
 // 圈注科普：照片主体上一个红圈加一支箭头，一句短问句。科普频道的招牌（research.md 第 3.3 节）。
 // 氛围单图：一张好图说完，字少而小，衬线体加软投影，不描边（小红书高颜值单图、公众号编辑感）。
-import type { CoverTemplate } from '../compose/index.ts';
+import type { CoverTemplate, RenderedPage } from '../compose/index.ts';
 import type { Rect } from '../platforms/index.ts';
+import type { PictureSubject } from '../qc/index.ts';
 import type { CoverLayout, Headline } from '../render/layout.ts';
 import {
     calloutLayout,
     calloutMarkup,
+    framingFraction,
     type PhotoFit,
     type PhotoLook,
     photoFocusTarget,
     photoTextLayout,
     preparePhotoLayer,
-    visibleFraction,
 } from '../render/photo-cover.ts';
 import type { TypeSpec } from '../render/type.ts';
 import {
@@ -26,6 +27,7 @@ import {
     localScrim,
     photoForLayout,
     photoLayers,
+    photoSubject,
 } from './page.ts';
 import { SCHEMES, type SchemeName } from './schemes.ts';
 
@@ -108,11 +110,12 @@ function photoTemplate(request: PhotoGenreRequest, kind: PhotoKind): CoverTempla
         layout: CoverLayout,
         headline: Headline,
         pixels: { width: number; height: number } | undefined,
-    ): Promise<string> => {
+    ): Promise<RenderedPage> => {
         let under: Layers = { css: moodCss, html: '' };
         let over: Layers = { css: '', html: '' };
+        let subjects: PictureSubject[] = [];
         if (pixels !== undefined) {
-            const visible = visibleFraction(layout);
+            const visible = framingFraction(layout);
             const picked = photoForLayout(photo, layout);
             const layer = await preparePhotoLayer(picked.path, pixels.width, pixels.height, {
                 focus: picked.focus,
@@ -123,6 +126,7 @@ function photoTemplate(request: PhotoGenreRequest, kind: PhotoKind): CoverTempla
                 ...(visible === undefined ? {} : { visible }),
             });
             const full: Rect = { x: 0, y: 0, width: layout.width, height: layout.height };
+            subjects = photoSubject("the photo's subject", layer.focusBox, full);
             under = joinLayers(
                 { css: moodCss, html: '' },
                 photoLayers([{ dataUri: layer.dataUri, rect: full }], request.look ?? 'natural', {
@@ -150,18 +154,21 @@ function photoTemplate(request: PhotoGenreRequest, kind: PhotoKind): CoverTempla
                 };
             }
         }
-        return genrePage({
-            layout,
-            headline,
-            text: request.text,
-            type,
-            colors,
-            background: scheme.baseDeep,
-            measure: pixels === undefined,
-            align: { x: 'start', y: textOnTop(layout) ? 'start' : 'end' },
-            under,
-            over,
-        });
+        return {
+            html: genrePage({
+                layout,
+                headline,
+                text: request.text,
+                type,
+                colors,
+                background: scheme.baseDeep,
+                measure: pixels === undefined,
+                align: { x: 'start', y: textOnTop(layout) ? 'start' : 'end' },
+                under,
+                over,
+            }),
+            subjects,
+        };
     };
     return {
         layoutFor,

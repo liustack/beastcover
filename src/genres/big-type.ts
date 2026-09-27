@@ -45,6 +45,9 @@ export function bigTypeTemplate(request: BigTypeRequest): CoverTemplate {
         });
     return {
         measureHtml: (layout, headline) => page(layout, headline, true),
-        renderHtml: async (layout, headline) => page(layout, headline, false),
+        renderHtml: async (layout, headline) => ({
+            html: page(layout, headline, false),
+            subjects: [],
+        }),
     };
 }

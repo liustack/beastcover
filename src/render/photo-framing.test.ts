@@ -101,6 +101,20 @@ describe('photo framing', () => {
         ).toBe(700);
     });
 
+    it('keeps the window inside a subject that is bigger than the window', () => {
+        // 主体 30 到 402（372 长），窗口只有 370：目标把窗口推到 0 会一边露空一边切主体，
+        // 夹回主体里面，起点落在 30 到 32 之间。
+        const start = placeWindow({
+            source: 600,
+            window: 370,
+            focusCenter: 216,
+            focusSize: 372,
+            target: 0.66,
+        });
+        expect(start).toBeGreaterThanOrEqual(30);
+        expect(start + 370).toBeLessThanOrEqual(402);
+    });
+
     it('keeps the focus inside the visible part of the window when the photo allows it', () => {
         // 窗口 1920 宽，只有 0.275 到 0.725 这段会被公众号看到。主体在 3000，目标 0.64 时起点 1771，
         // 主体落在窗口的 1229 处，在可见段里。

@@ -4,6 +4,8 @@ import {
     checkBrightness,
     checkEdges,
     checkOverlaps,
+    checkSubjects,
+    clearCrop,
     formatFindings,
     maskFromRects,
     type QcFinding,
@@ -173,6 +175,77 @@ describe('edges', () => {
         expect(
             checkEdges('youtube', mask([{ x: 400, y: 0, width: 300, height: 61 }]), youtube),
         ).toHaveLength(1);
+    });
+});
+
+describe('subjects', () => {
+    const douyin = { x: 0, y: 0, width: 1080, height: 1920 };
+    const bars = [
+        { x: 0, y: 0, width: 1080, height: 220 },
+        { x: 0, y: 1540, width: 1080, height: 380 },
+        { x: 944, y: 768, width: 136, height: 772 },
+    ];
+    const panel = { x: 0, y: 1120, width: 1080, height: 800 };
+    const subject = (box: { x: number; y: number; width: number; height: number }) => [
+        { name: "the after photo's subject", box, frame: panel },
+    ];
+
+    it('passes a subject that fits and shows in full', () => {
+        expect(
+            checkSubjects(
+                'douyin',
+                subject({ x: 100, y: 1150, width: 800, height: 350 }),
+                douyin,
+                bars,
+            ),
+        ).toEqual([]);
+    });
+
+    it('fails a subject that could fit but runs under the bottom bar', () => {
+        const findings = checkSubjects(
+            'douyin',
+            subject({ x: 100, y: 1336, width: 850, height: 438 }),
+            douyin,
+            bars,
+        );
+        expect(findings.map((finding) => finding.message)).toEqual([
+            "the after photo's subject is cut off or hidden under the app's buttons. Pick a photo with more room around its subject, or another type.",
+        ]);
+    });
+
+    it('accepts a subject larger than the window when the window shows only subject', () => {
+        expect(
+            checkSubjects(
+                'douyin',
+                subject({ x: -200, y: 1100, width: 1480, height: 900 }),
+                douyin,
+                bars,
+            ),
+        ).toEqual([]);
+        // 比窗口还大，窗口却一边露空：主体没对准。
+        expect(
+            checkSubjects(
+                'douyin',
+                subject({ x: 400, y: 1100, width: 1480, height: 900 }),
+                douyin,
+                bars,
+            ),
+        ).toHaveLength(1);
+    });
+
+    it('fails a subject hidden under the side buttons', () => {
+        expect(
+            checkSubjects(
+                'douyin',
+                subject({ x: 850, y: 1150, width: 200, height: 300 }),
+                douyin,
+                bars,
+            ),
+        ).toHaveLength(1);
+    });
+
+    it('works out the clear part of a crop from full-width bars only', () => {
+        expect(clearCrop(douyin, bars)).toEqual({ x: 0, y: 220, width: 1080, height: 1320 });
     });
 });
 

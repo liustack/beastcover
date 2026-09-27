@@ -3,8 +3,9 @@
 // 前后对比：左前右后（竖版上前下后），两半同亮度，各贴一个前后标签，中缝一支箭头。
 // 两类的标题都放在单独的实色标题带里，不压在照片上：压在照片上的字总会挡到其中一半的主体。
 import sharp from 'sharp';
-import type { CoverTemplate } from '../compose/index.ts';
+import type { CoverTemplate, RenderedPage } from '../compose/index.ts';
 import type { FamilyName, Rect } from '../platforms/index.ts';
+import type { PictureSubject } from '../qc/index.ts';
 import type { CoverLayout, Headline } from '../render/layout.ts';
 import { type PhotoLook, preparePhotoLayer } from '../render/photo-cover.ts';
 import type { TypeSpec } from '../render/type.ts';
@@ -17,7 +18,9 @@ import {
     joinLayers,
     type Layers,
     photoLayers,
+    photoSubject,
     rectCss,
+    seenPart,
 } from './page.ts';
 import { isLightScheme, SCHEMES, type SchemeName } from './schemes.ts';
 
@@ -108,27 +111,60 @@ const VERSUS: Readonly<Record<FamilyName, SplitGeometry>> = {
     },
 };
 
-// 前后对比：横版和超宽同档位对比；竖版上下分，标题带就是中缝。
+// 前后对比排成左右两半时，和档位对比同一套几何，标签小一号、不倾斜。
 const BEFORE_AFTER: Readonly<Record<FamilyName, SplitGeometry>> = {
     landscape: { ...VERSUS.landscape, labelPx: 84 },
-    portrait: {
-        split: 'rows',
-        band: { x: 0, y: 820, width: 1080, height: 300 },
-        textArea: { x: 86, y: 845, width: 842, height: 205 },
-        panels: [
-            { x: 0, y: 0, width: 1080, height: 820 },
-            { x: 0, y: 1120, width: 1080, height: 800 },
-        ],
-        // 箭头骑在标题带下沿，朝下指向「后」。
-        badge: { x: 540, y: 1120, size: 124 },
-        labels: [
-            { x: 86, y: 300, anchor: 'start' },
-            { x: 86, y: 1210, anchor: 'start' },
-        ],
-        labelPx: 64,
-    },
+    portrait: { ...VERSUS.portrait, labelPx: 64 },
     ultrawide: { ...VERSUS.ultrawide, labelPx: 56 },
 };
+
+// 竖版前后对比上下分时：标题带（也是中缝）占画布高度的比例，前后标签的字号占画布宽度的比例。
+const ROWS_BAND_SHARE = 0.156;
+const ROWS_LABEL_SHARE = 0.06;
+// 横图（宽高比不小于这个值）才上下分：竖图塞进扁长条会被切掉大半。
+const LANDSCAPE_PHOTO = 1.15;
+
+/**
+ * 竖版前后对比、两张都是横图时上下分：两半按平台真正看得见的那一截（可见区去掉顶栏底栏）来分，
+ * 标题带落在那一截的正中，不把半张照片浪费在被裁掉或被挡住的地方。
+ */
+function rowsGeometry(layout: CoverLayout): SplitGeometry {
+    const { width, height } = layout;
+    const clear = layout.clearArea ?? { x: 0, y: 0, width, height };
+    const band = Math.round(height * ROWS_BAND_SHARE);
+    const bandTop = Math.round(clear.y + (clear.height - band) / 2);
+    const bandBottom = bandTop + band;
+    const badge = Math.round(band * 0.41);
+    const labelPx = Math.round(width * ROWS_LABEL_SHARE);
+    const padTop = Math.round(band * 0.083);
+    return {
+        split: 'rows',
+        band: { x: 0, y: bandTop, width, height: band },
+        // 标题横向沿用族的安全区，纵向在标题带里，下面让出箭头的上半个。
+        textArea: {
+            x: layout.textArea.x,
+            y: bandTop + padTop,
+            width: layout.textArea.width,
+            height: band - padTop - Math.round(badge * 0.6),
+        },
+        // 两半就是看得清的那两截：照片按它们构图，被裁掉或被界面挡住的地方只留底色。
+        panels: [
+            { x: 0, y: clear.y, width, height: bandTop - clear.y },
+            { x: 0, y: bandBottom, width, height: clear.y + clear.height - bandBottom },
+        ],
+        // 箭头骑在标题带下沿，朝下指向「后」。
+        badge: { x: Math.round(width / 2), y: bandBottom, size: badge },
+        labels: [
+            { x: layout.textArea.x, y: clear.y + Math.round(labelPx * 0.9), anchor: 'start' },
+            {
+                x: layout.textArea.x,
+                y: bandBottom + Math.round(badge / 2 + labelPx * 0.6),
+                anchor: 'start',
+            },
+        ],
+        labelPx,
+    };
+}
 
 function familyOf(layout: CoverLayout): FamilyName {
     if (layout.family !== undefined) {
@@ -144,7 +180,22 @@ const MASTER: Readonly<Record<FamilyName, { width: number; height: number }>> = 
     ultrawide: { width: 1920, height: 768 },
 };
 
-/** 自定义画布按最接近的族等比换算 */
+/**
+ * 这张封面的分屏几何。竖版前后对比、两张都是横图时上下分，其余左右分。
+ * 自定义画布按最接近的族等比换算。
+ */
+function splitGeometry(
+    layout: CoverLayout,
+    kind: 'versus' | 'before-after',
+    photos: readonly [GenrePhoto, GenrePhoto],
+): SplitGeometry {
+    const landscapePhotos = photos.every((photo) => photo.width >= photo.height * LANDSCAPE_PHOTO);
+    if (kind === 'before-after' && familyOf(layout) === 'portrait' && landscapePhotos) {
+        return rowsGeometry(layout);
+    }
+    return geometryFor(layout, kind === 'versus' ? VERSUS : BEFORE_AFTER);
+}
+
 function geometryFor(layout: CoverLayout, table: Record<FamilyName, SplitGeometry>): SplitGeometry {
     const family = familyOf(layout);
     const geometry = table[family];
@@ -274,13 +325,14 @@ export function labelFontPx(
     return Math.floor(Math.min(geometry.labelPx, ...fits));
 }
 
-/** 测试用：每族的分屏几何和标签框 */
+/** 测试用：这张封面的分屏几何和标签框 */
 export function splitLabelRects(
     kind: 'versus' | 'before-after',
     layout: CoverLayout,
     labels: readonly [string, string],
+    photos: readonly [GenrePhoto, GenrePhoto],
 ): { rects: Rect[]; panels: readonly Rect[]; badge?: Rect; fontPx: number } {
-    const geometry = geometryFor(layout, kind === 'versus' ? VERSUS : BEFORE_AFTER);
+    const geometry = splitGeometry(layout, kind, photos);
     const fontPx = labelFontPx(geometry, layout, labels);
     return {
         rects: geometry.labels.map((anchor, index) =>
@@ -298,23 +350,6 @@ export function splitLabelRects(
                   },
               }),
         fontPx,
-    };
-}
-
-/** 面板里平台看得见的那一截，换算成面板的 0 到 1 */
-export function panelVisibility(panel: Rect, visibleArea: Rect): Rect {
-    const x = Math.max(panel.x, visibleArea.x);
-    const y = Math.max(panel.y, visibleArea.y);
-    const right = Math.min(panel.x + panel.width, visibleArea.x + visibleArea.width);
-    const bottom = Math.min(panel.y + panel.height, visibleArea.y + visibleArea.height);
-    if (right <= x || bottom <= y) {
-        throw new Error('A comparison panel has no visible part on the requested platforms.');
-    }
-    return {
-        x: (x - panel.x) / panel.width,
-        y: (y - panel.y) / panel.height,
-        width: (right - x) / panel.width,
-        height: (bottom - y) / panel.height,
     };
 }
 
@@ -336,47 +371,45 @@ async function panelPhotos(
     geometry: SplitGeometry,
     photos: readonly [GenrePhoto, GenrePhoto],
     scale: number,
-): Promise<{ dataUri: string; rect: Rect; brightness: number }[]> {
-    const visibleArea = layout.visibleArea ?? {
-        x: 0,
-        y: 0,
-        width: layout.width,
-        height: layout.height,
-    };
+): Promise<{ dataUri: string; rect: Rect; brightness: number; focusBox?: Rect }[]> {
     const prepared = await Promise.all(
         geometry.panels.map(async (panel, index) => {
             const photo = photos[index] as GenrePhoto;
-            const seen = panelVisibility(panel, visibleArea);
-            // 标签挂在面板上边时，主体往下让开标签那一截。
+            const seen = seenPart(panel, layout);
+            // 标签挂在这一截上边时，主体往下让开标签那一段。
             const label = geometry.labels[index] as ChipAnchor;
             const labelBottom = label.y + geometry.labelPx * 1.6;
             const labelShare =
-                label.y < panel.y + panel.height && labelBottom > panel.y
-                    ? Math.min(0.4, Math.max(0, (labelBottom - panel.y) / panel.height))
+                label.y < seen.y + seen.height && labelBottom > seen.y
+                    ? Math.min(0.4, Math.max(0, (labelBottom - seen.y) / seen.height))
                     : 0;
-            const top = Math.max(seen.y, labelShare);
-            const visible = { ...seen, y: top, height: seen.y + seen.height - top };
             const layer = await preparePhotoLayer(
                 photo.path,
-                Math.round(panel.width * scale),
-                Math.round(panel.height * scale),
+                Math.round(seen.width * scale),
+                Math.round(seen.height * scale),
                 {
                     focus: photo.focus,
-                    target: { x: 0.5, y: visible.y + visible.height / 2 },
-                    visible,
+                    target: { x: 0.5, y: labelShare + (1 - labelShare) / 2 },
+                    visible: { x: 0, y: labelShare, width: 1, height: 1 - labelShare },
                 },
             );
             const bytes = Buffer.from(
                 layer.dataUri.slice(layer.dataUri.indexOf(',') + 1),
                 'base64',
             );
-            return { dataUri: layer.dataUri, rect: panel, luma: await meanLuma(bytes) };
+            return {
+                dataUri: layer.dataUri,
+                rect: seen,
+                luma: await meanLuma(bytes),
+                ...(layer.focusBox === undefined ? {} : { focusBox: layer.focusBox }),
+            };
         }),
     );
     const target = prepared.reduce((sum, p) => sum + p.luma, 0) / prepared.length;
     return prepared.map((p) => ({
         dataUri: p.dataUri,
         rect: p.rect,
+        ...(p.focusBox === undefined ? {} : { focusBox: p.focusBox }),
         brightness: Math.min(
             BRIGHTNESS_RANGE[1],
             Math.max(BRIGHTNESS_RANGE[0], target / Math.max(1, p.luma)),
@@ -475,7 +508,6 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
     const schemeName = request.scheme ?? 'night';
     const scheme = SCHEMES[schemeName];
     const light = isLightScheme(schemeName);
-    const table = kind === 'versus' ? VERSUS : BEFORE_AFTER;
     const type: TypeSpec = light
         ? { style: 'ink', font: request.fonts.choose('heavy'), highlight: 'block' }
         : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
@@ -483,7 +515,7 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
         kind === 'versus' ? request.fonts.choose('condensed') : request.fonts.choose('heavy');
     const withGeometry = (layout: CoverLayout): CoverLayout => ({
         ...layout,
-        textArea: { ...geometryFor(layout, table).textArea },
+        textArea: { ...splitGeometry(layout, kind, request.photos).textArea },
     });
     const labelLayer = (geometry: SplitGeometry, layout: CoverLayout): Layers => {
         if (request.labels === undefined) {
@@ -512,13 +544,21 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
         layout: CoverLayout,
         headline: Headline,
         scale: number | undefined,
-    ): Promise<string> => {
-        const geometry = geometryFor(layout, table);
+    ): Promise<RenderedPage> => {
+        const geometry = splitGeometry(layout, kind, request.photos);
         const band = bandLayer(geometry, scheme.base, '#FFFFFF');
         let over: Layers = { css: '', html: '' };
         let under: Layers = band;
+        let subjects: PictureSubject[] = [];
         if (scale !== undefined) {
             const photos = await panelPhotos(layout, geometry, request.photos, scale);
+            const names =
+                kind === 'versus'
+                    ? ["the first photo's subject", "the second photo's subject"]
+                    : ["the before photo's subject", "the after photo's subject"];
+            subjects = photos.flatMap((photo, index) =>
+                photoSubject(names[index] as string, photo.focusBox, photo.rect),
+            );
             under = joinLayers(
                 photoLayers(photos, request.look ?? 'natural', {
                     deep: scheme.baseDeep,
@@ -540,18 +580,21 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
                 ),
             );
         }
-        return genrePage({
-            layout,
-            headline,
-            text: request.text,
-            type,
-            colors: scheme.type,
-            background: scheme.baseDeep,
-            measure: scale === undefined,
-            align: { x: 'center', y: 'center' },
-            under,
-            over,
-        });
+        return {
+            html: genrePage({
+                layout,
+                headline,
+                text: request.text,
+                type,
+                colors: scheme.type,
+                background: scheme.baseDeep,
+                measure: scale === undefined,
+                align: { x: 'center', y: 'center' },
+                under,
+                over,
+            }),
+            subjects,
+        };
     };
     return {
         layoutFor: withGeometry,
@@ -578,14 +621,4 @@ export function versusTemplate(request: SplitRequest): CoverTemplate {
 
 export function beforeAfterTemplate(request: SplitRequest): CoverTemplate {
     return splitTemplate(request, 'before-after');
-}
-
-/** 质检和测试用：每族的标题区 */
-export function splitTextAreas(kind: 'versus' | 'before-after'): Record<FamilyName, Rect> {
-    const table = kind === 'versus' ? VERSUS : BEFORE_AFTER;
-    return {
-        landscape: table.landscape.textArea,
-        portrait: table.portrait.textArea,
-        ultrawide: table.ultrawide.textArea,
-    };
 }

@@ -209,7 +209,10 @@ describe('cover type geometry', () => {
                 const framed = framedLayout(family);
                 const template = templateFor(kind, ['/a.png', '/b.png']);
                 const layout = { ...(template.layoutFor?.(framed) ?? framed) };
-                const { rects, panels, badge } = splitLabelRects(kind, layout, longest);
+                const { rects, panels, badge } = splitLabelRects(kind, layout, longest, [
+                    photo('/a.png'),
+                    photo('/b.png'),
+                ]);
                 expect(badge, `${kind} ${family} has a seam badge`).toBeDefined();
                 expect(overlaps(badge as Rect, layout.textArea), `${kind} ${family} badge`).toBe(
                     false,
@@ -399,7 +402,10 @@ describe('cover type rendering', () => {
                             ...framed,
                             textArea: (template.layoutFor?.(framed) ?? framed).textArea,
                         };
-                        const { panels } = splitLabelRects(kind, layout, labels);
+                        const { panels } = splitLabelRects(kind, layout, labels, [
+                            photo(paths[0] as string),
+                            photo(paths[1] as string),
+                        ]);
                         const page = await browser.newPage({
                             viewport: { width: recorded.width, height: recorded.height },
                         });
@@ -444,6 +450,62 @@ describe('cover type rendering', () => {
             await browser.close();
         }
     }, 300_000);
+
+    // 用户看到的问题：竖版前后对比的「后」只露出上半张，主体（整洁的桌面）在照片下半截，
+    // 质检照样通过。现在两半按平台看得清的那一截来分，主体要整个露出来，质检也会核对。
+    it('shows the whole subject of both photos on a portrait before-after', async () => {
+        const deskBefore = {
+            x: 0.55,
+            y: 0.36,
+            width: 0.72,
+            height: 0.62,
+            source: 'saliency' as const,
+        };
+        const deskAfter = {
+            x: 0.44,
+            y: 0.545,
+            width: 0.79,
+            height: 0.547,
+            source: 'saliency' as const,
+        };
+        const wide = [join(directory, 'wide-0.png'), join(directory, 'wide-1.png')] as const;
+        for (const path of wide) {
+            await sharp({
+                create: { width: 1200, height: 800, channels: 3, background: '#8899aa' },
+            })
+                .png()
+                .toFile(path);
+        }
+        for (const presets of [['xiaohongshu'], ['douyin'], ['xiaohongshu', 'douyin']] as const) {
+            const template = genreTemplate('before-after', {
+                text: '桌面改造',
+                fonts: FONTS,
+                photos: [
+                    { path: wide[0], width: 1200, height: 800, focus: deskBefore },
+                    { path: wide[1], width: 1200, height: 800, focus: deskAfter },
+                ],
+                labels: ['改前', '改后'],
+            });
+            const covers = await composeCovers({
+                renderer,
+                template,
+                text: '桌面改造',
+                targets: presets.map((platform) => ({
+                    platform,
+                    outputPath: join(directory, `desk-${presets.join('-')}-${platform}.png`),
+                })),
+                scale: 1,
+                qc: {},
+            });
+            const cut = covers.flatMap((cover) =>
+                cover.findings.filter((finding) => finding.message.includes('is cut off')),
+            );
+            expect(
+                cut.map((f) => `${f.platform}: ${f.message.slice(0, 40)}`),
+                presets.join(','),
+            ).toEqual([]);
+        }
+    }, 120_000);
 
     it('escapes the headline and labels instead of running them as markup', () => {
         const template = genreTemplate('versus', {

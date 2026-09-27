@@ -73,6 +73,9 @@ export function placeWindow(input: {
         start = clamp(start, focusEnd - visibleEnd * window, focusStart - visibleStart * window);
     } else if (focusSize <= window) {
         start = clamp(start, focusEnd - window, focusStart);
+    } else {
+        // 主体比窗口还大：窗口整个落在主体里，只露主体，不一边露空一边切掉主体。
+        start = clamp(start, focusStart, focusEnd - window);
     }
     return Math.round(clamp(start, 0, source - window));
 }
@@ -141,9 +144,12 @@ export function framePhoto(input: {
     };
 }
 
-/** 版式里记录的平台可见区域换算成画布的 0 到 1 */
-export function visibleFraction(layout: CoverLayout): Rect | undefined {
-    const area = layout.visibleArea;
+/**
+ * 构图时主体要落进的区域：本次平台都看得见、又不被顶栏底栏挡住的部分（合成时填的 clearArea），
+ * 换算成画布的 0 到 1
+ */
+export function framingFraction(layout: CoverLayout): Rect | undefined {
+    const area = layout.clearArea;
     if (area === undefined) {
         return undefined;
     }
@@ -400,7 +406,7 @@ export function framedFocusBox(
         canvas: { width: layout.width, height: layout.height },
         focus,
         target: photoFocusTarget(layout, hasSubject),
-        visible: visibleFraction(layout),
+        visible: framingFraction(layout),
     });
     return {
         x: ((focus.x - focus.width / 2) * photo.width - framed.left) / framed.width,
