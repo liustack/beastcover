@@ -69,9 +69,10 @@ const VERSUS: Readonly<Record<FamilyName, SplitGeometry>> = {
             { x: 960, y: 430, width: 960, height: 770 },
         ],
         badge: { x: 960, y: 800, size: 210 },
+        // 价签倾斜 4 度，最宽时一端会翘起约 30px，锚点比标题区下沿低出这一截。
         labels: [
-            { x: 480, y: 380, anchor: 'center' },
-            { x: 1440, y: 380, anchor: 'center' },
+            { x: 480, y: 404, anchor: 'center' },
+            { x: 1440, y: 404, anchor: 'center' },
         ],
         labelPx: 104,
     },
@@ -100,8 +101,8 @@ const VERSUS: Readonly<Record<FamilyName, SplitGeometry>> = {
         ],
         badge: { x: 960, y: 520, size: 150 },
         labels: [
-            { x: 480, y: 238, anchor: 'center' },
-            { x: 1440, y: 238, anchor: 'center' },
+            { x: 480, y: 254, anchor: 'center' },
+            { x: 1440, y: 254, anchor: 'center' },
         ],
         labelPx: 66,
     },
@@ -182,28 +183,52 @@ function geometryFor(layout: CoverLayout, table: Record<FamilyName, SplitGeometr
     };
 }
 
-// 标签的字宽（em）：汉字和全角字一个字宽，其余按 0.62（窄粗体的数字和字母更窄，按宽的算），
+// 标签的字宽（em），宁宽勿窄：CJK、韩文、假名、全角符号一个字宽，emoji 更宽，其他非 ASCII 字母
+// 按 0.8，ASCII 按粗体里的宽度（W、M 最宽）。窄粗体实际更窄，估宽只会让标签小一点，不会压住。
 // 再加左右内边距 0.72em，描边和硬投影共 0.21em。高度按 1.6em 估（行高、内边距、描边、倾斜）。
 const CHIP_PAD_EM = 0.93;
 const CHIP_HEIGHT_EM = 1.6;
-const WIDE_CHAR =
-    /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\u3000-\u303f\uff00-\uffef]/u;
+const EMOJI = /\p{Extended_Pictographic}/u;
 
-export function chipWidthEm(text: string): number {
-    return (
-        Array.from(text).reduce((sum, char) => sum + (WIDE_CHAR.test(char) ? 1 : 0.62), 0) +
-        CHIP_PAD_EM
-    );
+function charWidthEm(char: string): number {
+    const code = char.codePointAt(0) ?? 0;
+    if (EMOJI.test(char)) {
+        return 1.3;
+    }
+    if (code >= 0x1100) {
+        return 1;
+    }
+    if (code > 0x7e) {
+        return 0.8;
+    }
+    if ('WMmw@%'.includes(char)) {
+        return 1;
+    }
+    if (/[A-Z0-9#$&¥]/.test(char)) {
+        return 0.78;
+    }
+    if (/[a-z]/.test(char)) {
+        return 0.66;
+    }
+    return 0.45;
 }
 
-/** 标签在这个字号下大约占的框：居中的以锚点为中，靠左的从锚点起 */
-function chipRect(anchor: ChipAnchor, text: string, fontPx: number): Rect {
+export function chipWidthEm(text: string): number {
+    return Array.from(text).reduce((sum, char) => sum + charWidthEm(char), 0) + CHIP_PAD_EM;
+}
+
+// 档位对比的价签左右各倾斜这么多度。
+const LABEL_TILT = 4;
+
+/** 标签在这个字号下大约占的框：居中的以锚点为中，靠左的从锚点起，倾斜翘起的两端也算上 */
+function chipRect(anchor: ChipAnchor, text: string, fontPx: number, tilt: number): Rect {
     const width = chipWidthEm(text) * fontPx;
+    const lift = (width / 2) * Math.sin((Math.abs(tilt) * Math.PI) / 180);
     return {
         x: anchor.anchor === 'center' ? anchor.x - width / 2 : anchor.x,
-        y: anchor.y,
+        y: anchor.y - lift,
         width,
-        height: CHIP_HEIGHT_EM * fontPx,
+        height: CHIP_HEIGHT_EM * fontPx + lift * 2,
     };
 }
 
@@ -259,7 +284,7 @@ export function splitLabelRects(
     const fontPx = labelFontPx(geometry, layout, labels);
     return {
         rects: geometry.labels.map((anchor, index) =>
-            chipRect(anchor, labels[index] as string, fontPx),
+            chipRect(anchor, labels[index] as string, fontPx, kind === 'versus' ? LABEL_TILT : 0),
         ),
         panels: geometry.panels,
         ...(geometry.badge === undefined
@@ -477,7 +502,7 @@ function splitTemplate(request: SplitRequest, kind: 'versus' | 'before-after'): 
                 background: kind === 'versus' || second ? scheme.type.accent : '#FFFFFF',
                 ink: scheme.type.accentInk ?? '#111111',
                 edge: '#111111',
-                ...(kind === 'versus' ? { tilt: second ? 4 : -4 } : {}),
+                ...(kind === 'versus' ? { tilt: second ? LABEL_TILT : -LABEL_TILT } : {}),
                 fontFamily: labelFont.stack,
             };
         });

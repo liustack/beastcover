@@ -343,6 +343,108 @@ describe('cover type rendering', () => {
         }
     }, 240_000);
 
+    // 标签字号是按字宽估出来的。估算对不对，只有真渲染出来量外框才知道：韩文、emoji、最宽的
+    // 西文字母、汉字都要落在自己那半边看得见的地方，两个标签不互压，也不压平台界面。
+    it('keeps rendered labels inside their panels for every script', async () => {
+        const browser = await chromium.launch({ headless: true });
+        try {
+            for (const kind of ['versus', 'before-after'] as const) {
+                for (const labels of [
+                    ['가나다라마바사아', '가나다라마바사아'],
+                    ['WWWWWWWW', '😀😀😀😀😀😀😀😀'],
+                    ['一二三四五六七八', '¥1,500,00'],
+                ] as [string, string][]) {
+                    const template = genreTemplate(kind, {
+                        text: '对比',
+                        fonts: FONTS,
+                        photos: [photo(paths[0] as string), photo(paths[1] as string)],
+                        labels,
+                    });
+                    const pages: { html: string; width: number; height: number }[] = [];
+                    const recording: CoverRenderer = {
+                        ...renderer,
+                        screenshot: async (page) => {
+                            pages.push(page);
+                            return renderer.screenshot(page);
+                        },
+                    };
+                    const targets = (['youtube', 'douyin', 'x'] as const).map((platform) => ({
+                        platform,
+                        outputPath: join(directory, `labels-${kind}-${platform}.png`),
+                    }));
+                    await composeCovers({
+                        renderer: recording,
+                        template,
+                        text: '对比',
+                        targets,
+                        scale: 1,
+                    });
+                    for (const [index, family] of (
+                        ['landscape', 'portrait', 'ultrawide'] as const
+                    ).entries()) {
+                        const recorded = pages[index] as {
+                            html: string;
+                            width: number;
+                            height: number;
+                        };
+                        const names = [targets[index]?.platform as PlatformName];
+                        const framed = {
+                            ...familyLayout(family),
+                            visibleArea: familyVisibleArea(family, names),
+                            clearArea: familyClearArea(family, names),
+                            coveredAreas: familyCoveredAreas(family, names),
+                        };
+                        const layout = {
+                            ...(template.layoutFor?.(framed) ?? framed),
+                            ...framed,
+                            textArea: (template.layoutFor?.(framed) ?? framed).textArea,
+                        };
+                        const { panels } = splitLabelRects(kind, layout, labels);
+                        const page = await browser.newPage({
+                            viewport: { width: recorded.width, height: recorded.height },
+                        });
+                        await page.setContent(recorded.html, { waitUntil: 'load' });
+                        const boxes = (await Promise.all(
+                            (await page.locator('.chip').all()).map((chip) => chip.boundingBox()),
+                        )) as Rect[];
+                        await page.close();
+                        const where = `${kind} ${family} ${labels.join('/')}`;
+                        expect(boxes, where).toHaveLength(2);
+                        boxes.forEach((box, side) => {
+                            const panel = panels[side] as Rect;
+                            const seen = framed.visibleArea;
+                            // 横向在自己那半边看得见的部分里，纵向在可见区里（标签本来就骑在标题带下沿），
+                            // 不压标题。
+                            expect(
+                                inside(box, {
+                                    x: Math.max(panel.x, seen.x),
+                                    y: seen.y,
+                                    width:
+                                        Math.min(panel.x + panel.width, seen.x + seen.width) -
+                                        Math.max(panel.x, seen.x),
+                                    height: seen.height,
+                                }),
+                                `${where} label ${side}: ${JSON.stringify(box)}`,
+                            ).toBe(true);
+                            expect(
+                                overlaps(box, layout.textArea),
+                                `${where} label ${side} headline`,
+                            ).toBe(false);
+                            for (const covered of framed.coveredAreas) {
+                                expect(overlaps(box, covered), `${where} label ${side} UI`).toBe(
+                                    false,
+                                );
+                            }
+                        });
+                        expect(overlaps(boxes[0] as Rect, boxes[1] as Rect), where).toBe(false);
+                    }
+                }
+            }
+        } finally {
+            await browser.close();
+        }
+    }, 300_000);
+
     it('escapes the headline and labels instead of running them as markup', () => {
         const template = genreTemplate('versus', {
             text: '<img src=x onerror=alert(1)>',
