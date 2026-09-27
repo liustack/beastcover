@@ -153,13 +153,31 @@ describe('cover renderer', () => {
         expect((await captureViewport(flaky)).toString()).toBe('png');
         expect(calls).toBe(2);
 
+        // 一直抓不到：重试两次（一共三次）后照抛，不会无限重试。
+        let stuck = 0;
+        const never = {
+            screenshot: async (): Promise<Buffer> => {
+                stuck += 1;
+                throw new Error(
+                    'Protocol error (Page.captureScreenshot): Unable to capture screenshot',
+                );
+            },
+            waitForTimeout: async () => undefined,
+        };
+        await expect(captureViewport(never)).rejects.toThrow('Unable to capture screenshot');
+        expect(stuck).toBe(3);
+
+        // 别的错一次都不重试。
+        let closed = 0;
         const broken = {
-            screenshot: async () => {
+            screenshot: async (): Promise<Buffer> => {
+                closed += 1;
                 throw new Error('Target page, context or browser has been closed');
             },
             waitForTimeout: async () => undefined,
         };
         await expect(captureViewport(broken)).rejects.toThrow('has been closed');
+        expect(closed).toBe(1);
     });
 
     it('counts the lines the headline wraps to and keeps within the limit', async () => {
