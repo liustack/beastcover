@@ -14,6 +14,7 @@ import {
 } from '../platforms/index.ts';
 import { type CoverLayout, customLayout, familyLayout } from './layout.ts';
 import {
+    arrowWings,
     calloutGeometry,
     calloutLayout,
     createPhotoCoverTemplate,
@@ -316,8 +317,21 @@ describe('callout geometry', () => {
     });
 
     it('starts every arrow outside the ring and keeps the whole arrow clear, on a grid of subjects', () => {
-        for (const layout of [landscapeLayout(), portraitLayout()]) {
+        // 320x120 复刻自定义小画布：线宽有下限，白边和翼长不随短边同比缩小。
+        const smallCanvas = { x: 0, y: 0, width: 320, height: 120 };
+        const smallLayout = {
+            ...photoTextLayout(customLayout(320, 120)),
+            visibleArea: smallCanvas,
+            clearArea: smallCanvas,
+            coveredAreas: [],
+        };
+        for (const [layout, atLeast] of [
+            [landscapeLayout(), 100],
+            [portraitLayout(), 100],
+            [smallLayout, 20],
+        ] as const) {
             const blocked = [layout.textArea, ...(layout.coveredAreas ?? [])];
+            const visible = layout.visibleArea as Rect;
             let accepted = 0;
             for (let x = 0; x <= 0.9; x += 0.02) {
                 for (let y = 0; y <= 0.9; y += 0.02) {
@@ -325,6 +339,7 @@ describe('callout geometry', () => {
                         [0.05, 0.05],
                         [0.1, 0.06],
                         [0.06, 0.15],
+                        [0.13, 0.13],
                         [0.3, 0.1],
                         [0.4, 0.2],
                     ]) {
@@ -351,10 +366,22 @@ describe('callout geometry', () => {
                                 label,
                             ).toBe(false);
                         }
+                        // 箭杆、箭尖和两翼连圆头白边完整留在可见区内，不被画布或裁切切掉。
+                        const wings = arrowWings(arrow.start, arrow.end, stroke);
+                        for (const point of [arrow.start, arrow.end, ...wings]) {
+                            expect(point.x, label).toBeGreaterThanOrEqual(visible.x + pad);
+                            expect(point.x, label).toBeLessThanOrEqual(
+                                visible.x + visible.width - pad,
+                            );
+                            expect(point.y, label).toBeGreaterThanOrEqual(visible.y + pad);
+                            expect(point.y, label).toBeLessThanOrEqual(
+                                visible.y + visible.height - pad,
+                            );
+                        }
                     }
                 }
             }
-            expect(accepted).toBeGreaterThan(100);
+            expect(accepted, layout.family).toBeGreaterThan(atLeast);
         }
     });
 

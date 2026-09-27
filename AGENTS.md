@@ -16,7 +16,9 @@ Phase one currently ships these working surfaces:
 - `gen --source render --template text|poster|number|compare` picks the text cover: a calm headline, a loud full-bleed poster with an optional `--tag`, a huge `--number` beside a short line, or a `--before`/`--after` split with an arrow
 - `gen --subject <path>` puts a person or object on a render or stock cover: a transparent PNG as is, or a photo cut out on macOS 14+ with Vision
 - `gen --source stock` frames the photo around its subject (Vision faces and saliency on macOS, sharp attention elsewhere), and takes `--look natural|mono|duotone|punch` and `--fit cover|extend`
-- `local-model` calls the user's own Codex, Grok, or Claude CLI to paint a cover, and `--remix` redraws one image or puts the person from one image into the scene of another
+- `agent` calls the user's own Codex or agy CLI to paint a cover, and `--remix` redraws one image or puts the person from one image into the scene of another
+- `gen --source model` paints the same styles through the user's own image API key: GPT Image (`openai`) or Nano Banana (`gemini`), keys in `model.<provider>.apiKey`. No refs or remix yet
+- The default path is completely free (free stock photos plus local HTML rendering). agent and model are opt-ins the user already pays for elsewhere
 - `styles` lists the four self-contained catalog styles
 - `new` and `project` manage a per-project `.beastcover/` workspace
 
@@ -30,7 +32,7 @@ Do not add:
 - article illustrations or styles that only work as illustrations (thin lines, watercolor, low-contrast soft color, single-line sketch)
 - a bundled cutout model (BiRefNet, RMBG, or any ONNX runtime), or background removal through a generative model that redraws the face
 
-The four-style catalog is in `src/styles/`. Each style prompt is copied unchanged from the artwork source. Palette slots and the composition note are metadata on that record, not extra prompt layers. Removed style names fail with a message that says they were removed. Recenter and contact-sheet tools remain outside this pass. local-model crop and resize are part of generation, not those tools.
+The four-style catalog is in `src/styles/`. Each style prompt is copied unchanged from the artwork source. Palette slots and the composition note are metadata on that record, not extra prompt layers. Removed style names fail with a message that says they were removed. Recenter and contact-sheet tools remain outside this pass. agent crop and resize are part of generation, not those tools.
 
 ## Technical Approach
 
@@ -44,15 +46,17 @@ The four-style catalog is in `src/styles/`. Each style prompt is copied unchange
 - Size presets are named after platforms and hold production pixels. Old ratio names fail with a message naming the replacement. `scale` controls Chromium device scale and therefore output pixel density.
 - Platforms belong to three families (landscape, portrait, ultrawide). Each family has one master size, a text area, and a focus area, all in master coordinates, and each platform has a crop box in that master plus the rectangles its app UI covers. `src/platforms/index.test.ts` proves the text and focus areas sit inside every member crop and outside every covered rectangle. Change the geometry only together with that test.
 - `gen` renders one master per family at 2x or more, then crops and scales every requested platform from it with `sharp`. The renderer finds the largest font that keeps the headline inside the text area, keeps Latin words whole, and keeps punctuated clauses together when that costs under 30% of the size. Headline size is never set by fixed CSS ratios.
-- local-model runs the model once per family, saves the raw image in `.beastcover/cache/`, and crops each platform from it.
+- agent runs the model once per family, saves the raw image in `.beastcover/cache/`, and crops each platform from it.
 - Subject cutout lives in `src/subject/`. A PNG with at least 2% transparent pixels is used as is. Otherwise the Swift source in `vision.ts` is compiled once into `~/.beastcover/bin/vision-tool-<hash>` and run on the image, and the result is cached in the workspace `cache/` by image hash. Non-macOS or macOS before 14 fails with a request for a transparent PNG. The person sits in its own subject area, above the headline, and the subject area never overlaps the text area (`src/render/layout.test.ts`).
 - Templates live in `src/render/` (`template.ts`, `poster.ts`, `number.ts`, `compare.ts`, `photo-cover.ts`) and are assembled into a `CoverTemplate` by `src/compose/templates.ts`. A template may change the layout (`layoutFor`) and may fit a second big text (`measureAccentHtml` into `accentArea`, the number figure). Options that belong to another template fail instead of being ignored.
 - Photo framing lives in `src/subject/focus.ts` (where the subject is) and `src/render/photo-cover.ts` (`placeWindow`, `photoFocusTarget`, `photoTextLayout`). The crop window keeps the whole subject box when it fits and moves its centre toward a target clear of the headline. When the subject cannot fit a family crop, `gen` suggests `--fit extend` instead of switching by itself.
-- `--remix` images go first in the model reference list, the instruction joins the subject line, and `src/local-model/remix.ts` refuses images whose stock sidecar is not openverse cc0 or pdm.
+- `--remix` images go first in the model reference list, the instruction joins the subject line, and `src/agent/remix.ts` refuses images whose stock sidecar is not openverse cc0 or pdm.
 - Stock downloads are measured with sharp. The sidecar keeps the served size and, when different, the listed size. `gen` warns when a photo is stretched more than 1.5x on a platform.
 - history.jsonl stores output, photo, and subject paths relative to the workspace.
 - Workspace discovery only accepts a `.beastcover/` that contains `project.json`, because the settings folder `~/.beastcover/` has the same name.
-- `local-model` asks the backend for the native generate size, then crops and resizes in-process with `sharp`. It does not shell out to sips or ImageMagick.
+- `agent` asks the backend for the native generate size, then crops and resizes in-process with `sharp`. It does not shell out to sips or ImageMagick.
+- `model` reuses the agent generate plans and crop pipeline: one API call per family, the returned image is normalized to the plan size with `sharp`, then cropped per platform. Providers never fall back to each other, a missing key is an error naming the config key, keys go only into request headers and never into error messages, and `fetch` is injected so tests never touch the network. Model ids live in `MODEL_DEFAULTS` and `model.<provider>.model` overrides them.
+- history.jsonl is a log: records written before the rename (`local-model` source, `grok`/`claude` backends) stay readable.
 - Each style record is self-contained. Copy its full prompt unchanged and append one subject description.
 - A project workspace lives at `.beastcover/` inside the user project. Discovery walks up from the current directory. Missing workspaces are reported, never created silently.
 - Workspace ignore rules live only in `src/workspace/ignore.ts`. The CLI writes `.beastcover/.gitignore` (`/out/`, `/cache/`, `/refs/`) and never touches the user's `.gitignore` or `.git/info/exclude`. `project.json` and `history.jsonl` stay commitable.
@@ -80,15 +84,22 @@ src/
 │   ├── vision.ts           # macOS Vision tool: cutout and focus modes, one-time build, run
 │   ├── focus.ts            # Photo subject: Vision faces or saliency, else sharp attention
 │   └── index.test.ts
-├── local-model/
+├── agent/
 │   ├── index.ts            # Prompt envelope, argv, provider selection, spawn
 │   ├── prompt.ts           # Style prompt plus 主体, conditional palette replace
-│   ├── argv.ts             # Codex/Grok/Claude argv and named --ref files
+│   ├── argv.ts             # codex and agy argv and named --ref files
 │   ├── provider.ts         # Backend selection with no silent fallback
 │   ├── canvas.ts           # Generate plan per family, centred crop box per platform
 │   ├── remix.ts            # --remix mode and the own-or-cc0/pdm license gate
 │   ├── finish.ts           # sharp crop then resize
 │   └── run.ts              # rm, spawn, captured stdio, on-disk image verification
+├── model/
+│   ├── index.ts            # Re-exports
+│   ├── provider.ts         # Key-based provider selection with no silent fallback
+│   ├── prompt.ts           # Style prompt plus 主体 plus the family composition note
+│   ├── openai.ts           # GPT Image generations call, key only in the header
+│   ├── gemini.ts           # Nano Banana generateContent call, aspect ratio config
+│   └── run.ts              # One call per family, normalize to plan size, crop per platform
 ├── render/
 │   ├── index.ts            # Playwright renderer: fit the headline, screenshot a page
 │   ├── layout.ts           # Cover layouts, subject split, headline markup, measuring probes
@@ -142,7 +153,8 @@ beastcover gen "The tide comes back" --source stock --photo openverse:<id> --pre
 beastcover gen "别再乱剪了" --source render --subject me.jpg --preset youtube,xiaohongshu
 beastcover gen "封面没人点" --source render --template poster --tag "新手必看" --preset all
 beastcover gen "个习惯多出两小时" --source render --template number --number 3 --preset all
-beastcover gen "A figure on a shore" --source local-model --via codex --preset xiaohongshu
+beastcover gen "A figure on a shore" --source agent --via codex --preset xiaohongshu
+beastcover gen "A figure on a shore" --source model --via gemini --preset xiaohongshu
 beastcover config init
 beastcover config set render.preset x
 beastcover config set stock.pexels.apiKey <key>

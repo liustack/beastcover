@@ -9,23 +9,23 @@ import {
     unlinkSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
-import type { LocalModelProvider } from '../config.ts';
+import type { AgentProvider } from '../config.ts';
 import type { PlatformName } from '../platforms/index.ts';
-import { buildLocalModelArgv } from './argv.ts';
-import { getLocalModelCanvasPlan } from './canvas.ts';
-import { finishLocalModelImage } from './finish.ts';
+import { buildAgentArgv } from './argv.ts';
+import { getAgentCanvasPlan } from './canvas.ts';
+import { finishAgentImage } from './finish.ts';
 
-export const LOCAL_MODEL_TIMEOUT_MS = 300_000;
+export const AGENT_TIMEOUT_MS = 300_000;
 
-export interface LocalModelSpawnRequest {
+export interface AgentSpawnRequest {
     command: string;
     args: readonly string[];
     stdin: 'ignore';
     timeoutMs: number;
 }
 
-export interface LocalModelRunInput {
-    provider: LocalModelProvider;
+export interface AgentRunInput {
+    provider: AgentProvider;
     commandPath: string;
     prompt: string;
     referencePaths: string[];
@@ -34,7 +34,7 @@ export interface LocalModelRunInput {
     /** 同一族里要裁出的平台和成品路径 */
     targets: readonly { preset: PlatformName; outputPath: string }[];
     timeoutMs?: number;
-    spawn?: (request: LocalModelSpawnRequest) => Promise<void>;
+    spawn?: (request: AgentSpawnRequest) => Promise<void>;
     verbose?: boolean;
     backendOutput?: { write(chunk: string): unknown };
 }
@@ -55,7 +55,7 @@ function removeTarget(outputPath: string): void {
 function withTimeout(
     task: Promise<void>,
     timeoutMs: number,
-    provider: LocalModelProvider,
+    provider: AgentProvider,
 ): Promise<void> {
     return new Promise((resolve, reject) => {
         let settled = false;
@@ -64,7 +64,7 @@ function withTimeout(
                 return;
             }
             settled = true;
-            reject(new Error(`local-model via ${provider} timed out after ${timeoutMs}ms.`));
+            reject(new Error(`agent via ${provider} timed out after ${timeoutMs}ms.`));
         }, timeoutMs);
         task.then(
             (value) => {
@@ -92,7 +92,7 @@ export async function spawnCapturedProcess(input: {
     args: readonly string[];
     timeoutMs: number;
     verbose: boolean;
-    provider: LocalModelProvider;
+    provider: AgentProvider;
     backendOutput?: { write(chunk: string): unknown };
 }): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -102,7 +102,7 @@ export async function spawnCapturedProcess(input: {
         const stdout = child.stdout;
         const stderr = child.stderr;
         if (stdout === null || stderr === null) {
-            reject(new Error('local-model spawn is missing stdout or stderr pipes.'));
+            reject(new Error('agent spawn is missing stdout or stderr pipes.'));
             return;
         }
 
@@ -132,11 +132,7 @@ export async function spawnCapturedProcess(input: {
             }
             settled = true;
             dumpCaptured();
-            reject(
-                new Error(
-                    `local-model via ${input.provider} timed out after ${input.timeoutMs}ms.`,
-                ),
-            );
+            reject(new Error(`agent via ${input.provider} timed out after ${input.timeoutMs}ms.`));
         }, input.timeoutMs);
 
         child.on('error', (error) => {
@@ -162,29 +158,29 @@ export async function spawnCapturedProcess(input: {
                 return;
             }
             dumpCaptured();
-            reject(new Error(`local-model via ${input.provider} exited with code ${code}.`));
+            reject(new Error(`agent via ${input.provider} exited with code ${code}.`));
         });
     });
 }
 
-function verifyOutput(outputPath: string, provider: LocalModelProvider): void {
+function verifyOutput(outputPath: string, provider: AgentProvider): void {
     let info: Stats;
     try {
         info = statSync(outputPath);
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
             throw new Error(
-                `local-model via ${provider} produced no image. File not found: ${outputPath}.`,
+                `agent via ${provider} produced no image. File not found: ${outputPath}.`,
             );
         }
         throw error;
     }
 
     if (!info.isFile()) {
-        throw new Error(`local-model via ${provider} produced no image at ${outputPath}.`);
+        throw new Error(`agent via ${provider} produced no image at ${outputPath}.`);
     }
     if (info.size === 0) {
-        throw new Error(`local-model via ${provider} produced an empty file at ${outputPath}.`);
+        throw new Error(`agent via ${provider} produced an empty file at ${outputPath}.`);
     }
 
     const fd = openSync(outputPath, 'r');
@@ -200,30 +196,30 @@ function verifyOutput(outputPath: string, provider: LocalModelProvider): void {
     const isPng = header.length >= 4 && header.subarray(0, 4).equals(PNG_MAGIC);
     const isJpeg = header.length >= 3 && header.subarray(0, 3).equals(JPEG_MAGIC);
     if (!isPng && !isJpeg) {
-        throw new Error(`local-model via ${provider} produced an invalid image at ${outputPath}.`);
+        throw new Error(`agent via ${provider} produced an invalid image at ${outputPath}.`);
     }
 }
 
-export async function runLocalModel(input: LocalModelRunInput): Promise<{ outputPaths: string[] }> {
+export async function runAgent(input: AgentRunInput): Promise<{ outputPaths: string[] }> {
     const plans = input.targets.map((target) => ({
         ...target,
-        plan: getLocalModelCanvasPlan(target.preset),
+        plan: getAgentCanvasPlan(target.preset),
     }));
     const families = new Set(plans.map(({ plan }) => plan.family));
     if (families.size !== 1) {
-        throw new Error('runLocalModel crops one family per generation.');
+        throw new Error('runAgent crops one family per generation.');
     }
 
-    const timeoutMs = input.timeoutMs ?? LOCAL_MODEL_TIMEOUT_MS;
+    const timeoutMs = input.timeoutMs ?? AGENT_TIMEOUT_MS;
     mkdirSync(dirname(input.generatedPath), { recursive: true });
     removeTarget(input.generatedPath);
 
-    const argv = buildLocalModelArgv({
+    const argv = buildAgentArgv({
         provider: input.provider,
         prompt: input.prompt,
         referencePaths: input.referencePaths,
     });
-    const request: LocalModelSpawnRequest = {
+    const request: AgentSpawnRequest = {
         command: input.commandPath,
         args: argv.args,
         stdin: 'ignore',
@@ -246,7 +242,7 @@ export async function runLocalModel(input: LocalModelRunInput): Promise<{ output
     verifyOutput(input.generatedPath, input.provider);
     for (const { outputPath, plan } of plans) {
         mkdirSync(dirname(outputPath), { recursive: true });
-        await finishLocalModelImage({ sourcePath: input.generatedPath, outputPath, plan });
+        await finishAgentImage({ sourcePath: input.generatedPath, outputPath, plan });
     }
     return { outputPaths: plans.map(({ outputPath }) => outputPath) };
 }

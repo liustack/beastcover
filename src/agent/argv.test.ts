@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildLocalModelArgv, resolveNamedRefFiles } from './index.ts';
+import { buildAgentArgv, resolveNamedRefFiles } from './index.ts';
 
 const tempDirectories: string[] = [];
 
@@ -24,7 +24,7 @@ describe('places every codex -i after the prompt argument and rejects glob or mi
     const abs2 = '/tmp/cover-ref-b.jpg';
 
     it('builds codex argv with the prompt as one argument and every -i after it', () => {
-        const result = buildLocalModelArgv({
+        const result = buildAgentArgv({
             provider: 'codex',
             prompt,
             referencePaths: [abs1, abs2],
@@ -50,34 +50,14 @@ describe('places every codex -i after the prompt argument and rejects glob or mi
         expect(result.args.slice(promptIndex + 1)).toEqual(['-i', abs1, '-i', abs2]);
     });
 
-    it('builds grok argv without -i or --image', () => {
-        const result = buildLocalModelArgv({
-            provider: 'grok',
+    it('builds agy argv without -i or --image', () => {
+        const result = buildAgentArgv({
+            provider: 'agy',
             prompt,
             referencePaths: [abs1, abs2],
         });
 
-        expect(result.command).toBe('grok');
-        expect(result.stdin).toBe('ignore');
-        expect(result.args).toEqual([
-            '-p',
-            prompt,
-            '--permission-mode',
-            'bypassPermissions',
-            '--verbatim',
-        ]);
-        expect(result.args).not.toContain('-i');
-        expect(result.args).not.toContain('--image');
-    });
-
-    it('builds claude argv without -i or --image', () => {
-        const result = buildLocalModelArgv({
-            provider: 'claude',
-            prompt,
-            referencePaths: [abs1, abs2],
-        });
-
-        expect(result.command).toBe('claude');
+        expect(result.command).toBe('agy');
         expect(result.stdin).toBe('ignore');
         expect(result.args).toEqual(['-p', prompt, '--dangerously-skip-permissions']);
         expect(result.args).not.toContain('-i');

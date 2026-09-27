@@ -41,7 +41,7 @@ describe('offline doctor', () => {
         });
     });
 
-    it('checks Node, the Chromium executable, private config permissions, and local-model CLIs', async () => {
+    it('checks Node, the Chromium executable, private config permissions, and agent CLIs', async () => {
         const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-'));
         tempDirectories.push(directory);
         const configPath = join(directory, 'config.json');
@@ -57,7 +57,7 @@ describe('offline doctor', () => {
         });
 
         expect(healthy.healthy).toBe(true);
-        expect(healthy.checks).toHaveLength(7);
+        expect(healthy.checks).toHaveLength(6);
         // 没有 swiftc 时自动抠图不可用，只是提醒，不影响健康。
         expect(healthy.checks.find((check) => check.id === 'cutout')).toEqual({
             id: 'cutout',
@@ -78,7 +78,7 @@ describe('offline doctor', () => {
             id: 'config-permissions',
             status: 'ok',
         });
-        for (const id of ['codex', 'grok', 'claude'] as const) {
+        for (const id of ['codex', 'agy'] as const) {
             expect(healthy.checks.find((check) => check.id === id)).toMatchObject({
                 id,
                 status: 'warn',
@@ -135,7 +135,7 @@ describe('offline doctor', () => {
         });
     });
 
-    it('reports installed local-model CLIs as ok without changing health', async () => {
+    it('reports installed agent CLIs as ok without changing health', async () => {
         const directory = mkdtempSync(join(tmpdir(), 'beastcover-doctor-cli-'));
         tempDirectories.push(directory);
         const configPath = join(directory, 'config.json');
@@ -150,7 +150,7 @@ describe('offline doctor', () => {
         });
 
         expect(report.healthy).toBe(true);
-        for (const id of ['codex', 'grok', 'claude'] as const) {
+        for (const id of ['codex', 'agy'] as const) {
             expect(report.checks.find((check) => check.id === id)).toMatchObject({
                 id,
                 status: 'ok',
