@@ -105,7 +105,10 @@ const PLATFORMS: Readonly<Record<PlatformName, Platform>> = {
         use: 'Bilibili video cover',
         family: 'landscape',
         crop: { x: 0, y: 0, width: 1920, height: 1200 },
-        covered: [{ x: 0, y: 1056, width: 1920, height: 144 }],
+        // 2026-09-27 实测 bilibili.com 信息流：卡片按约 16:9 展示（16:10 封面上下各裁约
+        // 60px），播放数、弹幕数和时长的图标行叠在展示区底部约 10%。图标行加被裁掉的底边
+        // 合计约 y 1033 起，留余量取 1020。
+        covered: [{ x: 0, y: 1020, width: 1920, height: 180 }],
         feedWidth: 160,
     },
     wechat: {
