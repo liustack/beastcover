@@ -51,7 +51,8 @@ export interface GenrePhoto {
     path: string;
     width: number;
     height: number;
-    focus: PhotoFocus;
+    /** 主体在哪。画不了场景时的渐变底没有主体，就没有这一项 */
+    focus?: PhotoFocus;
     /** 按族换一张：现画的场景横版画一张、竖版画一张，各族用自己朝向的那张 */
     byFamily?: Partial<Record<FamilyName, GenrePhoto>>;
 }

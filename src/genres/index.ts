@@ -267,8 +267,14 @@ export function genreTemplate(name: GenreName, input: GenreInput): CoverTemplate
                 ...fit,
                 photo: first(input.photos, '--photo'),
             });
-        case 'callout':
-            return calloutTemplate({ ...common, ...look, photo: first(input.photos, '--photo') });
+        case 'callout': {
+            // 圈注圈的是真实照片里找到的主体，现画的场景不走这里（--scene 只给三种场景类型）。
+            const photo = first(input.photos, '--photo');
+            if (photo.focus === undefined) {
+                throw new Error('The callout needs a photo whose subject was found.');
+            }
+            return calloutTemplate({ ...common, ...look, photo, focus: photo.focus });
+        }
         case 'collage':
             return collageTemplate({ ...common, ...look, photos: input.photos });
         case 'mood':

@@ -1254,6 +1254,8 @@ describe('BeastCover CLI', () => {
 
     it('falls back to a gradient scene and says how to paint it', async () => {
         const cwd = tempDir('beastcover-cli-scene-degrade-');
+        // 渐变底没有主体，不去找。
+        const photoFocus = vi.fn(centreFocus);
         const stdout = captureOutput();
         const exitCode = await runCli(
             [
@@ -1273,7 +1275,7 @@ describe('BeastCover CLI', () => {
                 configPath: join(cwd, 'unused-config.json'),
                 openRenderer: mockRender().open,
                 qc: undefined,
-                photoFocus: centreFocus,
+                photoFocus,
                 lookupCommand: () => undefined,
                 stdout,
             },
@@ -1282,6 +1284,7 @@ describe('BeastCover CLI', () => {
         expect(stdout.chunks.join('')).toContain(
             'Scene: no image model key or agent CLI on this machine, so the scene is a plain colour gradient.',
         );
+        expect(photoFocus).not.toHaveBeenCalled();
 
         for (const [args, message] of [
             [

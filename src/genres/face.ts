@@ -4,8 +4,9 @@
 // （$10,000、DAY 7、50 米）压在标题上方。MrBeast 一类挑战视频的主力配方。
 // 配方依据：research.md 第 2.1 节人物大小和位置、第 2.4 节背景、第 5.0 节各平台的字。
 import sharp from 'sharp';
-import type { CoverTemplate } from '../compose/index.ts';
+import type { CoverTemplate, RenderedPage } from '../compose/index.ts';
 import type { Rect } from '../platforms/index.ts';
+import type { PictureSubject } from '../qc/index.ts';
 import type { FontChoice } from '../render/fonts.ts';
 import { type CoverLayout, escapeHtml, type Headline, withSubjectArea } from '../render/layout.ts';
 import {
@@ -28,6 +29,7 @@ import {
     localScrim,
     photoForLayout,
     photoLayers,
+    photoSubject,
     rectCss,
 } from './page.ts';
 import { SCHEMES, type SchemeName, schemeGradient } from './schemes.ts';
@@ -190,7 +192,7 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
         layout: CoverLayout,
         headline: Headline,
         pixels: { width: number; height: number } | undefined,
-    ) => {
+    ): Promise<RenderedPage> => {
         const measure = pixels === undefined;
         const stakeLayer =
             stake === undefined ||
@@ -207,11 +209,12 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                   );
         let under = { css: '', html: '' };
         let person = { css: '', html: '' };
+        let sceneSubjects: PictureSubject[] = [];
         if (pixels !== undefined) {
             const visible = framingFraction(layout);
             const scene = photoForLayout(request.photo, layout);
             const photo = await preparePhotoLayer(scene.path, pixels.width, pixels.height, {
-                focus: scene.focus,
+                ...(scene.focus === undefined ? {} : { focus: scene.focus }),
                 // 竖版字在上、人在下，场景的主体放到人的肩头一带，不压在字底下。
                 target:
                     layout.subjectArea !== undefined && layout.subjectArea.y > layout.textArea.y
@@ -220,6 +223,12 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                 fit: request.fit ?? 'cover',
                 canvas: { width: layout.width, height: layout.height },
                 ...(visible === undefined ? {} : { visible }),
+            });
+            sceneSubjects = photoSubject("the scene's subject", photo.focusBox, {
+                x: 0,
+                y: 0,
+                width: layout.width,
+                height: layout.height,
             });
             const bytes = Buffer.from(
                 photo.dataUri.slice(photo.dataUri.indexOf(',') + 1),
@@ -249,18 +258,24 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                 faceShare: FACE_STAKES_SHARE,
             });
         }
-        return genrePage({
-            layout,
-            headline,
-            text: request.text,
-            type,
-            colors: scheme.type,
-            background: scheme.baseDeep,
-            measure,
-            align: { x: 'start', y: 'start' },
-            under,
-            over: joinLayers(stakeLayer, person),
-        });
+        return {
+            html: genrePage({
+                layout,
+                headline,
+                text: request.text,
+                type,
+                colors: scheme.type,
+                background: scheme.baseDeep,
+                measure,
+                align: { x: 'start', y: 'start' },
+                under,
+                over: joinLayers(stakeLayer, person),
+            }),
+            subjects: [
+                ...sceneSubjects,
+                ...faceSubject(layout, request.subject, FACE_STAKES_SHARE),
+            ],
+        };
     };
     return {
         layoutFor,
@@ -306,9 +321,7 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                 measure: true,
                 align: { x: 'start', y: 'start' },
             }),
-        renderHtml: async (layout, headline, pixelWidth, pixelHeight) => ({
-            html: await page(layout, headline, { width: pixelWidth, height: pixelHeight }),
-            subjects: faceSubject(layout, request.subject, FACE_STAKES_SHARE),
-        }),
+        renderHtml: (layout, headline, pixelWidth, pixelHeight) =>
+            page(layout, headline, { width: pixelWidth, height: pixelHeight }),
     };
 }

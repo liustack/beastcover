@@ -18,6 +18,7 @@ import {
     preparePhotoLayer,
 } from '../render/photo-cover.ts';
 import type { TypeSpec } from '../render/type.ts';
+import type { PhotoFocus } from '../subject/vision.ts';
 import {
     type FontKit,
     type GenrePhoto,
@@ -39,8 +40,6 @@ export interface PhotoGenreRequest {
     look?: PhotoLook;
     fit?: PhotoFit;
 }
-
-type PhotoKind = 'scene-title' | 'callout' | 'mood';
 
 // 氛围单图的字只占标题区左下角这一小块：字小，照片是主角。
 const MOOD_WIDTH_SHARE = 0.62;
@@ -84,7 +83,14 @@ export function moodLayout(layout: CoverLayout): CoverLayout {
     };
 }
 
-function photoTemplate(request: PhotoGenreRequest, kind: PhotoKind): CoverTemplate {
+/** 圈注要圈照片里找到的主体，所以只有它带着主体位置 */
+type PhotoMode =
+    | { kind: 'scene-title' }
+    | { kind: 'mood' }
+    | { kind: 'callout'; focus: PhotoFocus };
+
+function photoTemplate(request: PhotoGenreRequest, mode: PhotoMode): CoverTemplate {
+    const { kind } = mode;
     const scheme = SCHEMES[request.scheme ?? 'navy'];
     const type: TypeSpec =
         kind === 'mood'
@@ -92,8 +98,8 @@ function photoTemplate(request: PhotoGenreRequest, kind: PhotoKind): CoverTempla
             : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
     const photo = request.photo;
     const layoutFor =
-        kind === 'callout'
-            ? (layout: CoverLayout) => calloutLayout(layout, photo, photo.focus)
+        mode.kind === 'callout'
+            ? (layout: CoverLayout) => calloutLayout(layout, photo, mode.focus)
             : kind === 'mood'
               ? moodLayout
               : photoTextLayout;
@@ -118,7 +124,7 @@ function photoTemplate(request: PhotoGenreRequest, kind: PhotoKind): CoverTempla
             const visible = framingFraction(layout);
             const picked = photoForLayout(photo, layout);
             const layer = await preparePhotoLayer(picked.path, pixels.width, pixels.height, {
-                focus: picked.focus,
+                ...(picked.focus === undefined ? {} : { focus: picked.focus }),
                 target: kind === 'callout' ? photoFocusTarget(layout, false) : focusTarget(layout),
                 fit: kind === 'callout' ? 'cover' : (request.fit ?? 'cover'),
                 // 按版式比例构图，和渲染前的圈注检查用同一个窗口。
@@ -193,13 +199,13 @@ function photoTemplate(request: PhotoGenreRequest, kind: PhotoKind): CoverTempla
 }
 
 export function sceneTitleTemplate(request: PhotoGenreRequest): CoverTemplate {
-    return photoTemplate(request, 'scene-title');
+    return photoTemplate(request, { kind: 'scene-title' });
 }
 
-export function calloutTemplate(request: PhotoGenreRequest): CoverTemplate {
-    return photoTemplate(request, 'callout');
+export function calloutTemplate(request: PhotoGenreRequest & { focus: PhotoFocus }): CoverTemplate {
+    return photoTemplate(request, { kind: 'callout', focus: request.focus });
 }
 
 export function moodTemplate(request: PhotoGenreRequest): CoverTemplate {
-    return photoTemplate(request, 'mood');
+    return photoTemplate(request, { kind: 'mood' });
 }

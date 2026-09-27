@@ -12,7 +12,6 @@ import {
     photoFocusTarget,
     photoTextLayout,
     placeWindow,
-    preparePanelLayer,
     preparePhotoLayer,
 } from './photo-cover.ts';
 
@@ -200,28 +199,11 @@ describe('photo framing', () => {
             }
         }
         expect(inside).toBeGreaterThan(1000);
-    });
-
-    it('frames a compare panel sharp inside its visible part and blurs the rest', async () => {
-        // 红块在照片中间，面板只有右边 45% 看得见：清晰的红块要出现在那一截里。
-        const path = await photoWithRedBlock();
-        const layer = await preparePanelLayer(path, 960, 368, {
-            focus: { x: 300 / 1600, y: 0.5, width: 0.125, height: 0.22, source: 'attention' },
-            visible: { x: 0.55, y: 0, width: 0.45, height: 1 },
-        });
-        const bytes = Buffer.from(layer.dataUri.slice(layer.dataUri.indexOf(',') + 1), 'base64');
-        const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
-        expect([info.width, info.height]).toEqual([960, 368]);
-        let inside = 0;
-        for (let y = 0; y < info.height; y += 1) {
-            for (let x = Math.round(0.55 * info.width); x < info.width; x += 1) {
-                const i = (y * info.width + x) * info.channels;
-                if ((data[i] ?? 0) > 230 && (data[i + 1] ?? 255) < 40) {
-                    inside += 1;
-                }
-            }
-        }
-        expect(inside).toBeGreaterThan(1000);
+        // 整张放进来也记下主体落在哪，质检照样核对：照片缩到 864 宽、贴在 528 处，
+        // 主体中心在 528 + 0.885 x 864。
+        const box = layer.focusBox as { x: number; width: number };
+        expect(box.x + box.width / 2).toBeCloseTo((528 + 0.885 * 864) / 1920, 3);
+        expect(box.width).toBeCloseTo((0.07 * 864) / 1920, 3);
     });
 
     it('moves the focus toward the target instead of cropping around the centre', async () => {

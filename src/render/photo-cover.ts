@@ -215,6 +215,15 @@ export async function preparePhotoLayer(
             .composite([{ input: foreground, left, top }])
             .jpeg({ quality: PHOTO_JPEG_QUALITY, mozjpeg: true })
             .toBuffer();
+        // 整张放进来也要知道主体落在哪：质检照样核对它有没有压在平台按钮下面。
+        if (focus !== undefined) {
+            focusBox = {
+                x: (left + (focus.x - focus.width / 2) * width) / pixelWidth,
+                y: (top + (focus.y - focus.height / 2) * height) / pixelHeight,
+                width: (focus.width * width) / pixelWidth,
+                height: (focus.height * height) / pixelHeight,
+            };
+        }
     } else if (focus === undefined) {
         bytes = await sharp(upright)
             .resize(pixelWidth, pixelHeight, { fit: 'cover', position: 'attention' })
@@ -575,54 +584,6 @@ export function calloutMarkup(layout: CoverLayout, box: Rect): string {
 
 // 照片封面的标题只占标题区的下面这一截，上面留给照片主体。
 const PHOTO_TEXT_SHARE = 0.5;
-
-/**
- * 前后对比的一个面板：平台只看得到面板的一截时（公众号只露出接缝两边），清晰照片按主体
- * 构图放进这一截，面板其余部分铺同一张照片的模糊放大版。整块都看得见时就是普通构图。
- */
-export async function preparePanelLayer(
-    imagePath: string,
-    pixelWidth: number,
-    pixelHeight: number,
-    framing: { focus: PhotoFocus; visible: Rect },
-): Promise<PhotoLayer> {
-    const { visible } = framing;
-    const full = visible.x <= 0 && visible.y <= 0 && visible.width >= 1 && visible.height >= 1;
-    if (full) {
-        return preparePhotoLayer(imagePath, pixelWidth, pixelHeight, {
-            focus: framing.focus,
-            target: { x: 0.5, y: 0.5 },
-        });
-    }
-    const left = Math.round(visible.x * pixelWidth);
-    const top = Math.round(visible.y * pixelHeight);
-    const width = Math.round(visible.width * pixelWidth);
-    const height = Math.round(visible.height * pixelHeight);
-    const sharpPart = await preparePhotoLayer(imagePath, width, height, {
-        focus: framing.focus,
-        target: { x: 0.5, y: 0.5 },
-    });
-    const upright = await sharp(imagePath, { failOn: 'error' }).rotate().toBuffer();
-    const blur = Math.max(4, Math.min(pixelWidth, pixelHeight) * EXTEND_BLUR_SHARE);
-    const background = await sharp(upright)
-        .resize(pixelWidth, pixelHeight, { fit: 'cover' })
-        .blur(blur)
-        .modulate({ brightness: 0.8 })
-        .toBuffer();
-    const foreground = Buffer.from(
-        sharpPart.dataUri.slice(sharpPart.dataUri.indexOf(',') + 1),
-        'base64',
-    );
-    const bytes = await sharp(background)
-        .composite([{ input: foreground, left, top }])
-        .jpeg({ quality: PHOTO_JPEG_QUALITY, mozjpeg: true })
-        .toBuffer();
-    return {
-        dataUri: `data:image/jpeg;base64,${bytes.toString('base64')}`,
-        sourceWidth: sharpPart.sourceWidth,
-        sourceHeight: sharpPart.sourceHeight,
-    };
-}
 
 /**
  * 照片封面给照片主体让位：每一族和自定义画布的标题都压在标题区下半。

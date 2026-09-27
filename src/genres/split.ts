@@ -388,7 +388,7 @@ async function panelPhotos(
                 Math.round(seen.width * scale),
                 Math.round(seen.height * scale),
                 {
-                    focus: photo.focus,
+                    ...(photo.focus === undefined ? {} : { focus: photo.focus }),
                     target: { x: 0.5, y: labelShare + (1 - labelShare) / 2 },
                     visible: { x: 0, y: labelShare, width: 1, height: 1 - labelShare },
                 },

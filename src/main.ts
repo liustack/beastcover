@@ -556,7 +556,8 @@ interface PhotoCredit {
 }
 
 interface LoadedPhoto {
-    photo: GenrePhoto;
+    /** 真实照片总有一个主体估计（人脸、显著区域或注意力裁切） */
+    photo: GenrePhoto & { focus: PhotoFocus };
     credit: PhotoCredit;
 }
 
@@ -777,7 +778,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     photos.push(await loadPhoto(runtime, value, stockRuntime));
                 }
                 // 故事画面：没给照片、给了 --scene，就按本机能力现画，画不了退到配色渐变并说明。
-                const genrePhotos = photos.map((loaded) => loaded.photo);
+                const genrePhotos: GenrePhoto[] = photos.map((loaded) => loaded.photo);
                 const sceneLines: string[] = [];
                 let painter: ScenePainter | undefined;
                 if (scene !== undefined) {
@@ -812,12 +813,15 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                       verbose: Boolean(options.verbose),
                                       backendOutput: runtime.stderr,
                                   });
+                        // 渐变底没有主体，不去找，质检也就不会拿一块渐变当主体去核对。
                         painted.push({
                             orientation,
                             photo: {
                                 path,
                                 ...(await imageSize(path)),
-                                focus: await runtime.photoFocus(path),
+                                ...(painter === undefined
+                                    ? {}
+                                    : { focus: await runtime.photoFocus(path) }),
                             },
                         });
                         if (painter !== undefined) {

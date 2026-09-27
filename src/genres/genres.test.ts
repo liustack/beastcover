@@ -504,6 +504,50 @@ describe('cover type rendering', () => {
         }
     }, 120_000);
 
+    it('checks the scene subject of face-stakes, and finds none in a gradient scene', async () => {
+        // 竖版照片正好铺满母版，主体在 y 1450-1600，抖音底栏从 1540 起：主体被挡。
+        const tall = join(directory, 'tall.png');
+        await sharp({ create: { width: 1080, height: 1920, channels: 3, background: '#557799' } })
+            .png()
+            .toFile(tall);
+        const compose = (focus: GenrePhoto['focus']) =>
+            composeCovers({
+                renderer,
+                template: genreTemplate('face-stakes', {
+                    text: '在火山口住了一晚',
+                    fonts: FONTS,
+                    photos: [
+                        {
+                            path: tall,
+                            width: 1080,
+                            height: 1920,
+                            ...(focus === undefined ? {} : { focus }),
+                        },
+                    ],
+                    subject: SUBJECT,
+                }),
+                text: '在火山口住了一晚',
+                targets: [{ platform: 'douyin', outputPath: join(directory, 'stakes-douyin.png') }],
+                scale: 1,
+                qc: {},
+            });
+        const hidden = await compose({
+            x: 300 / 1080,
+            y: 1525 / 1920,
+            width: 200 / 1080,
+            height: 150 / 1920,
+            source: 'saliency',
+        });
+        expect(hidden[0]?.findings.map((finding) => finding.message)).toContain(
+            "the scene's subject is cut off or hidden under the app's buttons. Pick a photo with more room around its subject, or another type.",
+        );
+        // 画不了场景时的渐变底没有主体，不拿它去核对。
+        const gradient = await compose(undefined);
+        expect(
+            gradient[0]?.findings.filter((finding) => finding.message.includes("scene's subject")),
+        ).toEqual([]);
+    }, 120_000);
+
     it('escapes the headline and labels instead of running them as markup', () => {
         const template = genreTemplate('versus', {
             text: '<img src=x onerror=alert(1)>',

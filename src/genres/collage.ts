@@ -195,7 +195,10 @@ export function collageTemplate(request: CollageRequest): CoverTemplate {
                         photo.path,
                         Math.round(seen.width * scale),
                         Math.round(seen.height * scale),
-                        { focus: photo.focus, target: { x: 0.5, y: 0.5 } },
+                        {
+                            ...(photo.focus === undefined ? {} : { focus: photo.focus }),
+                            target: { x: 0.5, y: 0.5 },
+                        },
                     );
                     return { dataUri: layer.dataUri, rect: seen, focusBox: layer.focusBox };
                 }),
