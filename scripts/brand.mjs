@@ -80,36 +80,56 @@ function bannerHtml(language) {
 const SOCIAL_HERO = 'face-stakes-scene-youtube.jpg';
 const SOCIAL_PAIR = ['number-youtube.png', 'scene-title-youtube.jpg'];
 
+// 深色舞台、细字、柔和投影：封面本身已经够吵，底子要安静，让封面当唯一的主角。
 function socialHtml() {
     const card = (name, style) =>
         `<img class="card" style="${style}" src="${dataUri(name)}" alt="">`;
-    // 大图 1070 宽，下面两张各 522 宽，间距 26，整组在 1280 高里垂直居中。
-    const heroHeight = Math.round((1070 * 9) / 16);
-    const pairWidth = (1070 - 26) / 2;
+    // 大图 1060 宽，下面两张各 518 宽，间距 24，整组在 1280 高里垂直居中。
+    const width = 1060;
+    const gap = 24;
+    const heroHeight = Math.round((width * 9) / 16);
+    const pairWidth = (width - gap) / 2;
     const pairHeight = Math.round((pairWidth * 9) / 16);
-    const top = Math.round((1280 - (heroHeight + 26 + pairHeight)) / 2);
+    const top = Math.round((1280 - (heroHeight + gap + pairHeight)) / 2);
+    const left = 1360;
     return `<!doctype html><html><head><meta charset="utf-8"><style>
         * { box-sizing: border-box; }
-        body { margin: 0; width: 2560px; height: 1280px; overflow: hidden; background: #ffe45c; font-family: ${FONT}; position: relative; }
-        .copy { position: absolute; left: 140px; top: 50%; transform: translateY(-50%); width: 1180px; }
-        .tag { display: inline-block; padding: 16px 30px; background: #121212; color: #ffe45c; font-size: 40px; font-weight: 800; letter-spacing: 0.08em; }
-        h1 { margin: 44px 0 0; font-size: 250px; line-height: 0.92; font-weight: 900; letter-spacing: -0.04em; color: #121212; }
-        h1 span { color: #e0241b; display: block; }
-        p { margin: 52px 0 0; font-size: 62px; line-height: 1.18; font-weight: 700; color: #121212; }
-        code { display: inline-block; margin-top: 60px; padding: 24px 36px; background: #fff; border: 6px solid #121212; box-shadow: 14px 14px 0 #121212; font: 700 40px Menlo, monospace; color: #121212; white-space: nowrap; }
-        .card { position: absolute; border-radius: 16px; border: 6px solid #121212; box-shadow: 12px 12px 0 #121212; }
+        body {
+            margin: 0; width: 2560px; height: 1280px; overflow: hidden; position: relative;
+            font-family: ${FONT}; color: #f4f4f5;
+            background:
+                radial-gradient(circle at 76% 46%, rgba(255, 106, 51, 0.22), transparent 42%),
+                radial-gradient(circle at 18% 80%, rgba(90, 120, 255, 0.10), transparent 40%),
+                #0b0c0f;
+        }
+        .copy { position: absolute; left: 150px; top: 50%; transform: translateY(-50%); width: 1100px; }
+        .eyebrow { font-size: 34px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #ff7a4d; }
+        h1 { margin: 28px 0 0; font-size: 210px; line-height: 0.95; font-weight: 800; letter-spacing: -0.045em; }
+        p { margin: 40px 0 0; font-size: 58px; line-height: 1.22; font-weight: 500; color: #a1a1aa; letter-spacing: -0.01em; }
+        .command {
+            display: inline-flex; gap: 22px; margin-top: 64px; padding: 26px 38px;
+            border-radius: 22px; background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            font: 500 38px Menlo, monospace; color: #e4e4e7; white-space: nowrap;
+        }
+        .command span { color: #71717a; }
+        .card {
+            position: absolute; border-radius: 22px;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55), 0 8px 24px rgba(0, 0, 0, 0.35);
+        }
     </style></head><body>
         <div class="copy">
-            <div class="tag">10 COVER TYPES · EVERY PLATFORM</div>
-            <h1>Beast<span>Cover</span></h1>
-            <p>Covers that get the click, checked before you ship.</p>
-            <code>npx -y skills add liustack/beastcover -g</code>
+            <div class="eyebrow">10 cover types · every platform</div>
+            <h1>BeastCover</h1>
+            <p>Covers that get the click,<br>checked before you ship.</p>
+            <div class="command"><span>$</span>npx -y skills add liustack/beastcover -g</div>
         </div>
-        ${card(SOCIAL_HERO, `left: 1380px; top: ${top}px; width: 1070px; height: ${heroHeight}px;`)}
+        ${card(SOCIAL_HERO, `left: ${left}px; top: ${top}px; width: ${width}px; height: ${heroHeight}px;`)}
         ${SOCIAL_PAIR.map((name, index) =>
             card(
                 name,
-                `left: ${1380 + index * (pairWidth + 26)}px; top: ${top + heroHeight + 26}px; width: ${pairWidth}px; height: ${pairHeight}px;`,
+                `left: ${left + index * (pairWidth + gap)}px; top: ${top + heroHeight + gap}px; width: ${pairWidth}px; height: ${pairHeight}px;`,
             ),
         ).join('')}
     </body></html>`;
