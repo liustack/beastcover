@@ -61,7 +61,11 @@ function mockRender() {
         screenshot,
         close: vi.fn(async () => undefined),
         probeFonts: vi.fn(async () => []),
-        inspect: vi.fn(async () => ({ background: Buffer.alloc(0), withText: Buffer.alloc(0) })),
+        inspect: vi.fn(async () => ({
+            background: Buffer.alloc(0),
+            withText: Buffer.alloc(0),
+            headline: Buffer.alloc(0),
+        })),
     };
     return Object.assign(screenshot, { open: vi.fn(async () => renderer) });
 }

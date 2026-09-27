@@ -104,6 +104,8 @@ async function meanLuma(png: Buffer): Promise<number> {
 interface MasterInspection {
     background: Buffer;
     withText: Buffer;
+    /** 只画标题填色的一张，量对比度用 */
+    headline: Buffer;
     text: TextMask;
     pictureText: TextMask;
     contents?: ImageContents;
@@ -120,6 +122,7 @@ async function inspectMaster(
     const inspection: MasterInspection = {
         background: inspected.background,
         withText: inspected.withText,
+        headline: inspected.headline,
         text,
         pictureText: await textOnPicture(text, inspected.background),
     };
@@ -138,8 +141,6 @@ async function findingsFor(
     target: QcTarget,
     crop: Rect,
     covered: readonly Rect[],
-    /** 标题区：对比度只量标题 */
-    textArea: Rect,
     page: RenderedPage,
     qc: MasterInspection,
     png: Buffer,
@@ -149,7 +150,7 @@ async function findingsFor(
             target,
             withText: qc.withText,
             background: qc.background,
-            area: textArea,
+            headline: qc.headline,
             crop,
         })),
         ...checkSubjects(target, page.subjects, crop, covered),
@@ -476,7 +477,6 @@ export async function composeCovers(input: {
                               platform.name,
                               platform.crop,
                               platform.covered,
-                              layout.textArea,
                               page,
                               qc,
                               png,
@@ -550,7 +550,6 @@ export async function composeCustomCover(input: {
                       'canvas',
                       canvas,
                       [],
-                      layout.textArea,
                       page,
                       await inspectMaster(input.renderer, input.qc, {
                           html,

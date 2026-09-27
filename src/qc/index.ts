@@ -381,11 +381,21 @@ export function checkSubjects(
     });
 }
 
-// 标题和它背后的对比度（WCAG）：大字至少 3:1，建议 4.5:1（research.md 第 4.1 节）。
+// 标题和紧挨着它的颜色（WCAG）：大字至少 3:1，建议 4.5:1（research.md 第 4.1 节）。
 const CONTRAST_FAIL = 3;
 const CONTRAST_WARN = 4.5;
-// 标题区里的字迹少于这么多像素，就当没有标题，不量对比度。
-const MIN_INK_PIXELS = 200;
+// 这个裁切框里标题填色少于这么多像素，就当标题不在这一版里。
+const MIN_GLYPH_PIXELS = 200;
+// 字外面离笔画 1 到 3 像素的一圈，就是眼睛拿来跟字比的颜色：有描边是描边，有色块是色块，
+// 什么都没有就是照片。1 像素以内是抗锯齿的混色，不算。
+const RING_INNER = 1;
+const RING_OUTER = 3;
+// 按小格子分别量，一处看不清不会被别处的反差拉平。
+const CONTRAST_CELL = 16;
+// 一个格子里字和外圈都至少有这么多像素才量。
+const MIN_CELL_PIXELS = 4;
+// 报告最差那一成字的对比度：九成的字够了还不算够，剩下一成看不清照样读不出整句。
+const WEAKEST_SHARE = 0.1;
 
 /** WCAG 相对亮度，sRGB 0-255 */
 function relativeLuminance(r: number, g: number, b: number): number {
@@ -400,66 +410,198 @@ function contrastRatio(a: number, b: number): number {
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
+/** 方形膨胀：离某个 1 不超过 radius 像素（切比雪夫距离）的都变成 1 */
+function dilate(mask: Uint8Array, width: number, height: number, radius: number): Uint8Array {
+    const across = new Uint8Array(mask.length);
+    for (let y = 0; y < height; y += 1) {
+        const row = y * width;
+        for (let x = 0; x < width; x += 1) {
+            const last = Math.min(width - 1, x + radius);
+            for (let d = Math.max(0, x - radius); d <= last; d += 1) {
+                if (mask[row + d] === 1) {
+                    across[row + x] = 1;
+                    break;
+                }
+            }
+        }
+    }
+    const out = new Uint8Array(mask.length);
+    for (let x = 0; x < width; x += 1) {
+        for (let y = 0; y < height; y += 1) {
+            const last = Math.min(height - 1, y + radius);
+            for (let d = Math.max(0, y - radius); d <= last; d += 1) {
+                if (across[d * width + x] === 1) {
+                    out[y * width + x] = 1;
+                    break;
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/** 方形腐蚀：只留四周 radius 像素内全是 1 的点 */
+function erode(mask: Uint8Array, width: number, height: number, radius: number): Uint8Array {
+    const outside = mask.map((value) => 1 - value);
+    return dilate(outside, width, height, radius).map((value) => 1 - value);
+}
+
 /**
- * 标题读不读得出来：只看标题区里的字迹。字迹里最亮的一成和最暗的一成，只要有一头和字背后
- * 的平均亮度拉得开就算读得出。白字黑描边两头都有，压在什么上都过；单色字（亮底深字、照片上的
- * 软投影白字）就要看它背后够不够反差。
+ * 标题读不读得出来。字在哪不靠和背景比色差（和背景一个颜色的字就找不到了），靠单独渲的
+ * 一张：只画标题填色，字黑其余全白。按小格子拿成品里字的颜色比两道边，取反差大的那道：
+ * 字外面紧挨着的一圈（白字黑描边就是描边），和整块字迹（字加描边、投影）外面的一圈
+ * （黑字黑描边压奶油底，眼睛看的是这一道）。所有格子里取最差那一成：半截压暗处半截压亮处的，
+ * 亮处那半截会被量出来。
  */
 export async function checkContrast(input: {
     target: QcTarget;
     withText: Buffer;
     background: Buffer;
-    /** 标题区，母版坐标 */
-    area: Rect;
+    /** 只画标题填色的一张（CoverRenderer.inspect 的 headline）：字黑，其余全白 */
+    headline: Buffer;
     crop: Rect;
 }): Promise<QcFinding[]> {
-    const text = await sharp(input.withText)
+    const decode = (png: Buffer) =>
+        sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const text = await decode(input.withText);
+    const back = await decode(input.background);
+    const glyphs = await sharp(input.headline)
         .removeAlpha()
+        .greyscale()
         .raw()
         .toBuffer({ resolveWithObject: true });
-    const back = await sharp(input.background).removeAlpha().raw().toBuffer();
     const { width, height, channels } = text.info;
-    const region = intersect(input.area, input.crop);
-    if (region === undefined) {
-        return [];
-    }
-    const x0 = Math.max(0, Math.floor(region.x));
-    const y0 = Math.max(0, Math.floor(region.y));
-    const x1 = Math.min(width, Math.ceil(region.x + region.width));
-    const y1 = Math.min(height, Math.ceil(region.y + region.height));
-    const ink: number[] = [];
-    let behind = 0;
-    for (let y = y0; y < y1; y += 1) {
-        for (let x = x0; x < x1; x += 1) {
-            const i = (y * width + x) * channels;
-            let diff = 0;
-            for (let c = 0; c < 3; c += 1) {
-                diff = Math.max(diff, Math.abs((text.data[i + c] ?? 0) - (back[i + c] ?? 0)));
-            }
-            if (diff <= INK_DIFF) {
-                continue;
-            }
-            ink.push(
-                relativeLuminance(text.data[i] ?? 0, text.data[i + 1] ?? 0, text.data[i + 2] ?? 0),
-            );
-            behind += relativeLuminance(back[i] ?? 0, back[i + 1] ?? 0, back[i + 2] ?? 0);
+    for (const other of [back.info, glyphs.info]) {
+        if (other.width !== width || other.height !== height) {
+            throw new Error('The headline, text, and background renders differ in size.');
         }
     }
-    if (ink.length < MIN_INK_PIXELS) {
+    const x0 = Math.max(0, Math.floor(input.crop.x));
+    const y0 = Math.max(0, Math.floor(input.crop.y));
+    const w = Math.min(width, Math.ceil(input.crop.x + input.crop.width)) - x0;
+    const h = Math.min(height, Math.ceil(input.crop.y + input.crop.height)) - y0;
+    if (w <= 0 || h <= 0) {
         return [];
     }
-    ink.sort((a, b) => a - b);
-    const dark = ink[Math.floor(ink.length * 0.1)] ?? 0;
-    const bright = ink[Math.floor(ink.length * 0.9)] ?? 0;
-    const back0 = behind / ink.length;
-    const ratio = Math.max(contrastRatio(dark, back0), contrastRatio(bright, back0));
+    const glyph = new Uint8Array(w * h);
+    // 整块字迹：标题填色，加上带字和不带字两张图不一样的地方（描边、投影、色块）。
+    const stack = new Uint8Array(w * h);
+    let glyphPixels = 0;
+    for (let y = 0; y < h; y += 1) {
+        for (let x = 0; x < w; x += 1) {
+            const j = y * w + x;
+            if ((glyphs.data[(y0 + y) * width + x0 + x] ?? 255) < 128) {
+                glyph[j] = 1;
+                stack[j] = 1;
+                glyphPixels += 1;
+                continue;
+            }
+            const i = ((y0 + y) * width + x0 + x) * channels;
+            for (let c = 0; c < 3; c += 1) {
+                if (Math.abs((text.data[i + c] ?? 0) - (back.data[i + c] ?? 0)) > INK_DIFF) {
+                    stack[j] = 1;
+                    break;
+                }
+            }
+        }
+    }
+    if (glyphPixels < MIN_GLYPH_PIXELS) {
+        return [];
+    }
+    const fill = erode(glyph, w, h, 1);
+    const ringOf = (mask: Uint8Array) => {
+        const near = dilate(mask, w, h, RING_INNER);
+        const far = dilate(mask, w, h, RING_OUTER);
+        return far.map((value, j) => (value === 1 && near[j] === 0 ? 1 : 0));
+    };
+    const layers = [fill, ringOf(glyph), ringOf(stack)];
+    const columns = Math.ceil(w / CONTRAST_CELL);
+    const rows = Math.ceil(h / CONTRAST_CELL);
+    // 每格每层两个数：亮度和、像素数。层依次是字、字外一圈、整块字迹外一圈。
+    const cells = new Float64Array(columns * rows * layers.length * 2);
+    for (let y = 0; y < h; y += 1) {
+        for (let x = 0; x < w; x += 1) {
+            const j = y * w + x;
+            const cell = Math.floor(y / CONTRAST_CELL) * columns + Math.floor(x / CONTRAST_CELL);
+            let luminance: number | undefined;
+            for (let layer = 0; layer < layers.length; layer += 1) {
+                if (layers[layer]?.[j] !== 1) {
+                    continue;
+                }
+                if (luminance === undefined) {
+                    const i = ((y0 + y) * width + x0 + x) * channels;
+                    luminance = relativeLuminance(
+                        text.data[i] ?? 0,
+                        text.data[i + 1] ?? 0,
+                        text.data[i + 2] ?? 0,
+                    );
+                }
+                const slot = (cell * layers.length + layer) * 2;
+                cells[slot] = (cells[slot] ?? 0) + luminance;
+                cells[slot + 1] = (cells[slot + 1] ?? 0) + 1;
+            }
+        }
+    }
+    // 描边有宽度，外面那一圈常常落在隔壁格子里：两道边都按周围 3x3 格子合起来算。
+    const pooled = (column: number, row: number, layer: number) => {
+        let sum = 0;
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy += 1) {
+            for (let dx = -1; dx <= 1; dx += 1) {
+                const c = column + dx;
+                const r = row + dy;
+                if (c < 0 || r < 0 || c >= columns || r >= rows) {
+                    continue;
+                }
+                const slot = ((r * columns + c) * layers.length + layer) * 2;
+                sum += cells[slot] ?? 0;
+                count += cells[slot + 1] ?? 0;
+            }
+        }
+        return count >= MIN_CELL_PIXELS ? sum / count : undefined;
+    };
+    const measured: { ratio: number; weight: number }[] = [];
+    for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+            const slot = (row * columns + column) * layers.length * 2;
+            const fillCount = cells[slot + 1] ?? 0;
+            if (fillCount < MIN_CELL_PIXELS) {
+                continue;
+            }
+            const letter = (cells[slot] ?? 0) / fillCount;
+            const edges = [pooled(column, row, 1), pooled(column, row, 2)].filter(
+                (value): value is number => value !== undefined,
+            );
+            if (edges.length === 0) {
+                continue;
+            }
+            measured.push({
+                ratio: Math.max(...edges.map((edge) => contrastRatio(letter, edge))),
+                weight: fillCount,
+            });
+        }
+    }
+    if (measured.length === 0) {
+        return [];
+    }
+    measured.sort((a, b) => a.ratio - b.ratio);
+    const total = measured.reduce((sum, cell) => sum + cell.weight, 0);
+    let seen = 0;
+    let ratio = measured[0]?.ratio ?? 0;
+    for (const cell of measured) {
+        seen += cell.weight;
+        ratio = cell.ratio;
+        if (seen >= total * WEAKEST_SHARE) {
+            break;
+        }
+    }
     const shown = `${ratio.toFixed(1)}:1`;
     if (ratio < CONTRAST_FAIL) {
         return [
             {
                 level: 'fail',
                 platform: input.target,
-                message: `the headline blends into what is behind it (contrast ${shown}, at least 3:1 needed). Darken or blur under it, or pick a darker or lighter part of the picture.`,
+                message: `the headline blends into what is behind it (contrast ${shown} on its weakest part, at least 3:1 needed). Pick a darker or lighter part of the picture, another --scheme, or another type.`,
             },
         ];
     }
@@ -468,7 +610,7 @@ export async function checkContrast(input: {
             {
                 level: 'warn',
                 platform: input.target,
-                message: `the headline is weak against what is behind it (contrast ${shown}, 4.5:1 reads well). Darken or blur under it.`,
+                message: `the headline is weak against what is behind it (contrast ${shown} on its weakest part, 4.5:1 reads well). Pick a calmer part of the picture or another --scheme.`,
             },
         ];
     }

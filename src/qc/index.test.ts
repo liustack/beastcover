@@ -253,64 +253,88 @@ describe('subjects', () => {
 });
 
 describe('contrast', () => {
-    const area = { x: 0, y: 0, width: 200, height: 100 };
-    const solid = (colour: string) =>
-        sharp({ create: { width: 200, height: 100, channels: 3, background: colour } })
+    const W = 200;
+    const H = 100;
+    const crop = { x: 0, y: 0, width: W, height: H };
+    type Rgb = readonly [number, number, number];
+    const raster = (paint: (x: number, y: number) => Rgb) => {
+        const data = Buffer.alloc(W * H * 3);
+        for (let y = 0; y < H; y += 1) {
+            for (let x = 0; x < W; x += 1) {
+                data.set(paint(x, y), (y * W + x) * 3);
+            }
+        }
+        return sharp(data, { raw: { width: W, height: H, channels: 3 } })
             .png()
             .toBuffer();
-    const withBlock = async (base: string, blocks: { colour: string; left: number }[]) =>
-        sharp(await solid(base))
-            .composite(
-                await Promise.all(
-                    blocks.map(async ({ colour, left }) => ({
-                        input: await sharp({
-                            create: { width: 40, height: 40, channels: 3, background: colour },
-                        })
-                            .png()
-                            .toBuffer(),
-                        left,
-                        top: 30,
-                    })),
-                ),
-            )
-            .png()
-            .toBuffer();
+    };
+    // 标题是中间一根 160x40 的横条。
+    const inGlyph = (x: number, y: number) => x >= 20 && x < 180 && y >= 30 && y < 70;
+    const headline = () => raster((x, y) => (inGlyph(x, y) ? [0, 0, 0] : [255, 255, 255]));
+    const grey = (value: number): Rgb => [value, value, value];
+    // ground 是不带字的那张。没给就和带字的一样：只有标题填色算字迹。
+    const check = async (
+        paint: (x: number, y: number) => Rgb,
+        ground: (x: number, y: number) => Rgb = paint,
+    ) =>
+        (
+            await checkContrast({
+                target: 'youtube',
+                withText: await raster(paint),
+                background: await raster(ground),
+                headline: await headline(),
+                crop,
+            })
+        ).map((finding) => finding.level);
 
     it('fails a single-tone headline that blends into what is behind it', async () => {
-        const background = await solid('#d8d8d8');
-        const findings = await checkContrast({
-            target: 'youtube',
-            withText: await withBlock('#d8d8d8', [{ colour: '#ffffff', left: 20 }]),
-            background,
-            area,
-            crop: area,
-        });
-        expect(findings.map((finding) => finding.level)).toEqual(['fail']);
+        expect(await check((x, y) => (inGlyph(x, y) ? grey(255) : grey(216)))).toEqual(['fail']);
     });
 
-    it('passes dark type on a light ground and outlined type on anything', async () => {
-        const cream = await solid('#f5eedc');
+    it('finds a headline painted in the same colour as what is behind it', async () => {
+        expect(await check(() => grey(255))).toEqual(['fail']);
+        expect(await check((x, y) => (inGlyph(x, y) ? grey(238) : grey(255)))).toEqual(['fail']);
+    });
+
+    it('passes dark type on a light ground and outlined type on a mid grey', async () => {
+        expect(await check((x, y) => (inGlyph(x, y) ? [18, 18, 18] : [245, 238, 220]))).toEqual([]);
+        // 白字外面一圈 6 像素的黑描边，压在中灰上。
+        const nearGlyph = (x: number, y: number) => x >= 14 && x < 186 && y >= 24 && y < 76;
         expect(
-            await checkContrast({
-                target: 'youtube',
-                withText: await withBlock('#f5eedc', [{ colour: '#121212', left: 20 }]),
-                background: cream,
-                area,
-                crop: area,
-            }),
+            await check(
+                (x, y) => (inGlyph(x, y) ? grey(255) : nearGlyph(x, y) ? grey(0) : grey(138)),
+                () => grey(138),
+            ),
         ).toEqual([]);
-        // 白字黑描边压在中灰上：白的一头拉不开，黑的一头拉得开。
-        const grey = await solid('#8a8a8a');
+        // 黑字黑描边压奶油底：字和描边连成一块，眼睛拿整块和奶油底比。
+        const cream: Rgb = [245, 238, 220];
+        expect(
+            await check(
+                (x, y) => (nearGlyph(x, y) ? grey(18) : cream),
+                () => cream,
+            ),
+        ).toEqual([]);
+    });
+
+    it('fails a headline that is readable on one half and not on the other', async () => {
+        // 白字左半压在深灰上，右半压在 #999 上（只有 2.85:1）。
+        expect(
+            await check((x, y) => (inGlyph(x, y) ? grey(255) : x < 100 ? grey(51) : grey(153))),
+        ).toEqual(['fail']);
+        // 灰底上一小段黑色强调字，拉不高其余白字的对比度。
+        expect(
+            await check((x, y) => (inGlyph(x, y) ? (x < 40 ? grey(0) : grey(255)) : grey(153))),
+        ).toEqual(['fail']);
+    });
+
+    it('skips a crop the headline is not in', async () => {
         expect(
             await checkContrast({
                 target: 'youtube',
-                withText: await withBlock('#8a8a8a', [
-                    { colour: '#ffffff', left: 20 },
-                    { colour: '#000000', left: 80 },
-                ]),
-                background: grey,
-                area,
-                crop: area,
+                withText: await raster(() => grey(255)),
+                background: await raster(() => grey(255)),
+                headline: await headline(),
+                crop: { x: 0, y: 80, width: W, height: 20 },
             }),
         ).toEqual([]);
     });

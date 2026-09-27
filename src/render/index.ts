@@ -25,10 +25,10 @@ export interface CoverRenderer {
     fitText(request: FitTextRequest): Promise<number>;
     screenshot(page: RenderPage): Promise<Buffer>;
     /**
-     * 质检用：按 1 倍各截一张带字的和把字全部隐藏的，两张一比就是字迹。
-     * 隐藏用 visibility，不改排版。
+     * 质检用，都按 1 倍截：带字的、把字全部隐藏的（两张一比就是字迹），和只画标题填色的
+     * （字黑其余全白，字和背景同色也找得到字在哪）。隐藏用 visibility，不改排版。
      */
-    inspect(page: RenderPage): Promise<{ background: Buffer; withText: Buffer }>;
+    inspect(page: RenderPage): Promise<{ background: Buffer; withText: Buffer; headline: Buffer }>;
     /** 探测候选字体装没装、覆不覆盖这句标题、多粗，结果和截图用的是同一个 Chromium */
     probeFonts(text: string, families: Record<FontScript, string[]>): Promise<FontProbeResult[]>;
     close(): Promise<void>;
@@ -55,6 +55,33 @@ function validateScale(value: number): void {
 /** 封面上的字：标题填色层、描边层、数字、标签，以及模板显式标出的 .qc-text */
 export const TEXT_SELECTOR = '.copy:not(.probe), .figure, .label, .qc-text';
 const HIDE_TEXT_SELECTOR = `${TEXT_SELECTOR}, .copy-layer, .headline-stack`;
+// 只留标题填色：别的全隐藏、底刷白，字刷黑。描边宽度留着（合成粗体靠它加粗），只改颜色，
+// 投影、高亮色块、伪元素都去掉，剩下的就是字本身占的像素。
+const HEADLINE_ONLY = `
+    html, body { background: #fff !important; }
+    body * { visibility: hidden !important; }
+    .copy:not(.probe), .copy:not(.probe) * {
+        visibility: visible !important;
+        color: #000 !important;
+        -webkit-text-fill-color: #000 !important;
+        -webkit-text-stroke-color: #000 !important;
+        text-shadow: none !important;
+        background: none !important;
+        box-shadow: none !important;
+        border-color: transparent !important;
+        filter: none !important;
+        opacity: 1 !important;
+    }
+    .copy:not(.probe)::before, .copy:not(.probe)::after,
+    .copy:not(.probe) *::before, .copy:not(.probe) *::after { visibility: hidden !important; }
+`;
+
+function withStyle(html: string, css: string): string {
+    const style = `<style>${css}</style>`;
+    return html.includes('</head>')
+        ? html.replace('</head>', `${style}</head>`)
+        : `${style}${html}`;
+}
 
 // 半个像素的余量吸收亚像素排版误差。
 const FIT_TOLERANCE = 0.5;
@@ -154,10 +181,6 @@ export async function openRenderer(): Promise<CoverRenderer> {
         async inspect(request) {
             validateDimension('Width', request.width);
             validateDimension('Height', request.height);
-            const hide = `<style>${HIDE_TEXT_SELECTOR} { visibility: hidden !important; }</style>`;
-            const html = request.html.includes('</head>')
-                ? request.html.replace('</head>', `${hide}</head>`)
-                : `${hide}${request.html}`;
             const shot = (page: Page) =>
                 page.screenshot({
                     type: 'png',
@@ -168,9 +191,19 @@ export async function openRenderer(): Promise<CoverRenderer> {
             return withPage(browser, { ...request, scale: 1 }, async (page) => {
                 await page.setContent(request.html, { waitUntil: 'load' });
                 const withText = await shot(page);
-                await page.setContent(html, { waitUntil: 'load' });
+                await page.setContent(
+                    withStyle(
+                        request.html,
+                        `${HIDE_TEXT_SELECTOR} { visibility: hidden !important; }`,
+                    ),
+                    { waitUntil: 'load' },
+                );
                 const background = await shot(page);
-                return { background, withText };
+                await page.setContent(withStyle(request.html, HEADLINE_ONLY), {
+                    waitUntil: 'load',
+                });
+                const headline = await shot(page);
+                return { background, withText, headline };
             });
         },
 

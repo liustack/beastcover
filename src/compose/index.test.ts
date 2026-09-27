@@ -96,7 +96,11 @@ function fakeRenderer(fontFor: (request: FitTextRequest, keepClauses: boolean) =
         }),
         close: vi.fn(async () => undefined),
         probeFonts: vi.fn(async () => []),
-        inspect: vi.fn(async () => ({ background: Buffer.alloc(0), withText: Buffer.alloc(0) })),
+        inspect: vi.fn(async () => ({
+            background: Buffer.alloc(0),
+            withText: Buffer.alloc(0),
+            headline: Buffer.alloc(0),
+        })),
     };
     return { renderer, screenshots, fits };
 }
@@ -230,7 +234,11 @@ describe('cover composition', () => {
             screenshot: vi.fn(),
             close: async () => undefined,
             probeFonts: async () => [],
-            inspect: async () => ({ background: Buffer.alloc(0), withText: Buffer.alloc(0) }),
+            inspect: async () => ({
+                background: Buffer.alloc(0),
+                withText: Buffer.alloc(0),
+                headline: Buffer.alloc(0),
+            }),
         };
         const directory = tempDir();
 
@@ -394,6 +402,36 @@ describe('placement fallback', () => {
             .toBuffer();
     }
 
+    /** 只画标题填色的那一张：标题区涂黑，其余全白 */
+    function drawHeadline(page: RenderPage): Promise<Buffer> {
+        const { layout } = JSON.parse(page.html) as FakeLayoutPage;
+        const area = layout.textArea;
+        return sharp({
+            create: {
+                width: Math.round(page.width * page.scale),
+                height: Math.round(page.height * page.scale),
+                channels: 3,
+                background: { r: 255, g: 255, b: 255 },
+            },
+        })
+            .composite([
+                {
+                    input: {
+                        create: {
+                            width: Math.round(area.width * page.scale),
+                            height: Math.round(area.height * page.scale),
+                            channels: 3,
+                            background: { r: 0, g: 0, b: 0 },
+                        },
+                    },
+                    left: Math.round(area.x * page.scale),
+                    top: Math.round(area.y * page.scale),
+                },
+            ])
+            .png()
+            .toBuffer();
+    }
+
     it('moves the headline to the next placement when the first covers a person', async () => {
         const bottom = (layout: CoverLayout): CoverLayout => ({
             ...layout,
@@ -415,6 +453,7 @@ describe('placement fallback', () => {
             inspect: vi.fn(async (page: RenderPage) => ({
                 background: await draw(page, false),
                 withText: await draw(page, true),
+                headline: await drawHeadline(page),
             })),
         };
         const output = join(tempDir(), 'moved.png');
@@ -466,6 +505,7 @@ describe('placement fallback', () => {
             inspect: vi.fn(async (page: RenderPage) => ({
                 background: await draw(page, false),
                 withText: await draw(page, true),
+                headline: await drawHeadline(page),
             })),
         };
         const cover = await composeCustomCover({
