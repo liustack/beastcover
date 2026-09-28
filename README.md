@@ -36,9 +36,9 @@ Works with Claude Code, Codex, and any agent that reads a skill folder. Then tel
 
 ## What it makes
 
-Every platform has several cover types that keep winning, not one. BeastCover makes ten of them, and picks one from what you give it when you do not say. The banner at the top is all ten:
+Every platform has several cover types that keep winning, not one. BeastCover makes fourteen of them, and picks one from what you give it when you do not say. The banner at the top shows every one:
 
-Big type, number hook, face with big words, face with stakes, versus, before and after, scene title, callout, collage, and mood. The words on any of them come in six styles: bold, variety-show 花字, rounded sticker, magazine serif, calligraphy, and a phone notes screen for big type. Every one is a single command, collected with the commands that made them in [examples/](examples/).
+Big type, number hook, face with big words, face with stakes, versus, before and after, scene title, callout, collage, mood, product, tier list, quote, and screenshot proof. The words on any of them come in six styles: bold, variety-show 花字, rounded sticker, magazine serif, calligraphy, and a phone notes screen for big type. Every one is a single command, collected with the commands that made them in [examples/](examples/).
 
 ## Why these get clicked
 
@@ -75,7 +75,7 @@ Platforms with close ratios share one master and are cropped from it. Across sha
 
 | Path | Cost | What happens |
 | :-- | :-- | :-- |
-| Ten cover types (`--template`) | Free | Rendered in a local Chromium, nothing leaves your machine |
+| Fourteen cover types (`--template`) | Free | Rendered in a local Chromium, nothing leaves your machine |
 | Photos (`--photo`) | Free | Your own, or CC0 and public-domain photos from Openverse. A Pexels key is optional |
 | Painted scenes (`--scene`) | Your key or subscription | When there is no photo, your image API key or your Codex or agy CLI paints the scene. With neither, it falls back to a colour gradient and says so |
 

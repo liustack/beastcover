@@ -1,6 +1,6 @@
 ---
 name: beastcover
-description: "Make covers that get the click: a thumbnail or header for an article, video, or post, sized for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, or TikTok, plus the Open Graph image of a web page and a GitHub social preview. Ten cover types (big type, number hook, face with big words, face with stakes, versus, before and after, scene title, callout, collage, mood), every one checked after rendering. Free by default: local render and cc0 stock, no API key, no upload. Use this skill whenever the user asks for a cover, thumbnail, hero image, banner, OG image, or social preview, or wants the title and description that ship with one. Also use it for BeastCover configuration and offline diagnostics."
+description: "Make covers that get the click: a thumbnail or header for an article, video, or post, sized for WeChat, X, YouTube, Bilibili, Xiaohongshu, Instagram, Douyin, or TikTok, plus the Open Graph image of a web page and a GitHub social preview. Fourteen cover types (big type, number hook, face with big words, face with stakes, versus, before and after, scene title, callout, collage, mood, product, tier list, quote, screenshot proof), every one checked after rendering. Free by default: local render and cc0 stock, no API key, no upload. Use this skill whenever the user asks for a cover, thumbnail, hero image, banner, OG image, or social preview, or wants the title and description that ship with one. Also use it for BeastCover configuration and offline diagnostics."
 compatibility: Requires Node.js 22.19 or newer. Local HTML rendering also requires Playwright Chromium.
 allowed-tools: Bash
 ---
@@ -67,6 +67,10 @@ Platforms with close ratios share one master and are cropped from it. The CLI ke
 | `callout` | A red circle and arrow on the photo's subject, with a short question | one `--photo` with a small, clear subject | YouTube science, Bilibili knowledge |
 | `collage` | Two to four photos in a grid with the title on a colour band | 2 to 4 `--photo` | Xiaohongshu lists, food, trips |
 | `mood` | One strong photo with a small, quiet line | one `--photo` or `--scene` | Xiaohongshu, WeChat |
+| `product` | One cut-out product filling its side, a soft glow behind it, the price under the headline | `--subject` (the product: a transparent PNG, or a photo to cut out), optional `--number "¥299"`, `--tag` | Reviews, 种草, unboxing, deals |
+| `tier` | A ranking board: S, A, B, C rows in the familiar colours, one photo each, the first photo in S | 3 or 4 `--photo`, in rank order | "I ranked every X", food, gear, games |
+| `quote` | A person, a big quotation mark, one line they said, and who said it | `--subject`, `--tag "name"` | Interview clips, podcasts, opinion |
+| `proof` | A screenshot shown whole on a tilted card beside big words | one `--photo` (the screenshot: chat, stats, a post, a bill) | Knowledge, 吃瓜, exposés, "receipts" |
 
 Options that belong to another type fail with a message naming the types that take them, so pick the type first.
 
@@ -79,7 +83,13 @@ beastcover gen "15元和150元的拉面" --template versus --photo /abs/cheap.jp
 beastcover gen "桌面*改造*" --photo /abs/before.jpg --photo /abs/after.jpg --labels "改前,改后" --preset xiaohongshu
 beastcover gen "这是什么？" --template callout --photo openverse:<id> --preset youtube
 beastcover gen "东京吃了*7天*" --photo a.jpg --photo b.jpg --photo c.jpg --photo d.jpg --preset xiaohongshu
+beastcover gen "降噪*天花板*" --template product --subject /abs/headphones.png --number "¥299" --preset youtube,xiaohongshu
+beastcover gen "我排了所有*拉面*" --template tier --photo /abs/s.jpg --photo /abs/a.jpg --photo /abs/b.jpg --photo /abs/c.jpg --preset youtube
+beastcover gen "剪辑最忌讳*拖*" --template quote --subject /abs/director.jpg --tag "李导演" --preset youtube,bilibili
+beastcover gen "他*承认*了" --template proof --photo /abs/chat.png --tag "实锤" --preset bilibili,xiaohongshu
 ```
+
+Pick `product` over `face-text` when the subject is a thing, not a person: the product is fitted whole and never cropped like a bust. Put the most arguable pick in S on a `tier` board, since people click to disagree. A `quote` works when the line is specific and contestable, not a description of the topic. A `proof` screenshot is never cropped, so crop it to the part that matters before passing it.
 
 ## 4. Write the words
 
@@ -87,7 +97,7 @@ beastcover gen "东京吃了*7天*" --photo a.jpg --photo b.jpg --photo c.jpg --
 - **Mark where a line may break.** A headline wraps to at most three lines and prefers fewer. Put punctuation or a space between Chinese phrases where a break reads naturally: `个习惯 多出两小时` breaks as 个习惯 / 多出两小时, not in the middle of a phrase.
 - **Mark one keyword with `*asterisks*`.** It gets the accent colour, a marker stroke, or a colour block, depending on the type. Without a mark, figures (`3`, `90%`, `¥150`) are highlighted automatically. Mark one word, not three.
 - **`--hook` for mixed runs.** WeChat and X article cards show the title beside the cover, so a full line is fine there. When one run covers both, pass the full line as the headline and the short label as `--hook`: video and note covers get the hook, WeChat and X keep the headline.
-- **`--tag`** is a small label above the headline (`新手必看`, `干货`, `2026`), for `big-type`, `number`, and `face-text`.
+- **`--tag`** is a small label above the headline (`新手必看`, `干货`, `2026`), for `big-type`, `number`, `face-text`, `product`, and `proof`. On `quote` it is who said the line.
 - Also write the title and the first line of the description when the user publishes: they carry the searchable phrase and confirm the promise (see packaging.md).
 
 When the output has a `Headline:` line, the text is long for a YouTube or Bilibili cover: offer a shorter hook. A `Thumbnail:` line means the words shrink too far in that platform's feed.
