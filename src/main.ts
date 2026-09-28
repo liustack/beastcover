@@ -734,13 +734,13 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
         .option('--guides', 'Draw the safe areas on each cover for checking the layout')
         .option(
             '--photo <ref-or-path>',
-            'Stock photo ref (pexels:<id>, openverse:<id>) or a local image (repeatable for versus, before-after, collage)',
+            'Stock photo ref (pexels:<id>, openverse:<id>) or a local image (repeatable for versus, before-after, collage, tier)',
             collectRefs,
             [],
         )
         .option(
             '--subject <path>',
-            'Person for face-text and face-stakes: a transparent PNG, or a photo to cut out on macOS',
+            'The person (face-text, face-stakes, quote) or the product (product): a transparent PNG, or a photo to cut out on macOS',
         )
         .option(
             '--scene <description>',
@@ -755,10 +755,13 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             '--style <name>',
             `How the words look: ${STYLE_NAMES.join(', ')} (memo is big-type only)`,
         )
-        .option('--tag <text>', 'big-type, number, face-text: a short label above the headline')
+        .option(
+            '--tag <text>',
+            'big-type, number, face-text, product, proof: a short label above the headline. quote: who said it',
+        )
         .option(
             '--number <figure>',
-            'number: the big figure, like 3 or 90%. face-stakes: the stakes sign, like $10,000',
+            'number: the big figure, like 3 or 90%. face-stakes: the stakes sign, like $10,000. product: the price, like ¥299',
         )
         .option(
             '--labels <first,second>',

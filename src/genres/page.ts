@@ -168,6 +168,8 @@ export interface GenrePageInput {
     align?: { x: 'start' | 'center' | 'end'; y: 'start' | 'center' | 'end' };
     /** 放在标题同一段里的小标签 HTML */
     prefix?: string;
+    /** 跟在标题后面同一段里的一行 HTML：价签、署名 */
+    suffix?: string;
 }
 
 /**
@@ -216,7 +218,7 @@ ${under.css}
 ${over.css}`,
         body: `${under.html}
         <section class="text-box" aria-label="Headline">
-            ${headlineLayers(input.text, headline, input.type, input.prefix)}${input.measure ? probeMarkup(plain, headline) : ''}
+            ${headlineLayers(input.text, headline, input.type, input.prefix, input.suffix)}${input.measure ? probeMarkup(plain, headline) : ''}
         </section>
         ${over.html}`,
     });
@@ -249,6 +251,41 @@ export function eyebrow(
             color: ${colors.ink};
         }
         .copy-layer .eyebrow {
+            background: transparent;
+            color: transparent;
+            -webkit-text-stroke: 0;
+        }`,
+    };
+}
+
+/**
+ * 跟在标题后面同一段里的一行：价签（实色块）或署名（没有底色的小字）。字号按标题的比例走，
+ * 跟着标题一起量，不会被挤出安全区。
+ */
+export function tailLine(
+    text: string | undefined,
+    look: { ink: string; background?: string; sizeEm: number },
+): { suffix: string; css: string } {
+    if (text === undefined) {
+        return { suffix: '', css: '' };
+    }
+    const block = look.background === undefined ? '' : `padding: 0.12em 0.38em 0.16em;`;
+    return {
+        suffix: `<span class="tail">${escapeHtml(text)}</span>`,
+        css: `
+        .tail {
+            display: table;
+            margin-top: 0.34em;
+            ${block}
+            font-size: ${look.sizeEm}em;
+            line-height: 1.1;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+            -webkit-text-stroke: 0;
+            background: ${look.background ?? 'transparent'};
+            color: ${look.ink};
+        }
+        .copy-layer .tail {
             background: transparent;
             color: transparent;
             -webkit-text-stroke: 0;

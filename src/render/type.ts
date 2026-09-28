@@ -158,15 +158,17 @@ const LAYERS: Readonly<Record<TypeStyle, readonly string[]>> = {
 
 /**
  * 叠好的标题：描边层在下（只给眼睛看，读屏跳过），填色层 .copy 在最上。
- * prefix 是放在标题同一段里的小标签（痛点标签），跟标题一起量字号，不会被挤出安全区。
+ * prefix 是放在标题同一段里的小标签（痛点标签），suffix 是跟在后面的一行（价签、署名），
+ * 都跟标题一起量字号，不会被挤出安全区。
  */
 export function headlineLayers(
     text: string,
     headline: Headline,
     spec: TypeSpec,
     prefix = '',
+    suffix = '',
 ): string {
-    const markup = prefix + emphasisMarkup(text, headline);
+    const markup = prefix + emphasisMarkup(text, headline) + suffix;
     const under = LAYERS[spec.style]
         .map((layer) => `<p class="copy-layer ${layer}" aria-hidden="true">${markup}</p>`)
         .join('');

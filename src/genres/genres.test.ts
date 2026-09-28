@@ -137,6 +137,40 @@ function templateFor(name: GenreName, paths: readonly string[], style?: StyleNam
                 fonts: FONTS,
                 photos: photos.slice(0, 3),
             });
+        case 'product':
+            return genreTemplate(name, {
+                ...styled,
+                text: '降噪*天花板*',
+                fonts: FONTS,
+                photos: [],
+                subject: SUBJECT,
+                figure: '¥299',
+                tag: '实测',
+            });
+        case 'tier':
+            return genreTemplate(name, {
+                ...styled,
+                text: '我排了所有*拉面*',
+                fonts: FONTS,
+                photos: photos.slice(0, 3),
+            });
+        case 'quote':
+            return genreTemplate(name, {
+                ...styled,
+                text: '别再*乱剪*了',
+                fonts: FONTS,
+                photos: [],
+                subject: SUBJECT,
+                tag: '李导演',
+            });
+        case 'proof':
+            return genreTemplate(name, {
+                ...styled,
+                text: '他*承认*了',
+                fonts: FONTS,
+                photos: photos.slice(0, 1),
+                tag: '实锤',
+            });
         default:
             return genreTemplate(name, {
                 ...styled,
@@ -174,7 +208,9 @@ describe('cover type registry', () => {
         ).toThrow('--template big-type takes no photo.');
         expect(() =>
             checkGenreInputs('mood', { photos: 1, subject: false, options: { tag: 'x' } }),
-        ).toThrow('--tag works with --template big-type, number, face-text.');
+        ).toThrow(
+            '--tag works with --template big-type, number, face-text, product, quote, proof.',
+        );
         // 浅底方案的深色字只能压纯色，压照片的类型直接拒绝。
         expect(() =>
             checkGenreInputs('scene-title', {
@@ -534,7 +570,7 @@ describe('cover type rendering', () => {
             }
         }
         expect(failures).toEqual([]);
-    }, 600_000);
+    }, 900_000);
 
     // 量字号的页面和截图的页面是两份 HTML，任何一处排法不一致（标签、倾斜、照片层），
     // 截图里的标题就会跑出标题区。这里拿真 Chromium 渲出成品页面，量标题的实际外框。
@@ -600,7 +636,7 @@ describe('cover type rendering', () => {
         } finally {
             await browser.close();
         }
-    }, 240_000);
+    }, 900_000);
 
     // 标签字号是按字宽估出来的。估算对不对，只有真渲染出来量外框才知道：韩文、emoji、最宽的
     // 西文字母、汉字都要落在自己那半边看得见的地方，两个标签不互压，也不压平台界面。

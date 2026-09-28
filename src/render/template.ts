@@ -1,4 +1,5 @@
 // 封面页面的公共部分：页面骨架、标题的排版规则、人物层。各封面类型（src/genres/）在这上面搭。
+import type { Rect } from '../platforms/index.ts';
 import type { SubjectLayer } from '../subject/index.ts';
 import {
     type CoverLayout,
@@ -9,9 +10,10 @@ import {
 } from './layout.ts';
 
 /** 人物描边的粗细：clean 是干净分离，sticker 是贴纸感。按画布短边的比例 */
-export type SubjectOutline = 'clean' | 'sticker';
+/** clean 细白边、sticker 粗白边（贴纸感），none 不描边（产品这类东西，白边会显得像贴纸） */
+export type SubjectOutline = 'clean' | 'sticker' | 'none';
 
-const OUTLINE_SHARE: Record<SubjectOutline, number> = { clean: 0.014, sticker: 0.024 };
+const OUTLINE_SHARE: Record<SubjectOutline, number> = { clean: 0.014, sticker: 0.024, none: 0 };
 
 /**
  * 人物描边滤镜：把人物的透明度模糊后陡峭截断，得到一圈圆角外扩，填白就是白描边。
@@ -44,7 +46,13 @@ function outlineFilter(width: number, darkEdge: boolean): string {
 export function subjectMarkup(
     layout: CoverLayout,
     subject: SubjectLayer | undefined,
-    options: { outline?: SubjectOutline; lightBackground?: boolean; faceShare?: number } = {},
+    options: {
+        outline?: SubjectOutline;
+        lightBackground?: boolean;
+        faceShare?: number;
+        /** 调用方自己算好的位置（产品要整件放在看得清的地方，不按人物的站法） */
+        rect?: Rect;
+    } = {},
 ): {
     css: string;
     html: string;
@@ -52,10 +60,12 @@ export function subjectMarkup(
     if (subject === undefined) {
         return { css: '', html: '' };
     }
-    const rect = placeSubject(layout, subject, options.faceShare);
+    const rect = options.rect ?? placeSubject(layout, subject, options.faceShare);
     const short = Math.min(layout.width, layout.height);
-    const width = Math.max(3, Math.round(short * OUTLINE_SHARE[options.outline ?? 'clean']));
+    const outline = options.outline ?? 'clean';
+    const width = Math.max(3, Math.round(short * OUTLINE_SHARE[outline]));
     const shadow = Math.round(short * 0.02);
+    const drop = `drop-shadow(0 ${Math.round(shadow * 0.3)}px ${shadow}px rgba(0, 0, 0, 0.4))`;
     return {
         css: `
         .subject {
@@ -65,9 +75,9 @@ export function subjectMarkup(
             width: ${rect.width}px;
             height: ${rect.height}px;
             z-index: 2;
-            filter: url(#subject-outline) drop-shadow(0 ${Math.round(shadow * 0.3)}px ${shadow}px rgba(0, 0, 0, 0.4));
+            filter: ${outline === 'none' ? drop : `url(#subject-outline) ${drop}`};
         }`,
-        html: `${outlineFilter(width, options.lightBackground === true)}<img class="subject" src="${subject.dataUri}" alt="" aria-hidden="true">`,
+        html: `${outline === 'none' ? '' : outlineFilter(width, options.lightBackground === true)}<img class="subject" src="${subject.dataUri}" alt="" aria-hidden="true">`,
     };
 }
 

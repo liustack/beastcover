@@ -549,7 +549,7 @@ describe('BeastCover CLI', () => {
             ],
             [
                 ['--template', 'callout', '--photo', 'x.jpg', '--subject', 'me.png'],
-                'Error: --subject works with --template face-text or face-stakes. callout has no person in it.\n',
+                'Error: --subject works with --template face-text, face-stakes, product, quote. callout has no person or product in it.\n',
             ],
         ] as const) {
             const stderr = captureOutput();
@@ -1388,15 +1388,15 @@ describe('BeastCover CLI', () => {
         for (const [args, message] of [
             [
                 ['--template', 'banner'],
-                'Unknown template "banner". Use big-type, number, face-text, face-stakes, versus, before-after, scene-title, callout, collage, mood.',
+                'Unknown template "banner". Use big-type, number, face-text, face-stakes, versus, before-after, scene-title, callout, collage, mood, product, tier, quote, proof.',
             ],
             [
                 ['--tag', '新手', '--photo', 'a.png'],
-                '--tag works with --template big-type, number, face-text.',
+                '--tag works with --template big-type, number, face-text, product, quote, proof.',
             ],
             [
                 ['--template', 'big-type', '--number', '3'],
-                '--number works with --template number, face-stakes.',
+                '--number works with --template number, face-stakes, product.',
             ],
             [
                 ['--template', 'number'],
@@ -1416,7 +1416,7 @@ describe('BeastCover CLI', () => {
             ],
             [
                 ['--template', 'number', '--number', '3', '--subject', 'me.png'],
-                '--subject works with --template face-text or face-stakes. number has no person in it.',
+                '--subject works with --template face-text, face-stakes, product, quote. number has no person or product in it.',
             ],
             [
                 ['--template', 'face-text'],
@@ -1488,7 +1488,7 @@ describe('BeastCover CLI', () => {
             ],
             [
                 ['--look', 'mono'],
-                '--look works with --template face-stakes, versus, before-after, scene-title, callout, collage, mood.',
+                '--look works with --template face-stakes, versus, before-after, scene-title, callout, collage, mood, tier.',
             ],
         ] as const) {
             const stderr = captureOutput();

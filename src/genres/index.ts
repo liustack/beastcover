@@ -6,13 +6,16 @@ import type { PhotoFit, PhotoLook } from '../render/photo-cover.ts';
 import type { SubjectLayer } from '../subject/index.ts';
 import { bigTypeTemplate } from './big-type.ts';
 import { COLLAGE_MAX, COLLAGE_MIN, collageTemplate } from './collage.ts';
-import { faceStakesTemplate, faceTextTemplate } from './face.ts';
+import { faceStakesTemplate, faceTextTemplate, quoteTemplate } from './face.ts';
 import { numberGenreTemplate } from './number.ts';
 import type { FontKit, GenrePhoto } from './page.ts';
 import { calloutTemplate, moodTemplate, sceneTitleTemplate } from './photo.ts';
+import { productTemplate } from './product.ts';
+import { proofTemplate } from './proof.ts';
 import { isLightScheme, type SchemeName } from './schemes.ts';
 import { beforeAfterTemplate, versusTemplate } from './split.ts';
 import type { StyleName } from './styles.ts';
+import { TIER_MAX, TIER_MIN, tierTemplate } from './tier.ts';
 
 export const GENRE_NAMES = [
     'big-type',
@@ -25,6 +28,10 @@ export const GENRE_NAMES = [
     'callout',
     'collage',
     'mood',
+    'product',
+    'tier',
+    'quote',
+    'proof',
 ] as const;
 
 export type GenreName = (typeof GENRE_NAMES)[number];
@@ -144,6 +151,38 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
         flatGround: false,
         summary: 'one strong photo with a small, quiet line',
     },
+    product: {
+        photos: [0, 0],
+        scenes: 0,
+        subject: true,
+        options: ['tag', 'number'],
+        flatGround: true,
+        summary: 'one cut-out product filling its side, the price under the headline (--number)',
+    },
+    tier: {
+        photos: [TIER_MIN, TIER_MAX],
+        scenes: 0,
+        subject: false,
+        options: ['look'],
+        flatGround: true,
+        summary: 'a ranking board, S A B C rows with one photo each, the first photo in S',
+    },
+    quote: {
+        photos: [0, 0],
+        scenes: 0,
+        subject: true,
+        options: ['tag'],
+        flatGround: true,
+        summary: 'a person, a big quotation mark, one line they said, and who said it (--tag)',
+    },
+    proof: {
+        photos: [1, 1],
+        scenes: 0,
+        subject: false,
+        options: ['tag'],
+        flatGround: true,
+        summary: 'a screenshot shown whole on a tilted card beside big words',
+    },
 };
 
 /** 没给 --template 时按素材选：有人有场景是赌注，只有人是人物大字，两张对比，三四张拼图，一张题字 */
@@ -206,8 +245,9 @@ export function checkGenreInputs(
         throw new Error(`--template ${name} needs --subject <path>, a photo of the person.`);
     }
     if (!spec.subject && inputs.subject) {
+        const owners = GENRE_NAMES.filter((genre) => GENRES[genre].subject);
         throw new Error(
-            `--subject works with --template face-text or face-stakes. ${name} has no person in it.`,
+            `--subject works with --template ${owners.join(', ')}. ${name} has no person or product in it.`,
         );
     }
     for (const [option, value] of Object.entries(inputs.options) as [GenreOption, unknown][]) {
@@ -332,5 +372,22 @@ export function genreTemplate(name: GenreName, input: GenreInput): CoverTemplate
                 ...fit,
                 photo: first(input.photos, '--photo'),
             });
+        case 'product':
+            return productTemplate({
+                ...common,
+                ...tag,
+                subject: personOf(input),
+                ...(input.figure === undefined ? {} : { price: input.figure }),
+            });
+        case 'tier':
+            return tierTemplate({ ...common, ...look, photos: input.photos });
+        case 'quote':
+            return quoteTemplate({
+                ...common,
+                subject: personOf(input),
+                ...(input.tag === undefined ? {} : { speaker: input.tag }),
+            });
+        case 'proof':
+            return proofTemplate({ ...common, ...tag, photo: first(input.photos, '--photo') });
     }
 }

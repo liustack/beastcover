@@ -33,10 +33,12 @@ import {
     genrePage,
     joinLayers,
     localScrim,
+    NO_LAYERS,
     photoForLayout,
     photoLayers,
     photoSubject,
     rectCss,
+    tailLine,
 } from './page.ts';
 import { isLightScheme, SCHEMES, type SchemeName, schemeGradient } from './schemes.ts';
 import { type StyleName, styledType } from './styles.ts';
@@ -194,6 +196,90 @@ export function faceTextTemplate(request: FaceTextRequest): CoverTemplate {
                 ),
             ),
             subjects: faceSubject(layout, request.subject, FACE_TEXT_SHARE),
+        }),
+    };
+}
+
+export interface QuoteRequest {
+    /** 原话 */
+    text: string;
+    fonts: FontKit;
+    subject: SubjectLayer;
+    /** 谁说的，跟在原话后面 */
+    speaker?: string;
+    scheme?: SchemeName;
+    style?: StyleName;
+}
+
+// 金句的人比人物大字小一点，原话要占更多地方。
+const QUOTE_SHARE = 0.36;
+
+/**
+ * 金句：一张脸、一个大引号、一句原话、一个署名。访谈切片和观点类用它，原话要具体、
+ * 有得争（YouTube 播客封面的经验：能被反驳的一句话比描述主题的一句话点得多）。
+ */
+export function quoteTemplate(request: QuoteRequest): CoverTemplate {
+    const schemeName = request.scheme ?? 'teal';
+    const scheme = SCHEMES[schemeName];
+    const light = isLightScheme(schemeName);
+    const bold: TypeSpec = light
+        ? { style: 'ink', font: request.fonts.choose('heavy'), highlight: 'marker' }
+        : { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' };
+    const { type, colors } = styledType(request.style ?? 'bold', {
+        fonts: request.fonts,
+        ground: { light, picture: false },
+        colors: scheme.type,
+        bold,
+    });
+    // 大引号是标题块开头的装饰（伪元素）：跟着原话一起量字号、一起留在标题区里，但不算一行字，
+    // 不占三行的名额。描边层也有一个，引号跟字一样带描边。量字号的探针不加。
+    const mark = `
+        .copy:not(.probe)::before,
+        .copy-layer::before {
+            content: '“';
+            display: block;
+            height: 0.62em;
+            font-size: 1.6em;
+            line-height: 1;
+        }
+        .copy:not(.probe)::before {
+            color: ${colors.accent};
+        }`;
+    const speaker = tailLine(request.speaker === undefined ? undefined : `— ${request.speaker}`, {
+        ink: colors.fill,
+        sizeEm: 0.36,
+    });
+    const page = (layout: CoverLayout, headline: Headline, subject: SubjectLayer | undefined) => {
+        const person =
+            subject === undefined
+                ? NO_LAYERS
+                : subjectMarkup(layout, subject, { outline: 'clean', faceShare: QUOTE_SHARE });
+        const angle = layout.subjectArea && layout.subjectArea.y > layout.textArea.y ? 180 : 90;
+        return genrePage({
+            layout,
+            headline,
+            text: request.text,
+            type,
+            colors,
+            background: light ? scheme.base : schemeGradient(scheme, angle),
+            measure: subject === undefined,
+            suffix: speaker.suffix,
+            over: joinLayers({ css: mark + speaker.css, html: '' }, person),
+        });
+    };
+    return {
+        layoutFor: faceLayout,
+        measureHtml: (layout, headline) => page(layout, headline, undefined),
+        renderHtml: async (layout, headline) => ({
+            html: page(
+                layout,
+                headline,
+                await litSubject(
+                    request.subject,
+                    (lumaOf(scheme.base) + lumaOf(scheme.baseDeep)) / 2,
+                ),
+            ),
+            subjects: faceSubject(layout, request.subject, QUOTE_SHARE),
         }),
     };
 }
