@@ -145,6 +145,7 @@ function photoTemplate(request: PhotoGenreRequest, mode: PhotoMode): CoverTempla
                 localScrim(
                     layout,
                     textOnTop(layout) ? 'top' : 'bottom',
+                    type,
                     kind === 'mood' ? 0.38 : 0.62,
                 ),
             );

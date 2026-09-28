@@ -359,6 +359,10 @@ export function photoLayers(
     };
 }
 
+// 描边的字（outline、double）自己带着字边的对比，渐变只需压住字下面的细节，
+// 取 research.md 背景压暗 15-35% 的上限。软投影的字靠渐变托住，用类型给的强度。
+const OUTLINED_SCRIM = 0.35;
+
 /**
  * 局部压暗：只压字所在的那一侧，从字外一截开始由透明渐变到深色。整张压暗的封面在信息流里
  * 一贯吃亏（1of10 30 万条），字的可读性靠这块渐变加字自己的描边。
@@ -366,8 +370,13 @@ export function photoLayers(
 export function localScrim(
     layout: CoverLayout,
     side: 'bottom' | 'top' | 'left' | 'right',
-    strength = 0.58,
+    type: TypeSpec,
+    softStrength = 0.58,
 ): Layers {
+    const strength =
+        type.style === 'outline' || type.style === 'double'
+            ? Math.min(softStrength, OUTLINED_SCRIM)
+            : softStrength;
     const area = layout.textArea;
     const reach = 0.7;
     let rect: Rect;

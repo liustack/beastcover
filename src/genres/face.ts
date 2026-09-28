@@ -457,7 +457,7 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
                     request.look ?? 'natural',
                     { deep: scheme.baseDeep, accent: scheme.type.accent },
                 ),
-                localScrim(layout, portrait ? 'top' : 'left'),
+                localScrim(layout, portrait ? 'top' : 'left', type),
             );
             // 身后是人站的那块场景（已经虚化），量它的平均亮度。
             const rect = placeSubject(layout, request.subject, FACE_STAKES_SHARE);

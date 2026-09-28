@@ -31,7 +31,7 @@ import {
     genreTemplate,
     parseGenre,
 } from './index.ts';
-import { fontKit, type GenrePhoto } from './page.ts';
+import { fontKit, type GenrePhoto, localScrim } from './page.ts';
 import { isLightScheme, SCHEME_NAMES, SCHEMES } from './schemes.ts';
 import { splitLabelRects } from './split.ts';
 import { parseStyle, STYLE_NAMES, type StyleName, styledType } from './styles.ts';
@@ -387,6 +387,23 @@ describe('schemes', () => {
                 );
             }
         }
+    });
+});
+
+describe('local scrim', () => {
+    const layout = familyLayout('landscape');
+    const peak = (css: string) => Number(/rgba\(0, 0, 0, ([\d.]+)\) 100%/.exec(css)?.[1]);
+
+    it('only quiets the detail under outlined letters', () => {
+        for (const style of ['outline', 'double'] as const) {
+            const type = { style, font: FONTS.choose('heavy') };
+            expect(peak(localScrim(layout, 'top', type, 0.62).css), style).toBe(0.35);
+        }
+    });
+
+    it('keeps the full strength under soft letters, which lean on it', () => {
+        const type = { style: 'soft' as const, font: FONTS.choose('serif') };
+        expect(peak(localScrim(layout, 'top', type, 0.62).css)).toBe(0.62);
     });
 });
 
