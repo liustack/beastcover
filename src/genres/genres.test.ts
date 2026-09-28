@@ -669,7 +669,7 @@ describe('cover type rendering', () => {
                 qc: {},
             });
             for (const finding of composed?.findings ?? []) {
-                if (/is dark|nearly grey/.test(finding.message)) {
+                if (/is dark|almost no colour/.test(finding.message)) {
                     warnings.push(`${cover.name}: ${finding.message}`);
                 }
             }

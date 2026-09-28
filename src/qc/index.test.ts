@@ -376,6 +376,35 @@ describe('colourfulness', () => {
         expect(checkColourfulness('youtube', await colourfulness(grey))).toHaveLength(1);
         expect(checkColourfulness('youtube', await colourfulness(orange))).toEqual([]);
     });
+
+    // 白底上一块亮色：全图统计量得很低，人看着却是有颜色的（Reinecke 2013 的白底亮按钮）。
+    const whiteWith = (share: number) => {
+        const side = Math.round(Math.sqrt(320 * 180 * share));
+        return sharp({ create: { width: 320, height: 180, channels: 3, background: '#ffffff' } })
+            .composite([
+                {
+                    input: {
+                        create: { width: side, height: side, channels: 3, background: '#ffd60a' },
+                    },
+                    left: 40,
+                    top: 40,
+                },
+            ])
+            .png()
+            .toBuffer();
+    };
+
+    it('passes a white cover that carries one vivid accent', async () => {
+        const measured = await colourfulness(await whiteWith(0.01));
+        expect(measured.score).toBeLessThan(25);
+        expect(checkColourfulness('youtube', measured)).toEqual([]);
+    });
+
+    it('still warns when the vivid colour is only a speck', async () => {
+        expect(
+            checkColourfulness('youtube', await colourfulness(await whiteWith(0.002))),
+        ).toHaveLength(1);
+    });
 });
 
 describe('brightness', () => {

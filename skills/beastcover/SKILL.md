@@ -180,7 +180,7 @@ QC is part of the job, not an option. After rendering, the CLI checks each cover
 
 - `QC FAIL <platforms>: ...` in red: the headline covers a face, a person, text already in the picture, or the main subject. The files are written anyway. **Do not hand a failing cover over.** Fix it: pick another photo, another type, a shorter line, or drop the platform, then render again.
 - `QC FAIL ... blends into what is behind it`: the headline does not stand out from the picture (under 3:1 contrast). Pick a darker or lighter part of the picture, another type, or another photo.
-- `QC WARN`: the headline sits on a busy area or is weak against the picture, the cover is dark, it is nearly grey, or the face is too small to read in the feed. Fix it when you can (for a small face, ask the user for a head-and-shoulders photo), or tell the user why it stays.
+- `QC WARN`: the headline sits on a busy area or is weak against the picture, the cover is dark, it has almost no colour, or the face is too small to read in the feed. Fix it when you can (for a small face, ask the user for a head-and-shoulders photo), or tell the user why it stays.
 - `Layout: the headline moved ...`: the first placement covered the picture, so the CLI used the other spot. Look at the result.
 - `Font: ...`: no heavy Chinese font was found and the headline uses synthetic weight. Tell the user which font to install for the full look.
 - `Preview: <path>`: every cover at its feed size on one sheet. **Open it and look.** Can you tell at a glance what the cover shows and why to click? Is anything cut off, covered, or unreadable? The machine cannot see everything: a person Vision missed, a subject that reads wrong at feed size, an idea that does not land.

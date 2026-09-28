@@ -632,9 +632,23 @@ export async function checkContrast(input: {
 // 彩度（Hasler-Süsstrunk）：爆款缩略图大多在 50 到 80，只有字的旧模板量出来 9 到 15。
 // 低于这个值画面发灰，提醒一句。
 const DULL_COLOURFULNESS = 25;
+// 这个公式是在自然照片上拟合的，全图统计把白底上的一小块亮色摊薄了。网页截图上它只有
+// r = 0.71，白底加几个亮按钮的页面被明显低估（Reinecke 等 2013）。人判断有没有颜色更看
+// 艳度而不是颜色多少（Amati 等 2014），所以一块够艳、够大的强调色也算有颜色。
+// 色度按同一对对立通道算：荧光黄、红、橙、荧光绿在 200 以上，肤色和青底在 100 到 130。
+// 0.5% 在小红书双列的缩略图上约 15 点见方，一眼看得到，零星的几个艳点凑不够。
+const VIVID_CHROMA = 160;
+const ACCENT_SHARE = 0.005;
 
-/** 成品的彩度，Hasler-Süsstrunk 公式，缩到 640 宽再算 */
-export async function colourfulness(png: Buffer): Promise<number> {
+export interface Colourfulness {
+    /** Hasler-Süsstrunk 的 M3 */
+    score: number;
+    /** 色度到 VIVID_CHROMA 的像素占全图的比例 */
+    vividShare: number;
+}
+
+/** 成品的彩度，Hasler-Süsstrunk 公式，加上够艳的像素占多少，缩到 640 宽再算 */
+export async function colourfulness(png: Buffer): Promise<Colourfulness> {
     const { data, info } = await sharp(png)
         .removeAlpha()
         .resize({ width: 640 })
@@ -645,6 +659,7 @@ export async function colourfulness(png: Buffer): Promise<number> {
     let sumYb = 0;
     let sumRg2 = 0;
     let sumYb2 = 0;
+    let vivid = 0;
     for (let i = 0; i < data.length; i += info.channels) {
         const r = data[i] ?? 0;
         const g = data[i + 1] ?? 0;
@@ -655,21 +670,27 @@ export async function colourfulness(png: Buffer): Promise<number> {
         sumYb += yb;
         sumRg2 += rg * rg;
         sumYb2 += yb * yb;
+        if (Math.hypot(rg, yb) >= VIVID_CHROMA) {
+            vivid += 1;
+        }
         n += 1;
     }
     const meanRg = sumRg / n;
     const meanYb = sumYb / n;
     const spread = Math.sqrt(sumRg2 / n - meanRg * meanRg + (sumYb2 / n - meanYb * meanYb));
-    return spread + 0.3 * Math.sqrt(meanRg * meanRg + meanYb * meanYb);
+    return {
+        score: spread + 0.3 * Math.sqrt(meanRg * meanRg + meanYb * meanYb),
+        vividShare: vivid / n,
+    };
 }
 
-export function checkColourfulness(target: QcTarget, value: number): QcFinding[] {
-    return value < DULL_COLOURFULNESS
+export function checkColourfulness(target: QcTarget, measured: Colourfulness): QcFinding[] {
+    return measured.score < DULL_COLOURFULNESS && measured.vividShare < ACCENT_SHARE
         ? [
               {
                   level: 'warn',
                   platform: target,
-                  message: `the cover is nearly grey (colourfulness ${Math.round(value)}, breakout thumbnails sit around 50 to 80). Add one strong colour: another --scheme, --look punch, or a more colourful photo.`,
+                  message: `the cover has almost no colour (colourfulness ${Math.round(measured.score)}, breakout thumbnails sit around 50 to 80, and no vivid accent). Add one strong colour: another --scheme, a coloured keyword or tag, --look punch, or a more colourful photo.`,
               },
           ]
         : [];
