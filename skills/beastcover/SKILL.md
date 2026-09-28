@@ -113,7 +113,7 @@ When the output has a `Headline:` line, the text is long for a YouTube or Bilibi
 | `cream` | Cream paper, near-black type, yellow marker | `big-type` default. Knowledge, calm explainers |
 | `lemon` | Bright yellow, black type, red block | Xiaohongshu lifestyle, `collage` default |
 | `orange` | Warm orange, white type, yellow figure | `number` default. Food, fitness, vlogs |
-| `teal` | Teal, white type, yellow accent | `face-text` default. Reviews, travel, tutorials: cool ground makes warm skin stand out |
+| `teal` | Teal, white type, yellow accent | `face-text` and `tier` default. Reviews, travel, tutorials: cool ground makes warm skin and the warm tier colours stand out |
 | `navy` | Deep navy, white type, yellow accent | Tech, finance, education. Dark: QC warns it reads dark in feeds |
 | `night` | Near black, white type, lime accent | `versus` and `before-after` bands. Commentary, gaming |
 
@@ -130,9 +130,9 @@ The type decides the idea and the layout. `--style` decides how the words look, 
 | `round` | Rounded sticker lettering: dark type in a white outline, the keyword on a marker | Xiaohongshu lifestyle, food, cute and casual |
 | `editorial` | Magazine serif, no outline, a soft shadow on pictures | `mood` default. Lifestyle, travel, WeChat, design and luxury |
 | `brush` | A calligraphy title with a soft shadow | Bilibili documentary, travel, guofeng, food culture |
-| `memo` | A phone notes screen: black type on white, a yellow marker (`big-type` only, own colours, no `--scheme`) | Xiaohongshu 干货, checklists, tips |
+| `memo` | A phone notes screen: black type on pale blue paper, a yellow marker, the tag as a yellow sticky note (`big-type` only, own colours, no `--scheme`) | Xiaohongshu 干货, checklists, tips |
 
-`round` and `brush` need a rounded or brush Chinese font, which most Macs do not have until one is installed. Without it the words fall back to the heavy font and a `Font:` line names the free font to install (ZCOOL KuaiLe, Ma Shan Zheng). Tell the user. Windows ships YouYuan and KaiTi, so they work there as is. A `memo` cover is white on purpose, so its `nearly grey` warning is expected.
+`round` and `brush` need a rounded or brush Chinese font, which most Macs do not have until one is installed. Without it the words fall back to the heavy font and a `Font:` line names the free font to install (ZCOOL KuaiLe, Ma Shan Zheng). Tell the user. Windows ships YouYuan and KaiTi, so they work there as is.
 
 Thin handwriting is not offered: it disappears at feed size.
 

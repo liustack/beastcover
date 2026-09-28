@@ -633,6 +633,50 @@ describe('cover type rendering', () => {
         expect(failures).toEqual([]);
     }, 900_000);
 
+    // 纯色底的类型自己定底色，底色让封面发暗发灰就是类型的错，换照片也救不了。
+    it('keeps the flat grounds of tier and memo bright and colourful', async () => {
+        const covers = [
+            { name: 'tier', template: templateFor('tier', paths), platform: 'youtube' },
+            {
+                name: 'memo with a tag',
+                template: templateFor('big-type', paths, 'memo'),
+                platform: 'xiaohongshu',
+            },
+            {
+                name: 'memo without a tag',
+                template: genreTemplate('big-type', {
+                    text: '*租房*避坑清单',
+                    fonts: FONTS,
+                    photos: [],
+                    style: 'memo',
+                }),
+                platform: 'xiaohongshu',
+            },
+        ] as const;
+        const warnings: string[] = [];
+        for (const cover of covers) {
+            const [composed] = await composeCovers({
+                renderer,
+                template: cover.template,
+                text: 'unused',
+                targets: [
+                    {
+                        platform: cover.platform,
+                        outputPath: join(directory, `ground-${cover.name}.png`),
+                    },
+                ],
+                scale: 1,
+                qc: {},
+            });
+            for (const finding of composed?.findings ?? []) {
+                if (/is dark|nearly grey/.test(finding.message)) {
+                    warnings.push(`${cover.name}: ${finding.message}`);
+                }
+            }
+        }
+        expect(warnings).toEqual([]);
+    }, 120_000);
+
     // 量字号的页面和截图的页面是两份 HTML，任何一处排法不一致（标签、倾斜、照片层），
     // 截图里的标题就会跑出标题区。这里拿真 Chromium 渲出成品页面，量标题的实际外框。
     it('keeps the rendered headline inside its text area for every type and family', async () => {

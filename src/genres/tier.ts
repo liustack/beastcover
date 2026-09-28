@@ -180,8 +180,9 @@ export function tierTemplate(request: TierRequest): CoverTemplate {
     if (count < TIER_MIN || count > TIER_MAX) {
         throw new Error(`A tier list takes ${TIER_MIN} to ${TIER_MAX} photos.`);
     }
-    // 近黑底：排名视频的熟悉样子，等级的彩色在暗底上最跳。
-    const schemeName = request.scheme ?? 'night';
+    // 青底：等级色从红到黄全是暖色，冷底上最跳，底也够亮。近黑底是排名网站的样子，
+    // 缩进信息流里和 App 的暗色界面融成一片（research.md 第 4.3 节「深灰底白字」）。
+    const schemeName = request.scheme ?? 'teal';
     const scheme = SCHEMES[schemeName];
     const light = isLightScheme(schemeName);
     const heavy = request.fonts.choose('heavy');
