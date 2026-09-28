@@ -1,7 +1,7 @@
 // 生成 README 横幅（中英各一张）和 GitHub 社交预览图，全部用 examples/ 里真实出的封面拼。
 // 用法：pnpm brand （先 pnpm examples，横幅里的封面就是最新的）
 //
-// 横幅是一面封面墙：十种封面类型，每张标上类型和平台。社交预览是左边项目名和一句话、
+// 横幅是一面封面墙：十四种封面类型，每张标上类型和平台。社交预览是左边项目名和一句话、
 // 右边三张真实封面，一大两小对齐排。示例封面换了，重新跑一遍即可。
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -38,11 +38,16 @@ const TILES = {
         platform: ['Xiaohongshu', '小红书'],
     },
     'mood-xiaohongshu.jpg': { en: 'Mood', zh: '氛围单图', platform: ['Xiaohongshu', '小红书'] },
+    'product-youtube.png': { en: 'Product', zh: '产品主角', platform: ['YouTube', 'YouTube'] },
+    'tier-youtube.jpg': { en: 'Tier list', zh: '排行榜', platform: ['YouTube', 'YouTube'] },
+    'quote-youtube.png': { en: 'Quote', zh: '金句', platform: ['YouTube', 'YouTube'] },
+    'proof-bilibili.png': { en: 'Screenshot proof', zh: '截图证据', platform: ['Bilibili', 'B 站'] },
 };
 
 const ROWS = [
     ['face-text-youtube.png', 'versus-youtube.jpg', 'number-youtube.png'],
     ['callout-youtube.jpg', 'scene-title-youtube.jpg', 'face-stakes-scene-youtube.jpg'],
+    ['product-youtube.png', 'tier-youtube.jpg', 'quote-youtube.png', 'proof-bilibili.png'],
     [
         'big-type-xiaohongshu.png',
         'collage-xiaohongshu.jpg',
@@ -50,6 +55,16 @@ const ROWS = [
         'mood-xiaohongshu.jpg',
     ],
 ];
+
+// 一行里的封面比例不一（B 站比 YouTube 高一点），按宽高比分宽度，整行才等高。
+const ASPECT = Object.fromEntries(
+    await Promise.all(
+        ROWS.flat().map(async (name) => {
+            const { width, height } = await sharp(join(examples, name)).metadata();
+            return [name, width / height];
+        }),
+    ),
+);
 
 const FONT =
     '"Helvetica Neue", "PingFang SC", "Noto Sans CJK SC", "Hiragino Sans GB", Arial, sans-serif';
@@ -60,7 +75,7 @@ function bannerHtml(language) {
         (row) => `<section class="row">${row
             .map((name) => {
                 const tile = TILES[name];
-                return `<figure><img src="${dataUri(name)}" alt=""><figcaption><b>${tile[language]}</b><span>${tile.platform[index]}</span></figcaption></figure>`;
+                return `<figure style="flex-grow: ${ASPECT[name]}"><img src="${dataUri(name)}" alt=""><figcaption><b>${tile[language]}</b><span>${tile.platform[index]}</span></figcaption></figure>`;
             })
             .join('')}</section>`,
     ).join('');
@@ -120,7 +135,7 @@ function socialHtml() {
         }
     </style></head><body>
         <div class="copy">
-            <div class="eyebrow">10 cover types · every platform</div>
+            <div class="eyebrow">14 cover types · every platform</div>
             <h1>BeastCover</h1>
             <p>Covers that get the click,<br>checked before you ship.</p>
             <div class="command"><span>$</span>npx -y skills add liustack/beastcover -g</div>

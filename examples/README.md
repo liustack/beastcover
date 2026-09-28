@@ -105,6 +105,46 @@ beastcover gen "慢一点的早晨" --template mood --photo openverse:278488ee-c
 
 <img src="mood-xiaohongshu.jpg" width="203">
 
+## Product
+
+One cut-out product fitted whole on its side, a soft glow behind it, and the price under the headline. The headphones are a cc0 photo cut out on macOS.
+
+```bash
+beastcover gen "降噪*天花板*" --template product --subject headphones.png --number "¥299" --tag 实测 --preset youtube,xiaohongshu
+```
+
+<img src="product-youtube.png" width="480"> <img src="product-xiaohongshu.png" width="203">
+
+## Tier list
+
+S, A, B, C rows in the colours everyone knows, one photo each, the first photo in S. Put the pick people will argue about at the top.
+
+```bash
+beastcover gen "我排了所有*拉面*" --template tier --photo openverse:a01ecc5c-176b-4d1f-a445-655ff2184e3a --photo openverse:0f89f9cc-d7fd-4828-bcb4-a2b0b5e390be --photo openverse:1ba9b26d-990f-4c66-ba15-f2cc8cabb41b --photo openverse:3db8719f-ce9f-4ed3-bc27-0ee02624fe3e --preset youtube
+```
+
+<img src="tier-youtube.jpg" width="480">
+
+## Quote
+
+A person, a big quotation mark, one line they said, and who said it.
+
+```bash
+beastcover gen "剪辑最忌讳*拖*" --template quote --subject your-photo.jpg --tag 李导演 --preset youtube
+```
+
+<img src="quote-youtube.png" width="480">
+
+## Screenshot proof
+
+The screenshot is shown whole on a tilted card, never cropped, beside the words. The chat is a made-up example.
+
+```bash
+beastcover gen "他*承认*了" --template proof --photo chat.png --tag 实锤 --preset bilibili
+```
+
+<img src="proof-bilibili.png" width="480">
+
 ## Lettering styles
 
 The type decides the idea and the layout; `--style` decides how the words look. Variety-show 花字 on a Bilibili face cover, a magazine serif on a WeChat header, and a phone notes screen on Xiaohongshu:
@@ -119,4 +159,4 @@ beastcover gen "租房*避坑* 清单" --template big-type --style memo --tag �
 
 ## Credits
 
-Photos via [Openverse](https://openverse.org), all CC0: [lava and helicopter](https://www.flickr.com/photos/27784370@N05/16285896735) by U.S. Geological Survey, [sailboat](https://stocksnap.io/photo/sailing-boat-6HIAAM72PR) by JJ Skys the Limit, [airplane](https://stocksnap.io/photo/airplane-sky-YNUT4JAZ0V) by Matt Bango, [ramen](https://www.rawpixel.com/image/5925771/photo-image-public-domain-food-free) via rawpixel, [ramen with egg](https://stocksnap.io/photo/ramen-noodles-KKMQPWQK6H) by Foodie Girl, [tsukemen](https://commons.wikimedia.org/w/index.php?curid=39923890) by Douglas Perkins, [night market](https://www.flickr.com/photos/101561334@N08/9870511026) by Gary Lee Todd, [coffee](https://www.flickr.com/photos/132795455@N08/17625638243) via Image Catalog. The demo face is AI-generated. No real person appears in these covers. The volcano scene and the two desks were painted by codex for these examples.
+Photos via [Openverse](https://openverse.org), all CC0: [lava and helicopter](https://www.flickr.com/photos/27784370@N05/16285896735) by U.S. Geological Survey, [sailboat](https://stocksnap.io/photo/sailing-boat-6HIAAM72PR) by JJ Skys the Limit, [airplane](https://stocksnap.io/photo/airplane-sky-YNUT4JAZ0V) by Matt Bango, [ramen](https://www.rawpixel.com/image/5925771/photo-image-public-domain-food-free) via rawpixel, [ramen with egg](https://stocksnap.io/photo/ramen-noodles-KKMQPWQK6H) by Foodie Girl, [tsukemen](https://commons.wikimedia.org/w/index.php?curid=39923890) by Douglas Perkins, [night market](https://www.flickr.com/photos/101561334@N08/9870511026) by Gary Lee Todd, [coffee](https://www.flickr.com/photos/132795455@N08/17625638243) via Image Catalog, [headphones](https://stocksnap.io/photo/wireless-headphones-EXCBJA3FFQ) by Burst. The demo face is AI-generated. No real person appears in these covers. The volcano scene and the two desks were painted by codex for these examples.

@@ -43,6 +43,9 @@ const face = join(examplesDir, 'assets', 'face.jpg');
 // 前后对比要同一张桌子的前后两张，免费图库凑不出来。这一对是 codex 按两段 --scene 画的
 // （第二张照着第一张改），存成素材，改版式时重排不用重画：
 //   beastcover gen "桌面*改造*" --template before-after --scene "<乱桌面>" --scene "<同一张桌子收拾好>" --via codex
+// 产品主角的耳机是 Burst 在 StockSnap 的 cc0 照片（openverse:cc164a64-1297-4814-b148-7f6ad9e2dd94）在 macOS 上抠好的透明 PNG，截图证据的聊天截图是自己画的。
+const headphones = join(examplesDir, 'assets', 'headphones.png');
+const chat = join(examplesDir, 'assets', 'chat.png');
 const deskBefore = join(examplesDir, 'assets', 'desk-before.jpg');
 const deskAfter = join(examplesDir, 'assets', 'desk-after.jpg');
 
@@ -85,6 +88,10 @@ gen(['*出海*第一天', '--template', 'scene-title', '--photo', PHOTOS.sailboa
 gen(['这是什么？', '--template', 'callout', '--photo', PHOTOS.plane, '--preset', 'youtube', '--output', out('callout-youtube.png')]);
 gen(['一周吃了*7碗*面', '--template', 'collage', '--photo', PHOTOS.ramen, '--photo', PHOTOS.tsukemen, '--photo', PHOTOS.streetFood, '--photo', PHOTOS.ramenFancy, '--preset', 'xiaohongshu', '--output', out('collage-xiaohongshu.png')]);
 gen(['慢一点的早晨', '--template', 'mood', '--photo', PHOTOS.coffee, '--preset', 'xiaohongshu', '--output', out('mood-xiaohongshu.png')]);
+gen(['降噪*天花板*', '--template', 'product', '--subject', headphones, '--number', '¥299', '--tag', '实测', '--preset', 'youtube,xiaohongshu', '--output', out('product.png')]);
+gen(['我排了所有*拉面*', '--template', 'tier', '--photo', PHOTOS.ramenFancy, '--photo', PHOTOS.ramen, '--photo', PHOTOS.tsukemen, '--photo', PHOTOS.streetFood, '--preset', 'youtube', '--output', out('tier-youtube.png')]);
+gen(['剪辑最忌讳*拖*', '--template', 'quote', '--subject', face, '--tag', '李导演', '--preset', 'youtube', '--output', out('quote-youtube.png')], { optional: true });
+gen(['他*承认*了', '--template', 'proof', '--photo', chat, '--tag', '实锤', '--preset', 'bilibili', '--output', out('proof-bilibili.png')]);
 // 字的风格：同一套类型，字换个样子。圆体和书法要本机装了对应的中文字体，不在这里。
 gen(['我看*傻*了', '--subject', face, '--style', 'variety', '--preset', 'bilibili', '--output', out('style-variety-bilibili.png')], { optional: true });
 gen(['慢慢来，*比较快*', '--template', 'big-type', '--style', 'editorial', '--preset', 'wechat', '--output', out('style-editorial-wechat.png')]);
@@ -97,6 +104,7 @@ jpegs.push(
     'callout-youtube',
     'collage-xiaohongshu',
     'mood-xiaohongshu',
+    'tier-youtube',
 );
 
 for (const name of jpegs) {
