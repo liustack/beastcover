@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { cleanCutoutEdges } from './edges.ts';
 import { type VisionCutoutRuntime, visionCutout } from './vision.ts';
 
 export type SubjectMethod = 'transparent' | 'macos-vision';
@@ -38,7 +39,7 @@ export interface SubjectRuntime {
 }
 
 // 抠图的处理方式一变（比如开始按 EXIF 转正），这个数就加一，旧版本留下的缓存不再被复用。
-const CUTOUT_CACHE_VERSION = 2;
+const CUTOUT_CACHE_VERSION = 3;
 
 // 透明像素至少占这么多，才算已经抠好的图。
 const MIN_TRANSPARENT_SHARE = 0.02;
@@ -135,7 +136,8 @@ async function cutoutCached(
     const partial = `${cached}.${randomUUID()}.partial.png`;
     try {
         await runtime.cutout(imagePath, partial);
-        const bytes = readFileSync(partial);
+        const bytes = await cleanCutoutEdges(readFileSync(partial));
+        writeFileSync(partial, bytes);
         try {
             renameSync(partial, cached);
         } catch (error) {

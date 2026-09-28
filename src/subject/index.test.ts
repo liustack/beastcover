@@ -55,6 +55,57 @@ async function writeCutout(_input: string, output: string): Promise<void> {
     await writeImage(output, { r: 0, g: 0, b: 0, alpha: 0 });
 }
 
+/** 透明底上的红块，外面包一圈 3 像素半透明白边，像白底照片抠出来的样子 */
+async function writeHaloCutout(_input: string, output: string): Promise<void> {
+    await sharp({
+        create: {
+            width: 400,
+            height: 400,
+            channels: 4,
+            background: { r: 0, g: 0, b: 0, alpha: 0 },
+        },
+    })
+        .composite([
+            {
+                input: {
+                    create: {
+                        width: 206,
+                        height: 306,
+                        channels: 4,
+                        background: { r: 245, g: 245, b: 245, alpha: 0.6 },
+                    },
+                },
+                left: 97,
+                top: 57,
+            },
+            {
+                input: {
+                    create: {
+                        width: 200,
+                        height: 300,
+                        channels: 4,
+                        background: { r: 200, g: 40, b: 40, alpha: 1 },
+                    },
+                },
+                left: 100,
+                top: 60,
+            },
+        ])
+        .png()
+        .toFile(output);
+}
+
+/** 主体层左边缘中间那一圈边上的像素 */
+async function leftEdgePixel(dataUri: string): Promise<number[]> {
+    const png = Buffer.from(dataUri.replace('data:image/png;base64,', ''), 'base64');
+    const { data, info } = await sharp(png)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    const i = (Math.floor(info.height / 2) * info.width + 1) * 4;
+    return [...data.subarray(i, i + 4)];
+}
+
 describe('subject layer', () => {
     it('uses a transparent PNG as is and trims its empty border', async () => {
         const directory = tempDir();
@@ -199,6 +250,40 @@ describe('subject layer', () => {
 
         expect(results.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
         expect(readdirSync(cacheDir).filter((name) => name.includes('partial'))).toEqual([]);
+    });
+
+    it('cleans the old background colour off the edge of a cutout', async () => {
+        const directory = tempDir();
+        const photo = await writeImage(join(directory, 'photo.png'), {
+            r: 255,
+            g: 255,
+            b: 255,
+            alpha: 1,
+        });
+
+        const subject = await prepareSubject(photo, {
+            cacheDir: join(directory, 'cache'),
+            cutout: writeHaloCutout,
+        });
+
+        const [r, g, b, alpha] = await leftEdgePixel(subject.dataUri);
+        expect(alpha).toBeGreaterThan(0);
+        expect(r).toBeGreaterThan(180);
+        expect(g).toBeLessThan(70);
+        expect(b).toBeLessThan(70);
+    });
+
+    it('leaves the edge of a transparent PNG as the user made it', async () => {
+        const directory = tempDir();
+        const path = join(directory, 'cutout.png');
+        await writeHaloCutout('', path);
+
+        const subject = await prepareSubject(path, {
+            cacheDir: join(directory, 'cache'),
+            cutout: vi.fn(writeCutout),
+        });
+
+        expect((await leftEdgePixel(subject.dataUri)).slice(0, 3)).toEqual([245, 245, 245]);
     });
 
     it('leaves no cache file behind when the cutout fails', async () => {
