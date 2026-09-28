@@ -914,7 +914,8 @@ describe('cover type rendering', () => {
     }, 60_000);
 
     it('checks the scene subject of face-stakes, and finds none in a gradient scene', async () => {
-        // 竖版照片正好铺满母版，主体在 y 1450-1600，抖音底栏从 1540 起：主体被挡。
+        // 竖版照片正好铺满母版，主体贴着底边（y 1820-1920），放大 1.5 倍也只能挪到 0.93 一带，
+        // 抖音底栏从 1540 起：主体被挡。
         const tall = join(directory, 'tall.png');
         await sharp({ create: { width: 1080, height: 1920, channels: 3, background: '#557799' } })
             .png()
@@ -942,9 +943,9 @@ describe('cover type rendering', () => {
             });
         const hidden = await compose({
             x: 300 / 1080,
-            y: 1525 / 1920,
+            y: 1870 / 1920,
             width: 200 / 1080,
-            height: 150 / 1920,
+            height: 100 / 1920,
             source: 'saliency',
         });
         expect(hidden[0]?.findings.map((finding) => finding.message)).toContain(

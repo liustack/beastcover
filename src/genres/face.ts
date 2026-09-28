@@ -46,6 +46,8 @@ import { type StyleName, styledType } from './styles.ts';
 // 脸高占无遮挡区高度的比例。爆款要求脸高至少三分之一，四到五成更好（research.md 第 2.1 节）。
 const FACE_TEXT_SHARE = 0.42;
 const FACE_STAKES_SHARE = 0.38;
+// 赌注封面的场景是虚化的背景，照片挪不到位时可以放大这么多，把场景主体送到人的肩头一侧。
+export const SCENE_MAX_ZOOM = 1.5;
 
 // 脸要比身后至少亮两成，第一眼才落在脸上（research.md 第 2.4 节、第 7.2 节）。
 // 提亮最多三成五，再多皮肤就发白发假。
@@ -377,6 +379,13 @@ function stakeMarkup(
     };
 }
 
+/** 赌注封面的版式：有赌注牌时字上面让出牌的位置。构图提示和出图用同一个 */
+export function faceStakesLayoutFor(
+    stake: string | undefined,
+): (layout: CoverLayout) => CoverLayout {
+    return stake === undefined ? faceLayout : stakesLayout;
+}
+
 export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
     const scheme = SCHEMES[request.scheme ?? 'navy'];
     const stakeFont = request.fonts.choose('condensed');
@@ -387,7 +396,7 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
         bold: { style: 'outline', font: request.fonts.choose('heavy'), highlight: 'color' },
     });
     const stake = request.stake;
-    const layoutFor = stake === undefined ? faceLayout : stakesLayout;
+    const layoutFor = faceStakesLayoutFor(stake);
     const page = async (
         layout: CoverLayout,
         headline: Headline,
@@ -415,11 +424,8 @@ export function faceStakesTemplate(request: FaceStakesRequest): CoverTemplate {
             const scene = photoForLayout(request.photo, layout);
             const photo = await preparePhotoLayer(scene.path, pixels.width, pixels.height, {
                 ...(scene.focus === undefined ? {} : { focus: scene.focus }),
-                // 竖版字在上、人在下，场景的主体放到人的肩头一带，不压在字底下。
-                target:
-                    layout.subjectArea !== undefined && layout.subjectArea.y > layout.textArea.y
-                        ? { x: 0.5, y: 0.62 }
-                        : photoFocusTarget(layout, true),
+                target: photoFocusTarget(layout, true),
+                maxZoom: SCENE_MAX_ZOOM,
                 fit: request.fit ?? 'cover',
                 canvas: { width: layout.width, height: layout.height },
                 ...(visible === undefined ? {} : { visible }),

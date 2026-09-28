@@ -35,6 +35,7 @@ import {
     setConfigValue,
 } from './config.ts';
 import { type DoctorReport, lookupCommandOnPath, renderDoctorReport, runDoctor } from './doctor.ts';
+import { faceStakesLayoutFor, SCENE_MAX_ZOOM } from './genres/face.ts';
 import {
     checkGenreInputs,
     defaultGenre,
@@ -972,7 +973,14 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                                   fullBleed.photo,
                                   fullBleed.photo.focus,
                                   effective.render.presets,
-                                  genre === 'face-stakes',
+                                  ...(genre === 'face-stakes'
+                                      ? [
+                                            {
+                                                layoutFor: faceStakesLayoutFor(figure),
+                                                maxZoom: SCENE_MAX_ZOOM,
+                                            },
+                                        ]
+                                      : []),
                               )
                             : []),
                         ...(effective.render.canvas

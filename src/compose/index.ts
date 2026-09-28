@@ -716,18 +716,20 @@ export function focusCropWarnings(
     photo: { width: number; height: number },
     focus: PhotoFocus,
     platforms: readonly PlatformName[],
-    hasSubject = false,
+    /** 照片是人物身后的场景：按类型自己的版式和放大上限构图 */
+    scene?: { layoutFor: (layout: CoverLayout) => CoverLayout; maxZoom: number },
 ): string[] {
     const families = [...new Set(platforms.map((name) => getPlatform(name).family))];
     return families.flatMap((familyName) => {
         const members = platforms.filter((name) => getPlatform(name).family === familyName);
-        const layout = {
+        const base = {
             ...familyLayout(familyName),
             visibleArea: familyVisibleArea(familyName, members),
             clearArea: familyClearArea(familyName, members),
         };
+        const layout = scene === undefined ? base : scene.layoutFor(base);
         // 主体范围换到母版坐标。
-        const fraction = framedFocusBox(photo, focus, layout, hasSubject);
+        const fraction = framedFocusBox(photo, focus, layout, scene !== undefined, scene?.maxZoom);
         const box: Rect = {
             x: fraction.x * layout.width,
             y: fraction.y * layout.height,

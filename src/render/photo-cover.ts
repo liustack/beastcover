@@ -62,6 +62,8 @@ export interface PhotoFraming {
      * 圈注要求渲染前的检查和出图构图完全一致，所以传版式的宽高来构图
      */
     canvas?: { width: number; height: number };
+    /** cover 时主体到不了目标，最多把画面放大几倍去够。只给虚化的背景用，清晰照片放大会糊 */
+    maxZoom?: number;
 }
 
 // extend 时背景模糊的强度，按画布短边算，画布越大越糊。
@@ -112,9 +114,15 @@ export interface FramedPhoto {
     focusVisible: boolean;
 }
 
+// 放大找位置时每一步多放大这么多，主体离目标不到这么远（窗口的比例）就算到了。
+const ZOOM_STEP = 0.05;
+const ZOOM_REACHED = 0.01;
+
 /**
  * 按画布比例在原图里取最大的窗口，挪到主体落在目标位置、并留在可见区域里的地方。
  * visible 是画布里平台真正会显示的区域（0 到 1），默认整张画布。
+ * maxZoom 大于 1 时，窗口挪到头主体还到不了目标，就把窗口缩小（画面放大）再挪，
+ * 取到得了的最小放大，到不了就取最接近的，最多放大 maxZoom 倍。
  */
 export function framePhoto(input: {
     source: { width: number; height: number };
@@ -122,12 +130,41 @@ export function framePhoto(input: {
     focus: PhotoFocus;
     target: { x: number; y: number };
     visible?: Rect;
+    maxZoom?: number;
 }): FramedPhoto {
     const { source, focus } = input;
-    const visible = input.visible ?? { x: 0, y: 0, width: 1, height: 1 };
     const aspect = input.canvas.width / input.canvas.height;
     const width = Math.min(source.width, Math.round(source.height * aspect));
     const height = Math.min(source.height, Math.round(source.width / aspect));
+    const miss = (framed: FramedPhoto) =>
+        Math.max(
+            Math.abs((focus.x * source.width - framed.left) / framed.width - input.target.x),
+            Math.abs((focus.y * source.height - framed.top) / framed.height - input.target.y),
+        );
+    let best = windowAt(input, width, height);
+    const steps = Math.floor(((input.maxZoom ?? 1) - 1) / ZOOM_STEP + 1e-9);
+    for (let step = 1; step <= steps && miss(best) > ZOOM_REACHED; step += 1) {
+        const zoom = 1 + step * ZOOM_STEP;
+        const framed = windowAt(input, Math.round(width / zoom), Math.round(height / zoom));
+        if (miss(framed) < miss(best)) {
+            best = framed;
+        }
+    }
+    return best;
+}
+
+function windowAt(
+    input: {
+        source: { width: number; height: number };
+        focus: PhotoFocus;
+        target: { x: number; y: number };
+        visible?: Rect;
+    },
+    width: number,
+    height: number,
+): FramedPhoto {
+    const { source, focus } = input;
+    const visible = input.visible ?? { x: 0, y: 0, width: 1, height: 1 };
     const xRange: [number, number] = [visible.x, visible.x + visible.width];
     const yRange: [number, number] = [visible.y, visible.y + visible.height];
     const left = placeWindow({
@@ -259,6 +296,7 @@ export async function preparePhotoLayer(
             focus,
             target,
             visible,
+            ...(framing.maxZoom === undefined ? {} : { maxZoom: framing.maxZoom }),
         });
         bytes = await sharp(upright)
             .extract({
@@ -429,13 +467,16 @@ export function framedFocusBox(
     focus: PhotoFocus,
     layout: CoverLayout,
     hasSubject: boolean,
+    maxZoom?: number,
 ): Rect {
+    const visible = framingFraction(layout);
     const framed = framePhoto({
         source: photo,
         canvas: { width: layout.width, height: layout.height },
         focus,
         target: photoFocusTarget(layout, hasSubject),
-        visible: framingFraction(layout),
+        ...(visible === undefined ? {} : { visible }),
+        ...(maxZoom === undefined ? {} : { maxZoom }),
     });
     return focusInWindow(focus, windowOf(framed, photo));
 }
@@ -609,16 +650,34 @@ export function photoTextLayout(layout: CoverLayout): CoverLayout {
     return { ...layout, textArea: { ...area, y: area.y + area.height - height, height } };
 }
 
+// 有人物时，场景主体放进人物区里离字最近的这一截，大约在肩头：露在人和字之间，不压在字底下。
+const SHOULDER_SHARE = 0.3;
+
 /**
  * 照片主体放哪才不和标题抢：标题在标题区下半，横版和超宽把主体放右上，竖版放上方。
- * 有人物时人物已经占了一侧，照片主体居中。
+ * 有人物时字和人各占一边，中间正好是交界，主体放到人的肩头一侧。
  */
 export function photoFocusTarget(
     layout: CoverLayout,
     hasSubject: boolean,
 ): { x: number; y: number } {
     if (hasSubject) {
-        return { x: 0.5, y: 0.5 };
+        const person = layout.subjectArea;
+        if (person === undefined) {
+            throw new Error('A cover with a person needs a subject area to frame the scene.');
+        }
+        const text = layout.textArea;
+        if (person.y > text.y) {
+            return {
+                x: (person.x + person.width / 2) / layout.width,
+                y: (person.y + person.height * SHOULDER_SHARE) / layout.height,
+            };
+        }
+        const nearEdge =
+            person.x >= text.x
+                ? person.x + person.width * SHOULDER_SHARE
+                : person.x + person.width * (1 - SHOULDER_SHARE);
+        return { x: nearEdge / layout.width, y: 0.5 };
     }
     switch (layout.family) {
         case 'landscape':

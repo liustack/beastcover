@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
 import { lookupCommandOnPath } from '../doctor.ts';
+import { stakesLayout } from '../genres/face.ts';
+import type { Rect } from '../platforms/index.ts';
 import { attentionFocus } from '../subject/focus.ts';
 import { visionFocus } from '../subject/vision.ts';
 import { customLayout, familyLayout } from './layout.ts';
@@ -242,7 +244,63 @@ describe('photo framing', () => {
         expect(photoFocusTarget(familyLayout('portrait'), false)).toEqual({ x: 0.5, y: 0.3 });
         expect(photoFocusTarget(familyLayout('ultrawide'), false)).toEqual({ x: 0.7, y: 0.3 });
         expect(photoFocusTarget(customLayout(900, 1600), false)).toEqual({ x: 0.5, y: 0.3 });
-        expect(photoFocusTarget(familyLayout('landscape'), true)).toEqual({ x: 0.5, y: 0.5 });
+    });
+
+    it("puts the scene's subject at the person's shoulder, clear of the words", () => {
+        for (const family of ['landscape', 'ultrawide', 'portrait'] as const) {
+            const layout = stakesLayout(familyLayout(family));
+            const person = layout.subjectArea;
+            if (person === undefined) {
+                throw new Error(`${family} stakes layout has no subject area`);
+            }
+            const target = photoFocusTarget(layout, true);
+            const point = { x: target.x * layout.width, y: target.y * layout.height };
+            const inside = (area: Rect) =>
+                point.x >= area.x &&
+                point.x <= area.x + area.width &&
+                point.y >= area.y &&
+                point.y <= area.y + area.height;
+            expect(inside(person), family).toBe(true);
+            expect(inside(layout.textArea), family).toBe(false);
+        }
+        // 竖版人在字下面：主体左右对准人物区中线。
+        const portrait = stakesLayout(familyLayout('portrait'));
+        const area = portrait.subjectArea;
+        if (area === undefined) {
+            throw new Error('portrait stakes layout has no subject area');
+        }
+        expect(photoFocusTarget(portrait, true).x * portrait.width).toBeCloseTo(
+            area.x + area.width / 2,
+        );
+        expect(() => photoFocusTarget(familyLayout('landscape'), true)).toThrow(
+            'needs a subject area',
+        );
+    });
+
+    it('zooms a photo that cannot slide far enough, never past maxZoom', () => {
+        // 3:2 的照片铺 16:9 画布，横向用满，窗口挪不动：主体在 0.44，想落到 0.655 只能放大。
+        const source = { width: 1024, height: 681 };
+        const canvas = { width: 1920, height: 1080 };
+        const focus = { x: 0.44, y: 0.5, width: 0.1, height: 0.1, source: 'saliency' as const };
+        const target = { x: 0.655, y: 0.5 };
+        const landed = (framed: { left: number; width: number }) =>
+            (focus.x * source.width - framed.left) / framed.width;
+
+        expect(framePhoto({ source, canvas, focus, target }).width).toBe(1024);
+        const zoomed = framePhoto({ source, canvas, focus, target, maxZoom: 1.5 });
+        expect(Math.abs(landed(zoomed) - target.x)).toBeLessThan(0.02);
+        expect(zoomed.width).toBeGreaterThanOrEqual(Math.floor(1024 / 1.5));
+        const capped = framePhoto({ source, canvas, focus, target, maxZoom: 1.2 });
+        expect(capped.width).toBe(Math.round(1024 / 1.2));
+        // 不放大就到得了，就不放大。
+        const easy = framePhoto({
+            source,
+            canvas,
+            focus,
+            target: { x: 0.44, y: 0.5 },
+            maxZoom: 1.5,
+        });
+        expect(easy.width).toBe(1024);
     });
 
     it('keeps photo cover headlines in the lower half of the text area', () => {
