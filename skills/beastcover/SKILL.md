@@ -89,7 +89,7 @@ beastcover gen "剪辑最忌讳*拖*" --template quote --subject /abs/director.j
 beastcover gen "他*承认*了" --template proof --photo /abs/chat.png --tag "实锤" --preset bilibili,xiaohongshu
 ```
 
-Pick `product` over `face-text` when the subject is a thing, not a person: the product is fitted whole and never cropped like a bust. Put the most arguable pick in S on a `tier` board, since people click to disagree. A `quote` works when the line is specific and contestable, not a description of the topic. A `proof` screenshot is never cropped, so crop it to the part that matters before passing it.
+Pick `product` over `face-text` when the subject is a thing, not a person: the product is fitted whole and never cropped like a bust. The product has no edge by default, which looks like a clean product shot. Add `--outline sticker` for a playful 种草 look, or when the cutout edge looks rough in the preview. It does not fix a cutout that kept part of the old background: use a photo of the product on a plain background instead. Put the most arguable pick in S on a `tier` board, since people click to disagree. A `quote` works when the line is specific and contestable, not a description of the topic. A `proof` screenshot is never cropped, so crop it to the part that matters before passing it.
 
 ## 4. Write the words
 

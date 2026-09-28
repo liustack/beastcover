@@ -6,7 +6,7 @@ import type { CoverTemplate } from '../compose/index.ts';
 import type { Rect } from '../platforms/index.ts';
 import type { PictureSubject } from '../qc/index.ts';
 import type { CoverLayout, Headline } from '../render/layout.ts';
-import { subjectMarkup } from '../render/template.ts';
+import { type SubjectOutline, subjectMarkup } from '../render/template.ts';
 import type { TypeSpec } from '../render/type.ts';
 import type { SubjectLayer } from '../subject/index.ts';
 import { faceLayout } from './face.ts';
@@ -33,6 +33,8 @@ export interface ProductRequest {
     /** 价格，跟在标题后面的价签里 */
     price?: string;
     style?: StyleName;
+    /** 默认不描边。抠得不干净，或者想要种草贴纸的感觉时加白边 */
+    outline?: SubjectOutline;
 }
 
 // 柔光比产品框大这么多，亮底上用白光，暗底上用强调色的淡光。
@@ -125,7 +127,11 @@ export function productTemplate(request: ProductRequest): CoverTemplate {
         const rect = productRect(layout, request.subject);
         const product = measure
             ? NO_LAYERS
-            : subjectMarkup(layout, request.subject, { outline: 'none', rect });
+            : subjectMarkup(layout, request.subject, {
+                  outline: request.outline ?? 'none',
+                  lightBackground: light,
+                  rect,
+              });
         const glow = measure ? NO_LAYERS : glowLayer(rect, glowColor);
         const angle = layout.subjectArea && layout.subjectArea.y > layout.textArea.y ? 180 : 90;
         return genrePage({

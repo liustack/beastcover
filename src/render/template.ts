@@ -9,9 +9,19 @@ import {
     textAreaCss,
 } from './layout.ts';
 
-/** 人物描边的粗细：clean 是干净分离，sticker 是贴纸感。按画布短边的比例 */
-/** clean 细白边、sticker 粗白边（贴纸感），none 不描边（产品这类东西，白边会显得像贴纸） */
-export type SubjectOutline = 'clean' | 'sticker' | 'none';
+/** clean 细白边、sticker 粗白边（贴纸感），none 不描边（产品默认不描，白边会显得像贴纸） */
+export const SUBJECT_OUTLINES = ['none', 'clean', 'sticker'] as const;
+
+export type SubjectOutline = (typeof SUBJECT_OUTLINES)[number];
+
+export function parseSubjectOutline(value: string): SubjectOutline {
+    if (!SUBJECT_OUTLINES.includes(value as SubjectOutline)) {
+        throw new Error(`Unknown outline "${value}". Use ${SUBJECT_OUTLINES.join(', ')}.`);
+    }
+    return value as SubjectOutline;
+}
+
+/** 描边粗细，按画布短边的比例 */
 
 const OUTLINE_SHARE: Record<SubjectOutline, number> = { clean: 0.014, sticker: 0.024, none: 0 };
 

@@ -211,6 +211,20 @@ describe('cover type registry', () => {
         ).toThrow(
             '--tag works with --template big-type, number, face-text, product, quote, proof.',
         );
+        expect(() =>
+            checkGenreInputs('product', {
+                photos: 0,
+                subject: true,
+                options: { outline: 'sticker' },
+            }),
+        ).not.toThrow();
+        expect(() =>
+            checkGenreInputs('face-text', {
+                photos: 0,
+                subject: true,
+                options: { outline: 'sticker' },
+            }),
+        ).toThrow('--outline works with --template product.');
         // 浅底方案的深色字只能压纯色，压照片的类型直接拒绝。
         expect(() =>
             checkGenreInputs('scene-title', {
@@ -228,6 +242,36 @@ describe('cover type registry', () => {
                 scheme: 'lemon',
             }),
         ).not.toThrow();
+    });
+});
+
+describe('product outline', () => {
+    const html = async (outline?: 'none' | 'clean' | 'sticker') => {
+        const template = genreTemplate('product', {
+            text: '降噪*天花板*',
+            fonts: FONTS,
+            photos: [],
+            subject: SUBJECT,
+            ...(outline === undefined ? {} : { outline }),
+        });
+        const base = familyLayout('landscape');
+        const layout = template.layoutFor === undefined ? base : template.layoutFor(base);
+        const page = await template.renderHtml(
+            layout,
+            { fontPx: 80, keepClauses: false },
+            layout.width,
+            layout.height,
+        );
+        return page.html;
+    };
+
+    it('shows the product bare unless a sticker edge is asked for', async () => {
+        expect(await html()).not.toContain('subject-outline');
+        expect(await html('none')).not.toContain('subject-outline');
+        // 奶油底上白边会糊进底色，外面要再包一圈深色细边。
+        const sticker = await html('sticker');
+        expect(sticker).toContain('url(#subject-outline)');
+        expect(sticker).toContain('rgba(0,0,0,0.55)');
     });
 });
 

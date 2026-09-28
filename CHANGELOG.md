@@ -5,6 +5,7 @@
 - **Four more cover types, fourteen in all.** `product`: one cut-out product fitted whole on its side with a soft glow and the price (`--number`) under the headline, for reviews and 种草. `tier`: a ranking board with S, A, B, C rows in the familiar colours and one photo per row, for "I ranked every X". `quote`: a person, a big quotation mark, the line they said, and who said it (`--tag`), for interview clips and opinion. `proof`: a screenshot shown whole on a tilted card beside big words, for knowledge, exposés, and receipts. Every lettering style works on them.
 - A product never stands on the bottom edge like a person does: it is fitted whole into the part of its side the platforms show, so it is never cropped.
 - **Cleaner cutout edges.** A photo cut out on macOS no longer carries a rim of its old background: the soft edge takes the colour of the subject, and the faintest outer pixels are dropped. The edge stays soft and hair keeps its strands. A transparent PNG you bring is still used exactly as it is. Earlier cutouts in the cache are made again once.
+- **`--outline sticker` for a product.** `product` shows the thing bare by default. `--outline clean` or `--outline sticker` puts a white edge around it, which reads as 种草 sticker and hides a rough cutout. On light schemes a thin dark line keeps the white edge off the background.
 
 ## 0.7.6 (2026-09-28)
 

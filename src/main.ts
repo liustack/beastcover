@@ -69,6 +69,7 @@ import {
     parsePhotoFit,
     parsePhotoLook,
 } from './render/photo-cover.ts';
+import { parseSubjectOutline, SUBJECT_OUTLINES, type SubjectOutline } from './render/template.ts';
 import { parseEmphasis, stripEmphasis } from './render/type.ts';
 import {
     findScenePainter,
@@ -773,6 +774,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
             'Full-bleed photo framing: cover (crop, default) or extend (keep the whole photo)',
         )
         .option(
+            '--outline <kind>',
+            `product: a white edge around the cut-out, ${SUBJECT_OUTLINES.join(', ')} (none by default, sticker hides a rough cutout)`,
+        )
+        .option(
             '--hook <text>',
             'A short line for the video and note covers. WeChat and X article covers keep the headline',
         )
@@ -797,6 +802,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     hook?: string;
                     look?: string;
                     fit?: string;
+                    outline?: string;
                     tag?: string;
                     number?: string;
                     labels?: string;
@@ -858,6 +864,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         labels: options.labels,
                         look: options.look,
                         fit: options.fit,
+                        outline: options.outline,
                     },
                     ...(scheme === undefined ? {} : { scheme }),
                     ...(style === undefined ? {} : { style }),
@@ -876,6 +883,10 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                     options.look === undefined ? undefined : parsePhotoLook(options.look);
                 const fit: PhotoFit =
                     options.fit === undefined ? 'cover' : parsePhotoFit(options.fit);
+                const outline: SubjectOutline | undefined =
+                    options.outline === undefined
+                        ? undefined
+                        : parseSubjectOutline(options.outline);
 
                 // 成品路径和各选项的组合不依赖照片，先算先拦，别为必然失败的命令下载照片或画场景。
                 checkCoverRequest(effective.render, guides, hook);
@@ -930,6 +941,7 @@ export function createProgram(overrides: CliRuntimeOverrides = {}): Command {
                         ...(labels === undefined ? {} : { labels }),
                         ...(look === undefined ? {} : { look }),
                         ...(options.fit === undefined ? {} : { fit }),
+                        ...(outline === undefined ? {} : { outline }),
                     });
                 const written = await writeCovers(
                     runtime,

@@ -3,6 +3,7 @@
 // 类型的来历和各平台的主流封面见 .issues/2026-09-27-breakout-design/research.md 第 5 节。
 import type { CoverTemplate } from '../compose/index.ts';
 import type { PhotoFit, PhotoLook } from '../render/photo-cover.ts';
+import type { SubjectOutline } from '../render/template.ts';
 import type { SubjectLayer } from '../subject/index.ts';
 import { bigTypeTemplate } from './big-type.ts';
 import { COLLAGE_MAX, COLLAGE_MIN, collageTemplate } from './collage.ts';
@@ -44,7 +45,7 @@ export function parseGenre(value: string): GenreName {
 }
 
 /** 只有部分类型接受的选项 */
-export type GenreOption = 'tag' | 'number' | 'labels' | 'look' | 'fit';
+export type GenreOption = 'tag' | 'number' | 'labels' | 'look' | 'fit' | 'outline';
 
 interface GenreSpec {
     /** 照片张数的下限和上限 */
@@ -155,7 +156,7 @@ export const GENRES: Readonly<Record<GenreName, GenreSpec>> = {
         photos: [0, 0],
         scenes: 0,
         subject: true,
-        options: ['tag', 'number'],
+        options: ['tag', 'number', 'outline'],
         flatGround: true,
         summary: 'one cut-out product filling its side, the price under the headline (--number)',
     },
@@ -279,6 +280,7 @@ export interface GenreInput {
     look?: PhotoLook;
     fit?: PhotoFit;
     style?: StyleName;
+    outline?: SubjectOutline;
 }
 
 function first<T>(items: readonly T[], what: string): T {
@@ -378,6 +380,7 @@ export function genreTemplate(name: GenreName, input: GenreInput): CoverTemplate
                 ...tag,
                 subject: personOf(input),
                 ...(input.figure === undefined ? {} : { price: input.figure }),
+                ...(input.outline === undefined ? {} : { outline: input.outline }),
             });
         case 'tier':
             return tierTemplate({ ...common, ...look, photos: input.photos });

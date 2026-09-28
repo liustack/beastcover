@@ -1422,6 +1422,14 @@ describe('BeastCover CLI', () => {
                 ['--template', 'face-text'],
                 '--template face-text needs --subject <path>, a photo of the person.',
             ],
+            [
+                ['--template', 'face-text', '--subject', 'me.png', '--outline', 'sticker'],
+                '--outline works with --template product.',
+            ],
+            [
+                ['--template', 'product', '--subject', 'me.png', '--outline', 'thick'],
+                'Unknown outline "thick". Use none, clean, sticker.',
+            ],
         ] as const) {
             const stderr = captureOutput();
             const exitCode = await runCli(['node', 'beastcover', 'gen', 'A', ...args], {
