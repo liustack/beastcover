@@ -140,7 +140,7 @@ skills/beastcover/SKILL.md      # Agent skill and routing contract
 
 1. Docs carry front-matter metadata (`summary`, `read_when`) and ship in the npm package. Each English page has a `.zh-CN.md` twin, linked from the top line of both.
 2. Before creating a new doc, run `pnpm docs:list` to review the existing index.
-3. Existing docs: `packaging` (the cover, the title, and the description as one promise with three jobs, and how each platform shows them).
+3. Existing docs: `what-a-cover-is` (the cover as the promise of the content, why feeds need it, what it has to do in half a second, the idea over the design), `packaging` (the cover, the title, and the description as one promise with three jobs, and how each platform shows them).
 
 ## CLI Usage
 

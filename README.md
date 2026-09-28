@@ -9,6 +9,7 @@
   <a href="./README.zh-CN.md">简体中文</a> ·
   <a href="./skills/beastcover/SKILL.md">Agent skill</a> ·
   <a href="./examples/">Examples</a> ·
+  <a href="./docs/what-a-cover-is.md">What a cover is</a> ·
   <a href="./docs/packaging.md">Packaging</a>
 </p>
 

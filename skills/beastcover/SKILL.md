@@ -32,7 +32,7 @@ Before any command, answer: what will make someone stop on this piece? Read the 
 
 The gap must be true. Platforms judge the cover by what happens after the click: YouTube's thumbnail test picks the winner by watch time, not clicks. Never promise what the piece does not deliver.
 
-Read [docs/packaging.md](../../docs/packaging.md) for how the cover, the title, and the description split the promise between them.
+Read [docs/what-a-cover-is.md](../../docs/what-a-cover-is.md) for why the idea beats the design, and [docs/packaging.md](../../docs/packaging.md) for how the cover, the title, and the description split the promise between them.
 
 ## 2. Pick the platforms
 

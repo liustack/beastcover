@@ -14,9 +14,9 @@ read_when:
 
 ## 为什么要有包装
 
-信息流里一屏至少同时出现四份内容，用户在远不到一秒的时间里选一个点。这个选择不是想清楚的，问他为什么点，他会说「就是想点」。那一瞬间谁更勾起兴趣谁就赢，其余的内容再好也被划走。空荡荡的高速公路上，广告牌做得再烂也有人看，因为没有别的可看。信息流恰恰相反。（[人人都是产品经理](https://www.woshipm.com/share/5978911.html)）
+信息流逼用户在远不到一秒的时间里做选择，而且这个选择不是想清楚的。这为什么让封面成为必需，封面要在这半秒里做到什么，见[封面是什么](what-a-cover-is.zh-CN.md)。
 
-所以包装不是最后补上的装饰。给 YouTube 多个头部频道做包装的 Paddy Galloway 说，一个点子如果写不出能让人点的标题和封面，它就还不是好点子；头部创作者把约 30% 的时间花在点子和包装上，小创作者只花 5%。（[Colin and Samir](https://www.colinandsamir.com/resources/the-new-rules-of-youtube-from-paddy-galloway)、[Creator Science](https://podcast.creatorscience.com/paddy-galloway-2/)）
+包装不是最后补上的装饰。给 YouTube 多个头部频道做包装的 Paddy Galloway 说，一个点子如果写不出能让人点的标题和封面，它就还不是好点子。头部创作者把约 30% 的时间花在点子和包装上，小创作者只花 5%。（[Colin and Samir](https://www.colinandsamir.com/resources/the-new-rules-of-youtube-from-paddy-galloway)、[Creator Science](https://podcast.creatorscience.com/paddy-galloway-2/)）
 
 ## 一个承诺，三份分工
 
@@ -28,13 +28,9 @@ read_when:
 
 三样东西要说不同的话，合起来才是一个完整的点子。把标题原样搬上封面等于浪费一半版面，因为标题就在封面旁边。让标题承担能被搜到的说法，让封面承担张力，合在一起说出任何一方单独说不出的东西。（[vidIQ](https://vidiq.com/blog/post/youtube-thumbnail-design-tips/)、[Longwave](https://www.longwave.media/blog/youtube-thumbnail-best-practices-2026)）
 
-封面不是海报，不需要意境，需要的是在半秒内告诉用户「点开能得到什么」。（[人人都是产品经理](https://www.woshipm.com/share/5978911.html)）
-
 ## 承诺必须是真的
 
-平台现在按点开之后发生了什么来评判包装。YouTube 的 Test & Compare 按观看时长份额选出获胜的封面，不按点击率，所以骗到点击、留不住人的封面会输掉测试。点击率高、观看时间短，等于告诉平台这个包装撒了谎。（[YouTube 帮助中心](https://support.google.com/youtube/answer/12340300?hl=en)、[Longwave](https://www.longwave.media/blog/youtube-thumbnail-best-practices-2026)）
-
-诚实的抓手是好奇缺口：给出的信息刚好让问题无法忽略，答案留在内容里。给「之前」不给「之后」，给结果不给方法，给两个选项不给赢家。
+平台按点开之后发生了什么来评判整个包装，所以标题和简介也要守住封面许下的承诺。点击率高、观看时间短，等于告诉平台这个包装撒了谎。让封面保持诚实的好奇缺口，见[封面是什么](what-a-cover-is.zh-CN.md#封面要做到什么)：给「之前」不给「之后」，给结果不给方法，给两个选项不给赢家。
 
 ## 每个平台在哪里展示这三样
 
@@ -45,11 +41,11 @@ read_when:
 | YouTube | 16:9 缩略图，按手机小卡的尺寸被判断 | 在缩略图旁边，最多 100 字符 | 电脑端「展开」前约 157 字符，手机约 100，YouTube 搜索结果约 138（[BulkPublish](https://www.bulkpublish.com/blog/youtube-character-limit/)、[touhfa](https://touhfa.art/blog/seo/youtube-description-guide/)） |
 | B 站 | 16:10 封面，双列信息流，底部一条被播放量压住 | 在卡片下方，建议 12 到 24 字 | 多数分区 250 字（[知乎](https://www.zhihu.com/question/452825495)） |
 | 小红书 | 3:4 封面在双列信息流里占大头 | 在卡片下方，最多 20 字 | 正文的头几行 |
-| 公众号 | 消息列表里 2.35:1 的头图，分享时是中间方块 | 白字压在封面底部 | 摘要，最多 120 字，显示在分享卡片里；不填就抓正文前 54 字（[知乎](https://zhuanlan.zhihu.com/p/1899150510721851888)） |
+| 公众号 | 消息列表里 2.35:1 的头图，分享时是中间方块 | 白字压在封面底部 | 摘要，最多 120 字，显示在分享卡片里，不填就抓正文前 54 字（[知乎](https://zhuanlan.zhihu.com/p/1899150510721851888)） |
 | X 文章 | 文章卡片上 5:2 的封面 | 和封面一起在卡片上 | 分享这篇文章的那条推文 |
 | 抖音、TikTok | 9:16 封面，主要出现在主页宫格，按 3:4 裁切 | 视频底部的文案，头几行之后折叠 | 同一条文案 |
 
-最要紧的两点差异：中文平台对封面上多写几个字的接受度比英文 YouTube 高（Paddy 对亚洲观众也有同样的观察）；公众号和 X 的标题就压在封面上或紧挨着封面，所以安静的、编辑感的、只有一个有力关键词的封面，在那里往往比一张喧闹的缩略图更好。
+最要紧的两点差异：中文平台对封面上多写几个字的接受度比英文 YouTube 高（Paddy 对亚洲观众也有同样的观察）。公众号和 X 的标题就压在封面上或紧挨着封面，所以安静的、编辑感的、只有一个有力关键词的封面，在那里往往比一张喧闹的缩略图更好。
 
 ## 怎么给一份内容做包装
 
