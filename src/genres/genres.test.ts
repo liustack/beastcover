@@ -633,7 +633,8 @@ describe('cover type rendering', () => {
         expect(failures).toEqual([]);
     }, 900_000);
 
-    // 纯色底的类型自己定底色，底色让封面发暗发灰就是类型的错，换照片也救不了。
+    // 纯色底的类型自己定底色，底色让封面发暗就是类型的错，换照片也救不了。
+    // 备忘录是白屏加一道荧光笔，那一道黄就是它的颜色，不该报没颜色。
     it('keeps the flat grounds of tier and memo bright and colourful', async () => {
         const covers = [
             { name: 'tier', template: templateFor('tier', paths), platform: 'youtube' },

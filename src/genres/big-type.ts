@@ -1,6 +1,6 @@
 // 大字报：字就是主体。亮底配重黑字（小红书、公众号的干货和观点），暗底配白字黑描边（喧闹的海报）。
 // 一个关键词荧光笔、实色块或换色；痛点标签放在标题同一段里，字号跟着标题走。
-// memo 风格画成手机备忘录：浅蓝笔记纸、顶上一条「‹ 备忘录」，字靠左排在下面那一页的中间，关键词压黄色荧光笔。
+// memo 风格画成手机备忘录：白底、顶上一条「‹ 备忘录」，字靠左排在下面那一页的中间，关键词压黄色荧光笔。
 // 配方依据：research.md 第 5.1 节「大字报配方」、第 1 节字的处理。
 import type { CoverTemplate } from '../compose/index.ts';
 import type { CoverLayout, Headline } from '../render/layout.ts';
@@ -17,19 +17,16 @@ export interface BigTypeRequest {
     style?: StyleName;
 }
 
-// 备忘录的颜色：浅蓝笔记纸、近黑的字、备忘录那种偏橙的黄做返回键，关键词压亮黄荧光笔，
-// 标签是一张黄便签。纯白纸只有荧光笔一点颜色，缩进信息流里发灰，冷纸也把暖黄托出来
-// （research.md 第 4.5 节亮度彩度要同高，第 5.1 节小红书备忘录风）。
-const MEMO_PAPER = '#E3EEFA';
+// 备忘录的颜色：白纸、近黑的字、备忘录那种偏橙的黄做返回键，关键词压亮黄荧光笔。
+const MEMO_PAPER = '#FFFFFF';
 const MEMO_INK = '#1C1C1E';
 const MEMO_CHROME = '#C98A00';
-const MEMO_RULE = '#C5D5E8';
-const MEMO_MARKER = '#FFD60A';
+const MEMO_RULE = '#E5E5EA';
 const MEMO_COLORS: TypeColors = {
     fill: MEMO_INK,
     stroke: MEMO_INK,
     ring: MEMO_PAPER,
-    accent: MEMO_MARKER,
+    accent: '#FFD60A',
     accentInk: MEMO_INK,
 };
 // 顶栏高度占短边的比例，字号占顶栏高的比例。
@@ -108,7 +105,7 @@ export function bigTypeTemplate(request: BigTypeRequest): CoverTemplate {
     const tag = eyebrow(
         request.tag,
         memo
-            ? { background: MEMO_MARKER, ink: MEMO_INK }
+            ? { background: MEMO_INK, ink: MEMO_PAPER }
             : light
               ? { background: scheme.type.stroke, ink: scheme.base }
               : { background: scheme.type.accent, ink: scheme.type.stroke },

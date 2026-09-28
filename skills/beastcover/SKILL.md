@@ -130,7 +130,7 @@ The type decides the idea and the layout. `--style` decides how the words look, 
 | `round` | Rounded sticker lettering: dark type in a white outline, the keyword on a marker | Xiaohongshu lifestyle, food, cute and casual |
 | `editorial` | Magazine serif, no outline, a soft shadow on pictures | `mood` default. Lifestyle, travel, WeChat, design and luxury |
 | `brush` | A calligraphy title with a soft shadow | Bilibili documentary, travel, guofeng, food culture |
-| `memo` | A phone notes screen: black type on pale blue paper, a yellow marker, the tag as a yellow sticky note (`big-type` only, own colours, no `--scheme`) | Xiaohongshu 干货, checklists, tips |
+| `memo` | A phone notes screen: black type on white, a yellow marker (`big-type` only, own colours, no `--scheme`) | Xiaohongshu 干货, checklists, tips |
 
 `round` and `brush` need a rounded or brush Chinese font, which most Macs do not have until one is installed. Without it the words fall back to the heavy font and a `Font:` line names the free font to install (ZCOOL KuaiLe, Ma Shan Zheng). Tell the user. Windows ships YouYuan and KaiTi, so they work there as is.
 

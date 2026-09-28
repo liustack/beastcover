@@ -16,7 +16,7 @@ export const STYLE_SUMMARIES: Readonly<Record<StyleName, string>> = {
     round: 'rounded sticker lettering: dark type in a white outline',
     editorial: 'magazine serif: no outline, a soft shadow on pictures',
     brush: 'calligraphy title in a brush font, for travel, documentary, and guofeng',
-    memo: 'a phone notes screen: black type on pale blue paper with a yellow marker',
+    memo: 'a phone notes screen: black type on white with a yellow marker',
 };
 
 export function parseStyle(value: string): StyleName {
