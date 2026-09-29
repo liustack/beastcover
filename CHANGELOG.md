@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.7 (2026-09-28)
+## 0.7.7 (2026-09-29)
 
 - **Four more cover types, fourteen in all.** `product`: one cut-out product fitted whole on its side with a soft glow and the price (`--number`) under the headline, for reviews and 种草. `tier`: a ranking board with S, A, B, C rows in the familiar colours and one photo per row on a teal ground, where the warm tier colours stand out, for "I ranked every X". `quote`: a person, a big quotation mark, the line they said, and who said it (`--tag`), for interview clips and opinion. `proof`: a screenshot shown whole on a tilted card beside big words, for knowledge, exposés, and receipts. Every lettering style works on them.
 - A product never stands on the bottom edge like a person does: it is fitted whole into the part of its side the platforms show, so it is never cropped.
@@ -9,6 +9,7 @@
 - **Photo covers stay bright.** `scene-title`, `callout`, and `face-stakes` darkened the headline's side of the picture as hard for outlined words as for soft ones, so a well-lit photo came out dark. Outlined words carry their own edge, so the shade under them is now light, just enough to calm the detail. `editorial` and `brush` words, which have no outline, keep the full shade.
 - **A white cover with one vivid accent no longer counts as grey.** The colourfulness score was fitted on photos and spreads a small bright patch over the whole frame, so a `memo` notes screen or a white page with a yellow marker was warned as nearly grey. A vivid colour covering at least 0.5% of the cover now counts as colour. The warning now says the cover has almost no colour.
 - **`--outline sticker` for a product.** `product` shows the thing bare by default. `--outline clean` or `--outline sticker` puts a white edge around it, which reads as 种草 sticker and hides a rough cutout. On light schemes a thin dark line keeps the white edge off the background.
+- **What a cover is**, a new page in `docs/` (English and Chinese): why feeds make covers necessary, what a cover has to do in half a second, and why the idea beats the design. `packaging` now links to it instead of repeating it.
 
 ## 0.7.6 (2026-09-28)
 
